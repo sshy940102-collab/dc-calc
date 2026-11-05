@@ -64,6 +64,33 @@ tr.tot td{font-weight:700;background:#f0f3f8;position:sticky;bottom:0}
 .empty{padding:40px;text-align:center;color:var(--sub)}
 .help{font-size:12px;color:var(--sub);line-height:1.6}
 .help code{background:#eef1f6;padding:1px 4px;border-radius:3px}
+.kpis.top{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.kpi .rt{display:block;font-size:15px;margin-top:4px;color:var(--navy2)}
+.kpi .rt.neg{color:var(--red)}
+.kpi .sb{display:block;font-size:11.5px;margin-top:4px;color:var(--sub);font-weight:400}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:12px;margin-top:12px}
+.dgrid .card h2 small{color:var(--sub);font-weight:400;font-size:11.5px}
+.wide{grid-column:1/-1}
+.hbr{display:grid;grid-template-columns:minmax(80px,150px) 1fr 130px;gap:8px;align-items:center;padding:3px 0;font-size:12px}
+.hbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbt{background:#eef1f6;border-radius:3px;height:14px;overflow:hidden}
+.hbt i{display:block;height:100%;border-radius:3px}
+.hbv{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hbv em{font-style:normal;color:var(--sub);margin-left:4px}
+.evr{display:grid;grid-template-columns:minmax(80px,130px) 1fr 1fr;gap:10px;align-items:center;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f2f6}
+.evr.hd{color:var(--sub);font-size:11.5px}
+.evb{display:flex;align-items:center;gap:6px}
+.evb .hbt{flex:1}
+.evb span{width:52px;text-align:right;font-variant-numeric:tabular-nums}
+.stk{display:flex;height:30px;border-radius:4px;overflow:hidden;margin:6px 0 10px}
+.stk i{display:block;height:100%}
+.lg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px}
+.lg span{display:inline-flex;align-items:center;gap:5px}
+.lg b{width:11px;height:11px;border-radius:2px;display:inline-block}
+.lg em{font-style:normal;color:var(--sub)}
+svg.ln{width:100%;height:auto;max-height:300px;display:block}
+svg.ln text{font-size:11px;fill:var(--sub)}
+@media (max-width:600px){.hbr{grid-template-columns:80px 1fr 100px}}
 footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 @media (max-width:600px){main{padding:10px}header{padding:12px 16px}}
 </style>
@@ -155,7 +182,7 @@ const readFile = f => new Promise((ok, ng) => { const fr = new FileReader(); fr.
 const findSheet = (wb, pred) => wb.SheetNames.find(pred);
 
 /* ================= 상태 ================= */
-const ST = { ref: null, raw: [], rawFiles: [], res: null, tab: "sum", ch: "전체", q: "", sort: {} };
+const ST = { ref: null, raw: [], rawFiles: [], res: null, tab: "dash", ch: "전체", big: "전체", small: "전체", q: "", sort: {} };
 
 /* ================= 기준 파일 파싱 ================= */
 function parseRef(wb) {
@@ -336,7 +363,7 @@ const COLS = {
     ["jPct", "장려금_분배기준(%)", 1], ["jAmt", "장려금_분배기준", 1], ["sPct", "장려금_SKU기준(%)", 1], ["sAmt", "장려금_SKU기준(금액)", 1], ["jTot", "장려금계", 1],
     ["log", "물류비", 1], ["fee", "代수수료", 1], ["pDist", "판관비_분배", 1], ["pSku", "판관비_SKU", 1], ["pTot", "판관비계", 1], ["cost", "비용계", 1], ["vc", "변동원가계", 1], ["tr", "운송비계", 1], ["cm", "공헌이익(CM)", 1]]
 };
-const TABS = [["sum", "채널 요약"], ["prod", "제품별"], ["evt", "행사분류별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
+const TABS = [["dash", "📊 대시보드"], ["sum", "채널 요약"], ["prod", "제품별"], ["evt", "행사분류별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
 
 function dataFor(tab, rows) {
   if (tab === "sum") return agg(rows, r => r.ch, r => ({ ch: r.ch }));
@@ -352,29 +379,44 @@ function cell(v, t, k) {
   return `<td>${v == null ? '<span class="flag">미매칭</span>' : esc(v)}</td>`;
 }
 
+const NOCAT = "(미분류)";
+const catOf = v => v == null || v === "" ? NOCAT : String(v);
+const uniq = a => [...new Set(a)].sort((x, y) => (x === NOCAT) - (y === NOCAT) || x.localeCompare(y, "ko"));
+const bigs = rows => uniq(rows.map(r => catOf(r.big)));
+const smalls = rows => uniq(rows.filter(r => ST.big === "전체" || catOf(r.big) === ST.big).map(r => catOf(r.small)));
+const filt = rows => rows.filter(r => (ST.ch === "전체" || r.ch === ST.ch) && (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small));
+const sel = (id, lbl, opts, cur) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lbl} <select id="${id}">${opts.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
+
 function render() {
   const R = ST.res;
   if (!R) { $("#out").innerHTML = `<div class="card empty">① 기준 파일과 ② 매입 로우를 올리면 자동으로 계산돼요.</div>`; $("#warn").innerHTML = ""; return; }
   renderWarn(R);
-  const rowsF = R.rows.filter(r => (ST.ch === "전체" || r.ch === ST.ch));
+  if (ST.big !== "전체" && !bigs(R.rows).includes(ST.big)) ST.big = "전체";
+  if (ST.small !== "전체" && !smalls(R.rows).includes(ST.small)) ST.small = "전체";
+  const rowsF = filt(R.rows);
   const t = total(rowsF);
   const mil = v => fmt(v / 1e6, 1);
-  let h = `<div class="kpis">
-    <div class="kpi"><small>매입금액</small><div>${mil(t.amt)}<em>백만</em></div></div>
-    <div class="kpi"><small>총매출 (출고가 기준)</small><div>${mil(t.sales)}<em>백만</em></div></div>
-    <div class="kpi"><small>DC</small><div>${mil(t.dc)}<em>${pct(t.dcR)}</em></div></div>
-    <div class="kpi"><small>장려금</small><div>${mil(t.jTot)}<em>${pct(t.sales ? t.jTot / t.sales : null)}</em></div></div>
-    <div class="kpi"><small>판관비</small><div>${mil(t.pTot)}<em>${pct(t.sales ? t.pTot / t.sales : null)}</em></div></div>
-    <div class="kpi cm"><small>CM (공헌이익)</small><div class="${t.cm < 0 ? "neg" : ""}">${mil(t.cm)}<em>CM율 ${pct(t.cmR)}</em></div></div>
+  const rt = v => t.sales ? v / t.sales : null;
+  const kpi = (lbl, v, rl, r, cls = "") => `<div class="kpi ${cls}"><small>${lbl}</small><div class="${v < 0 ? "neg" : ""}">${mil(v)}<em>백만</em></div>${rl ? `<b class="rt${r < 0 ? " neg" : ""}">${rl} ${pct(r)}</b>` : `<span class="sb">매입 ${mil(t.amt)}백만</span>`}</div>`;
+  let h = `<div class="kpis top">
+    ${kpi("총매출 (출고가 기준)", t.sales)}
+    ${kpi("DC", t.dc, "DC율", t.dcR)}
+    ${kpi("장려금", t.jTot, "장려금율", rt(t.jTot))}
+    ${kpi("판관비", t.pTot, "판관비율", rt(t.pTot))}
+    ${kpi("비용 (DC+장려금+판관비)", t.cost, "비용율", t.costR)}
+    ${kpi("공헌이익 (CM)", t.cm, "공헌이익율", t.cmR, "cm")}
   </div>`;
   h += `<div class="tabs">${TABS.map(([k, l]) => `<button data-tab="${k}" class="${ST.tab === k ? "on" : ""}">${l}</button>`).join("")}</div>`;
   h += `<div class="toolbar">
-    <label class="f" style="flex-direction:row;align-items:center;gap:6px">채널 <select id="chSel">${["전체", ...R.chs].map(c => `<option ${c === ST.ch ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
-    <input type="text" id="q" placeholder="제품코드·제품명 검색" value="${esc(ST.q)}" style="width:200px">
+    ${sel("chSel", "채널", ["전체", ...R.chs], ST.ch)}
+    ${sel("bigSel", "대카테고리", ["전체", ...bigs(R.rows)], ST.big)}
+    ${sel("smallSel", "소카테고리", ["전체", ...smalls(R.rows)], ST.small)}
+    ${ST.tab === "dash" ? "" : `<input type="text" id="q" placeholder="제품코드·제품명 검색" value="${esc(ST.q)}" style="width:200px">`}
     <span class="sp"></span>
     <span class="muted">월일수 ${R.mdays}일 · 일할 ${R.chs.map(c => `${esc(c)} ${(R.prorate[c] * R.mdays).toFixed(0)}/${R.mdays}`).join(", ")}</span>
     <button id="dl">엑셀 다운로드</button>
   </div>`;
+  if (ST.tab === "dash") { h += dash(rowsF, R); finishRender(h); return; }
   let data = dataFor(ST.tab, rowsF);
   if (ST.q && ST.tab !== "sum" && ST.tab !== "day") { const q = ST.q.toLowerCase(); data = data.filter(r => String(r.code ?? "").includes(q) || String(r.name ?? "").toLowerCase().includes(q) || String(r.evt ?? "").toLowerCase().includes(q)); }
   const cols = COLS[ST.tab]; const s = ST.sort[ST.tab];
@@ -384,12 +426,74 @@ function render() {
   h += shown.map(r => `<tr>${cols.map(([k, , t]) => cell(r[k], t, k)).join("")}</tr>`).join("");
   { const tt = total(data); h +=`<tr class="tot">${cols.map(([k, , t], i) => i === 0 ? `<td>합계</td>` : (t === 1 && NUMK.includes(k)) ? cell(tt[k], 1, k) : (t === 2 && tt[k] !== undefined) ? cell(tt[k], 2, k) : "<td></td>").join("")}</tr>`; }
   h += `</tbody></table>${data.length > LIM ? `<div class="empty">화면엔 ${LIM.toLocaleString()}행까지만 표시 (전체 ${data.length.toLocaleString()}행은 엑셀 다운로드)</div>` : ""}</div>`;
+  finishRender(h);
+}
+
+function finishRender(h) {
   $("#out").innerHTML = h;
   $("#out").querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { ST.tab = b.dataset.tab; render(); });
   $("#out").querySelectorAll("th").forEach(th => th.onclick = () => { const k = th.dataset.k; const c = ST.sort[ST.tab]; ST.sort[ST.tab] = { k, d: c && c.k === k ? -c.d : -1 }; render(); });
   $("#chSel").onchange = e => { ST.ch = e.target.value; render(); };
-  const q = $("#q"); q.oninput = e => { ST.q = e.target.value; clearTimeout(q._t); q._t = setTimeout(() => { render(); const n = $("#q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
+  $("#bigSel").onchange = e => { ST.big = e.target.value; ST.small = "전체"; render(); };
+  $("#smallSel").onchange = e => { ST.small = e.target.value; render(); };
+  const q = $("#q"); if (q) q.oninput = e => { ST.q = e.target.value; clearTimeout(q._t); q._t = setTimeout(() => { render(); const n = $("#q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
   $("#dl").onclick = download;
+}
+
+/* ================= 대시보드 ================= */
+const CLR = { sales: "#2f5597", dc: "#e07b39", j: "#d9a400", p: "#8e6cc9", vc: "#7a8699", tr: "#b4bcc9", cm: "#2e7d32" };
+const mil1 = v => fmt(v / 1e6, 1);
+function hbars(items) {
+  if (!items.length) return `<div class="empty">데이터 없음</div>`;
+  const mx = Math.max(1e-9, ...items.map(i => Math.abs(i.v)));
+  return items.map(i => `<div class="hbr"><span class="hbl" title="${esc(i.label)}">${esc(i.label)}</span><span class="hbt"><i style="width:${(Math.abs(i.v) / mx * 100).toFixed(1)}%;background:${i.v < 0 ? "var(--red)" : (i.c || CLR.sales)}"></i></span><span class="hbv${i.v < 0 ? " neg" : ""}">${i.txt}</span></div>`).join("");
+}
+function lineChart(pts) {
+  if (pts.length < 2) return `<div class="empty">일자가 2일 이상이어야 추이가 보여요</div>`;
+  const W = 1100, H = 260, L = 50, Rr = 14, T = 14, B = 28;
+  const ys = pts.flatMap(p => [p.a, p.b]); const y0 = Math.min(0, ...ys); let y1 = Math.max(0, ...ys); if (y1 === y0) y1 = y0 + 1;
+  const X = i => L + (W - L - Rr) * i / (pts.length - 1);
+  const Y = v => T + (H - T - B) * (1 - (v - y0) / (y1 - y0));
+  let s = `<svg class="ln" viewBox="0 0 ${W} ${H}" role="img" aria-label="일자별 총매출·공헌이익 추이">`;
+  for (let k = 0; k <= 4; k++) { const v = y0 + (y1 - y0) * k / 4; s += `<line x1="${L}" x2="${W - Rr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#e6e9ef"/><text x="${L - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${mil1(v)}</text>`; }
+  if (y0 < 0) s += `<line x1="${L}" x2="${W - Rr}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#9aa3b2"/>`;
+  const step = Math.ceil(pts.length / 12);
+  pts.forEach((p, i) => { if (i % step === 0 || i === pts.length - 1) s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${p.x}일</text>`; });
+  for (const [k, c] of [["a", CLR.sales], ["b", CLR.cm]]) {
+    s += `<path d="${pts.map((p, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(p[k]).toFixed(1)}`).join("")}" fill="none" stroke="${c}" stroke-width="2.2"/>`;
+    s += pts.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p[k]).toFixed(1)}" r="3" fill="${p[k] < 0 ? "var(--red)" : c}"><title>${p.x}일 ${k === "a" ? "총매출" : "공헌이익"} ${mil1(p[k])}백만${k === "b" && p.s ? ` (${pct(p[k] / p.s)})` : ""}</title></circle>`).join("");
+  }
+  return s + `</svg><div class="lg"><span><b style="background:${CLR.sales}"></b>총매출</span><span><b style="background:${CLR.cm}"></b>공헌이익</span><span class="muted">단위 백만 · 점에 마우스 올리면 값 표시</span></div>`;
+}
+function dash(rows, R) {
+  const t = total(rows);
+  const rt = v => t.sales ? v / t.sales : null;
+  let h = `<div class="dgrid">`;
+  // ① 비용 구성 (총매출 100% 기준)
+  const parts = [["DC", t.dc, CLR.dc], ["장려금", t.jTot, CLR.j], ["판관비", t.pTot, CLR.p], ["변동원가", t.vc, CLR.vc], ["운송비", t.tr, CLR.tr], ["공헌이익", t.cm, CLR.cm]];
+  const pos = parts.map(p => Math.max(0, p[1])); const ps = pos.reduce((a, b) => a + b, 0) || 1;
+  h += `<section class="card wide"><h2>총매출 구성 <small>총매출 ${mil1(t.sales)}백만 = 아래 항목 합</small></h2>
+    <div class="stk">${parts.map((p, i) => pos[i] > 0 ? `<i style="width:${(pos[i] / ps * 100).toFixed(2)}%;background:${p[2]}" title="${p[0]} ${mil1(p[1])}백만 (${pct(rt(p[1]))})"></i>` : "").join("")}</div>
+    <div class="lg">${parts.map(p => `<span><b style="background:${p[2]}"></b>${p[0]} ${mil1(p[1])} <em>${pct(rt(p[1]))}</em></span>`).join("")}</div>
+    ${t.cm < 0 ? `<div class="neg" style="margin-top:6px">⚠️ 공헌이익 마이너스 — 막대는 비용 항목만 표시</div>` : ""}</section>`;
+  // ② 일자별 추이
+  const dy = agg(rows.filter(r => r.day != null), r => r.day, r => ({ day: r.day })).sort((a, b) => a.day - b.day);
+  h += `<section class="card wide"><h2>일자별 매출 추이 <small>총매출 · 공헌이익</small></h2>${lineChart(dy.map(a => ({ x: a.day, a: a.sales, b: a.cm, s: a.sales })))}</section>`;
+  // ③ 제품 TOP / BOTTOM
+  const pr = agg(rows, r => r.code, r => ({ code: r.code, name: r.name }));
+  const lab = a => `${a.name ?? ""} (${a.code})`;
+  const top = [...pr].sort((a, b) => b.cm - a.cm).slice(0, 10);
+  const bot = [...pr].sort((a, b) => a.cm - b.cm).slice(0, 10);
+  const negN = pr.filter(a => a.cm < 0).length;
+  h += `<section class="card"><h2>공헌이익 TOP 10 <small>제품별</small></h2>${hbars(top.map(a => ({ label: lab(a), v: a.cm, c: CLR.cm, txt: `${mil1(a.cm)} <em>${pct(a.cmR)}</em>` })))}</section>`;
+  h += `<section class="card"><h2>공헌이익 하위 10 <small>${negN ? `<span class="neg">마이너스 ${negN}개 제품</span>` : "마이너스 제품 없음"}</small></h2>${hbars(bot.map(a => ({ label: lab(a), v: a.cm, c: "#9aa3b2", txt: `${mil1(a.cm)} <em>${pct(a.cmR)}</em>` })))}</section>`;
+  // ④ 행사분류별 DC율 · 공헌이익율
+  const ev = agg(rows, r => r.evt ?? "(미분류)", r => ({ evt: r.evt ?? "(미분류)" })).sort((a, b) => b.sales - a.sales);
+  const em = Math.max(1e-9, ...ev.flatMap(a => [Math.abs(a.dcR || 0), Math.abs(a.cmR || 0)]));
+  const eb = (v, c) => `<div class="evb"><span class="hbt"><i style="width:${(Math.abs(v || 0) / em * 100).toFixed(1)}%;background:${v < 0 ? "var(--red)" : c}"></i></span><span class="${v < 0 ? "neg" : ""}">${pct(v)}</span></div>`;
+  h += `<section class="card wide"><h2>행사분류별 <small>매출 큰 순</small></h2><div class="evr hd"><span>행사분류 (매출)</span><span>DC율</span><span>공헌이익율</span></div>${ev.map(a => `<div class="evr"><span class="hbl" title="${esc(a.evt)}">${esc(a.evt)} <span class="muted">${mil1(a.sales)}</span></span>${eb(a.dcR, CLR.dc)}${eb(a.cmR, CLR.cm)}</div>`).join("")}</section>`;
+  const fl = [ST.ch, ST.big, ST.small].filter(x => x !== "전체");
+  return h + `</div><div class="help" style="margin-top:8px">금액 단위 백만원 · 율은 모두 <b>총매출(출고가 기준)</b> 대비 · 필터: <b>${fl.length ? fl.map(esc).join(" / ") : "전체"}</b> (장려금·판관비 배분은 전체 기준으로 계산 후 필터)</div>`;
 }
 
 function renderWarn(R) {
@@ -410,7 +514,7 @@ function renderWarn(R) {
 /* ================= 엑셀 다운로드 ================= */
 function download() {
   const R = ST.res; if (!R) return;
-  const rowsF = R.rows.filter(r => ST.ch === "전체" || r.ch === ST.ch);
+  const rowsF = filt(R.rows);
   const wb = XLSX.utils.book_new();
   const toSheet = (tab, data) => {
     const cols = COLS[tab];
@@ -430,7 +534,8 @@ function download() {
   [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 미매칭", W.cls], ["비용배부분류 미매칭", W.cost], ["역마진", W.neg]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wr), "경고");
   const ym = $("#ym").value || "";
-  XLSX.writeFile(wb, `DC_CM_${ym}_${ST.ch}.xlsx`);
+  const tag = [ST.ch, ST.big, ST.small].filter(x => x !== "전체").join("_") || "전체";
+  XLSX.writeFile(wb, `DC_CM_${ym}_${tag}.xlsx`.replace(/[\\/:*?"<>|]/g, ""));
 }
 
 /* ================= 이벤트 ================= */
