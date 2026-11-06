@@ -148,6 +148,21 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
     </div>
   </details>
 
+  <details class="card pst" id="arc" open>
+    <summary>📦 월별 보관함 <span class="muted" id="arcCnt" style="font-weight:400;font-size:12px"></span></summary>
+    <div class="row" style="margin-top:10px">
+      <button type="button" id="arcSave">💾 현재 결과 보관함에 저장</button>
+      <button type="button" class="sec" id="arcExp">📤 백업 복사 (텍스트)</button>
+      <button type="button" class="sec" id="arcImp">📥 백업 불러오기</button>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px;margin-left:auto">채널 <select id="arcCh"></select></label>
+    </div>
+    <div class="help" style="margin-top:6px">보관함은 이 PC 브라우저에만 저장돼요 (다른 사람 링크엔 안 보임). 브라우저 기록 삭제 등으로 날아갈 수 있으니 <b>저장할 때마다 「백업 복사」→ 메모장에 붙여넣어 보관</b>하세요. 복구는 「백업 불러오기」에 그 텍스트를 붙여넣으면 끝.</div>
+    <div id="arcBk" style="display:none;margin-top:8px">
+      <textarea id="arcTxt" spellcheck="false" style="height:110px"></textarea>
+      <div class="row" style="margin-top:6px"><button type="button" id="arcGo">불러오기 실행</button><button type="button" class="sec" id="arcClose">닫기</button><span class="muted" id="arcMsg"></span></div>
+    </div>
+    <div id="arcList" style="margin-top:8px"></div>
+  </details>
   <div id="warn"></div>
   <div id="out"></div>
 </main>
@@ -460,7 +475,8 @@ const sel = (id, lbl, opts, cur) => `<label class="f" style="flex-direction:row;
 function render() {
   const R = ST.res;
   if (!R) { $("#out").innerHTML = `<div class="card empty">① 기준 파일과 ② 매입 로우를 올리면 자동으로 계산돼요.</div>`; $("#warn").innerHTML = ""; return; }
-  renderWarn(R);
+  if (R.archived) $("#warn").innerHTML = `<div class="warnbox" style="background:#eef3fb;border-color:#b8c9e8"><h3>📦 보관함 ${esc(R.archived)} 보기 중 <span class="muted" style="font-weight:400">(저장 ${esc(R.savedAt)} 시점 결과 · 경고·상세는 저장 안 됨)</span></h3><button type="button" id="arcBack">← 현재 데이터로 돌아가기</button></div>`;
+  else renderWarn(R);
   if (ST.big !== "전체" && !bigs(R.rows).includes(ST.big)) ST.big = "전체";
   if (ST.small !== "전체" && !smalls(R.rows).includes(ST.small)) ST.small = "전체";
   if (ST.evt !== "전체" && !evts(R.rows).includes(ST.evt)) ST.evt = "전체";
@@ -479,7 +495,8 @@ function render() {
     ${kpi("운송비", t.tr, "운송비율", rt(t.tr))}
     ${kpi("공헌이익 (CM)", t.cm, "공헌이익율", t.cmR, "cm")}
   </div>`;
-  h += `<div class="tabs">${TABS.map(([k, l]) => `<button data-tab="${k}" class="${ST.tab === k ? "on" : ""}">${l}</button>`).join("")}</div>`;
+  const tabs = R.archived ? TABS.filter(([k]) => k !== "det") : TABS; if (R.archived && ST.tab === "det") ST.tab = "dash";
+  h += `<div class="tabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${ST.tab === k ? "on" : ""}">${l}</button>`).join("")}</div>`;
   h += `<div class="toolbar">
     ${sel("chSel", "채널", ["전체", ...R.chs], ST.ch)}
     ${sel("bigSel", "대카테고리", ["전체", ...bigs(R.rows)], ST.big)}
@@ -491,7 +508,7 @@ function render() {
     <button id="dl">엑셀 다운로드</button>
   </div>`;
   if (ST.tab === "dash") { h += dash(rowsF, R); finishRender(h); return; }
-  let data = dataFor(ST.tab, rowsF);
+  let data = ST.tab === "day" && R.days ? dataFor("day", filt(R.days)) : dataFor(ST.tab, rowsF);
   if (ST.q && ST.tab !== "sum" && ST.tab !== "day") { const q = ST.q.toLowerCase(); data = data.filter(r => String(r.code ?? "").includes(q) || String(r.name ?? "").toLowerCase().includes(q) || String(r.evt ?? "").toLowerCase().includes(q)); }
   const cols = COLS[ST.tab]; const s = ST.sort[ST.tab];
   if (s) data = [...data].sort((a, b) => { const x = a[s.k], y = b[s.k]; if (x == null) return 1; if (y == null) return -1; return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "ko")) * s.d; });
@@ -552,7 +569,7 @@ function dash(rows, R) {
     <div class="lg">${parts.map(p => `<span><b style="background:${p[2]}"></b>${p[0]} ${mil1(p[1])} <em>${pct(rt(p[1]))}</em></span>`).join("")}</div>
     ${t.cm < 0 ? `<div class="neg" style="margin-top:6px">⚠️ 공헌이익 마이너스 — 막대는 비용 항목만 표시</div>` : ""}</section>`;
   // ② 일자별 추이
-  const dy = agg(rows.filter(r => r.day != null), r => r.day, r => ({ day: r.day })).sort((a, b) => a.day - b.day);
+  const dy = agg(R.days ? filt(R.days) : rows.filter(r => r.day != null), r => r.day, r => ({ day: r.day })).sort((a, b) => a.day - b.day);
   h += `<section class="card wide"><h2>일자별 매출 추이 <small>총매출 · 공헌이익</small></h2>${lineChart(dy.map(a => ({ x: a.day, a: a.sales, b: a.cm, s: a.sales })))}</section>`;
   // ③ 제품 TOP / BOTTOM
   const pr = agg(rows, r => r.code, r => ({ code: r.code, name: r.name }));
@@ -627,7 +644,8 @@ function download() {
   XLSX.utils.book_append_sheet(wb, toSheet("sum", dataFor("sum", rowsF).concat([Object.assign(total(rowsF), { ch: "합계" })])), "채널요약");
   XLSX.utils.book_append_sheet(wb, toSheet("prod", dataFor("prod", rowsF)), "제품별");
   XLSX.utils.book_append_sheet(wb, toSheet("evt", dataFor("evt", rowsF)), "행사분류별");
-  XLSX.utils.book_append_sheet(wb, toSheet("day", dataFor("day", rowsF)), "일자별");
+  XLSX.utils.book_append_sheet(wb, toSheet("day", dataFor("day", R.days ? filt(R.days) : rowsF)), "일자별");
+  if (R.archived) { XLSX.writeFile(wb, `DC_CM_${R.archived}_보관함_${[ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체"}.xlsx`.replace(/[\\/:*?"<>|]/g, "")); return; }
   XLSX.utils.book_append_sheet(wb, toSheet("det", rowsF), "상세");
   const W = R.W; const wr = [["구분", "제품코드", "제품명"]];
   [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 누락", W.cls], ["비용배부 분류 없음", W.cost]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
@@ -673,14 +691,14 @@ function rebuildDays() {
   document.querySelectorAll("#days input").forEach(i => i.oninput = run);
 }
 
-function run() { try { ST.res = compute(); } catch (e) { console.error(e); alert("계산 오류: " + e.message); ST.res = null; } render(); }
+function run() { ST.view = null; try { ST.res = compute(); } catch (e) { console.error(e); alert("계산 오류: " + e.message); ST.res = null; } render(); try { arcRender(); } catch (e) { } }
 
 /* ================= 마지막 입력 저장 (이 PC 브라우저 IndexedDB, 외부 전송 없음) ================= */
 const DB = (() => {
   let p = null;
   const open = () => p || (p = new Promise(ok => { try { const q = indexedDB.open("dc_calc", 1); q.onupgradeneeded = () => q.result.createObjectStore("kv"); q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); } catch (e) { ok(null); } }));
   const tx = (mode, fn) => open().then(db => db ? new Promise(ok => { try { const t = db.transaction("kv", mode); const r = fn(t.objectStore("kv")); t.oncomplete = () => ok(r && "result" in r ? r.result : true); t.onerror = t.onabort = () => ok(null); } catch (e) { ok(null); } }) : null);
-  return { get: k => tx("readonly", s => s.get(k)), set: (k, v) => tx("readwrite", s => s.put(v, k)), clear: () => tx("readwrite", s => s.clear()) };
+  return { get: k => tx("readonly", s => s.get(k)), set: (k, v) => tx("readwrite", s => s.put(v, k)), del: k => tx("readwrite", s => s.delete(k)), clear: () => tx("readwrite", s => s.clear()) };
 })();
 const readBuf = f => new Promise((ok, ng) => { const fr = new FileReader(); fr.onload = e => ok(new Uint8Array(e.target.result)); fr.onerror = ng; fr.readAsArrayBuffer(f); });
 const wbOf = buf => XLSX.read(buf, { type: "array", cellDates: false });
@@ -819,9 +837,103 @@ async function restore() {
     $("#restoreMsg").textContent = "↩ 지난번 입력을 자동으로 불러왔어요";
   } catch (e) { $("#restoreMsg").textContent = "지난번 입력 복원 실패: " + e.message; }
 }
+/* ================= 월별 보관함 ================= */
+// 스냅샷 = 채널×제품 집계(rows) + 채널×분류×일자 집계(days) + 메타. 상세 행·경고는 저장 안 함 (용량)
+let ARC = {};
+const r0 = v => typeof v === "number" ? Math.round(v) : v;
+function makeSnap(R, ym) {
+  const pick = a => { const o = {}; NUMK.forEach(n => o[n] = r0(a[n])); return o; };
+  const rows = agg(R.rows, r => r.ch + "|" + r.code, r => ({ ch: r.ch, code: r.code, name: r.name, big: r.big, small: r.small, evt: r.evt, jCls: r.jCls, pCls: r.pCls }))
+    .map(a => ({ ch: a.ch, code: a.code, name: a.name, big: a.big, small: a.small, evt: a.evt, jCls: a.jCls, pCls: a.pCls, ...pick(a) }));
+  const days = agg(R.rows.filter(r => r.day != null), r => [r.ch, r.big, r.small, r.evt, r.day].join("|"), r => ({ ch: r.ch, big: r.big, small: r.small, evt: r.evt, day: r.day }))
+    .map(a => ({ ch: a.ch, big: a.big, small: a.small, evt: a.evt, day: a.day, ...pick(a) }));
+  const d = new Date(); const savedAt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return { ym, savedAt, chs: R.chs, mdays: R.mdays, prorate: R.prorate, rows, days };
+}
+function snapRes(s) {
+  const fill = a => { const o = { ...a }; NUMK.forEach(n => o[n] = o[n] || 0); return o; };
+  return { rows: s.rows.map(fill), days: s.days.map(fill), chs: s.chs, mdays: s.mdays, prorate: s.prorate, archived: s.ym, savedAt: s.savedAt,
+    W: { out: new Map(), vc: new Map(), tr: new Map(), cls: new Map(), cost: new Map(), neg: new Map(), chref: new Set(), noMonth: new Set(), noDay: 0 } };
+}
+function arcRender() {
+  const yms = Object.keys(ARC).sort();
+  $("#arcCnt").textContent = yms.length ? `${yms.length}개월 저장됨 (${yms[0]}${yms.length > 1 ? " ~ " + yms[yms.length - 1] : ""})` : "비어있음";
+  const allCh = [...new Set(yms.flatMap(y => ARC[y].chs))];
+  const cur = $("#arcCh").value || "전체";
+  $("#arcCh").innerHTML = ["전체", ...allCh].map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("");
+  const ch = $("#arcCh").value || "전체";
+  $("#arcSave").textContent = ST.res && !ST.res.archived ? `💾 현재 결과 보관함에 저장 (${$("#ym").value || "기준월?"})` : "💾 현재 결과 보관함에 저장";
+  $("#arcSave").disabled = !(ST.res && !ST.res.archived);
+  if (!yms.length) { $("#arcList").innerHTML = `<div class="help">계산 후 「💾 현재 결과 보관함에 저장」을 누르면 월별로 쌓여요. 같은 월을 다시 저장하면 덮어씀.</div>`; return; }
+  const cols = [["sales", "총매출"], ["dc", "DC"], ["jTot", "장려금"], ["pTot", "판관비"], ["vc", "변동원가"], ["tr", "운송비"], ["cm", "CM"]];
+  const rowsH = yms.map(y => {
+    const s = ARC[y]; const t = total(s.rows.filter(r => ch === "전체" || r.ch === ch));
+    const on = ST.res && ST.res.archived === y;
+    return `<tr${on ? ' style="background:#eef3fb"' : ""}><td><b>${esc(y)}</b></td><td class="muted">${esc(s.savedAt)}</td>${cols.map(([k]) => `<td class="n${t[k] < 0 ? " neg" : ""}">${fmt(t[k] / 1e6, 1)}</td>`).join("")}<td class="n">${pct(t.dcR)}</td><td class="n"><b>${pct(t.cmR)}</b></td>
+      <td><button type="button" class="sec" data-av="${esc(y)}" style="padding:3px 10px">보기</button> <button type="button" class="sec" data-ad="${esc(y)}" style="padding:3px 10px">삭제</button></td></tr>`;
+  }).join("");
+  $("#arcList").innerHTML = `<div class="tw" style="max-height:300px"><table><thead><tr><th>월</th><th>저장시각</th>${cols.map(([, l]) => `<th>${l}</th>`).join("")}<th>DC율</th><th>CM율</th><th></th></tr></thead><tbody>${rowsH}</tbody></table></div><div class="help" style="margin-top:4px">단위 백만원 · 율은 총매출 대비 · 채널 선택은 이 표에만 적용</div>`;
+  $("#arcList").querySelectorAll("[data-av]").forEach(b => b.onclick = () => { const s = ARC[b.dataset.av]; ST.view = s.ym; ST.res = snapRes(s); render(); arcRender(); $("#warn").scrollIntoView({ behavior: "smooth" }); });
+  $("#arcList").querySelectorAll("[data-ad]").forEach(b => b.onclick = async () => { const y = b.dataset.ad; if (!confirm(`${y} 보관 결과를 삭제할까요? (백업 텍스트가 있으면 다시 불러올 수 있어요)`)) return; delete ARC[y]; await DB.set("archive", ARC); if (ST.res && ST.res.archived === y) run(); arcRender(); });
+}
+$("#arcCh").onchange = arcRender;
+$("#arcSave").onclick = async () => {
+  const R = ST.res; if (!R || R.archived) return;
+  const ym = $("#ym").value; if (!ym) { alert("기준월을 먼저 정해주세요"); return; }
+  if (ARC[ym] && !confirm(`${ym}은 이미 저장돼 있어요 (${ARC[ym].savedAt}). 지금 결과로 덮어쓸까요?`)) return;
+  ARC[ym] = makeSnap(R, ym);
+  const ok = await DB.set("archive", ARC);
+  try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { }
+  arcRender();
+  alert(ok ? `${ym} 저장 완료 ✅\n안전하게 보관하려면 「📤 백업 복사」 → 메모장에 붙여넣어 저장해 두세요.` : "⚠ 저장 실패 (브라우저 저장소 사용 불가)");
+};
+// 백업 = "DCCALC1:" + base64(gzip(JSON{archive, ref 붙여넣기 시트}))
+const b64 = { enc: u8 => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }, dec: s => Uint8Array.from(atob(s), c => c.charCodeAt(0)) };
+const gz = async (u8, mode) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(mode === "c" ? new CompressionStream("gzip") : new DecompressionStream("gzip"))).arrayBuffer());
+async function makeBackup() {
+  const ref = {}; PS.forEach(p => { if (p.k !== "raw" && PT[p.k]) ref[p.k] = PT[p.k]; });
+  const json = JSON.stringify({ v: 1, at: new Date().toISOString(), archive: ARC, ref });
+  return "DCCALC1:" + b64.enc(await gz(new TextEncoder().encode(json), "c"));
+}
+async function readBackup(txt) {
+  const s = txt.replace(/\s+/g, ""); if (!s.startsWith("DCCALC1:")) throw new Error("백업 텍스트가 아니에요 (DCCALC1: 로 시작해야 함)");
+  return JSON.parse(new TextDecoder().decode(await gz(b64.dec(s.slice(8)), "d")));
+}
+$("#arcExp").onclick = async () => {
+  if (!Object.keys(ARC).length && !PS.some(p => p.k !== "raw" && PT[p.k])) { alert("백업할 내용이 없어요"); return; }
+  try {
+    const t = await makeBackup();
+    let copied = false; try { await navigator.clipboard.writeText(t); copied = true; } catch (e) { }
+    $("#arcBk").style.display = ""; $("#arcTxt").value = t; $("#arcGo").style.display = "none";
+    if (!copied) { $("#arcTxt").select(); try { copied = document.execCommand("copy"); } catch (e) { } }
+    $("#arcMsg").textContent = (copied ? "✅ 복사됨 → 메모장에 Ctrl+V 해서 저장하세요" : "아래 텍스트를 전체 선택(Ctrl+A) → 복사(Ctrl+C) 해서 메모장에 저장하세요") + ` · 보관 ${Object.keys(ARC).length}개월 + 기준시트 · ${(t.length / 1024).toFixed(0)}KB`;
+  } catch (e) { alert("백업 실패: " + e.message); }
+};
+$("#arcImp").onclick = () => { $("#arcBk").style.display = ""; $("#arcTxt").value = ""; $("#arcGo").style.display = ""; $("#arcMsg").textContent = "메모장에 저장해 둔 백업 텍스트를 붙여넣고 「불러오기 실행」"; $("#arcTxt").focus(); };
+$("#arcClose").onclick = () => { $("#arcBk").style.display = "none"; };
+$("#arcGo").onclick = async () => {
+  try {
+    const b = await readBackup($("#arcTxt").value);
+    const add = Object.keys(b.archive || {}), dup = add.filter(y => ARC[y]);
+    let over = true; if (dup.length) over = confirm(`이미 있는 월 ${dup.join(", ")} — 백업 내용으로 덮어쓸까요?\n(취소 = 없는 월만 추가)`);
+    add.forEach(y => { if (!ARC[y] || over) ARC[y] = b.archive[y]; });
+    await DB.set("archive", ARC);
+    const refKeys = Object.keys(b.ref || {});
+    let refMsg = "";
+    if (refKeys.length && confirm(`백업에 기준 시트 ${refKeys.length}개도 있어요. 지금 기준 시트를 백업 것으로 바꿀까요?`)) {
+      refKeys.forEach(k => PT[k] = b.ref[k]); await DB.set("pt", { ...PT }); await DB.set("refSrc", { type: "paste" });
+      $("#pTxt").value = PT[pCur]; pTabs(); applyPasteRef(); rebuildDays(); run(); refMsg = " · 기준 시트 복원";
+    }
+    arcRender();
+    $("#arcMsg").textContent = `✅ 보관함 ${add.length}개월 불러옴${refMsg}`;
+  } catch (e) { $("#arcMsg").textContent = "❌ " + e.message; }
+};
+document.addEventListener("click", e => { if (e.target && e.target.id === "arcBack") { run(); arcRender(); } });
+DB.get("archive").then(a => { ARC = a || {}; arcRender(); });
+
 $("#btnForget").onclick = async () => {
-  if (!confirm("이 PC에 저장된 입력(기준·로우·붙여넣기)을 모두 지울까요?")) return;
-  await DB.clear(); PS.forEach(p => { try { localStorage.removeItem("dc_p_" + p.k); } catch (e) { } });
+  if (!confirm("이 PC에 저장된 입력(기준·로우·붙여넣기)을 모두 지울까요?\n(📦 월별 보관함은 그대로 유지)")) return;
+  await DB.del("pt"); await DB.del("refSrc"); await DB.del("rawSrc"); PS.forEach(p => { try { localStorage.removeItem("dc_p_" + p.k); } catch (e) { } });
   location.reload();
 };
 
