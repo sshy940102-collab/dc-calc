@@ -497,7 +497,8 @@ function compute() {
     r.sAmt = amtOf(ref.sku, r.ch, cd + norm(K.sAmt)) * r.skuR;
     r.jTot = r.jPct + r.jAmt + r.sPct + r.sAmt;
     // 물류비: EM 등 = 직납 행만 / 농협 = 전 행(代수수료와 동시), 판관비분류로 없으면 카테고리명으로 대체, 과세 ×1.1
-    if (r.nh) { let lr = rateOf(ref.rate, r.ch, pc + norm(K.log)); if (!lr && r.catn) lr = rateOf(ref.rate, r.ch, norm(r.catn) + norm(K.log)); r.log = lr * r.amt * r.taxF; }
+    // 엑셀 IFERROR(XLOOKUP(V…),XLOOKUP(M…)) 그대로: 판관비분류 행이 '없을 때만' 카테고리명으로 (율 0인 행이 있으면 0 그대로)
+    if (r.nh) { const has = k => ref.rate.some(x => x.key === k && chOk(x, r.ch)); const k1 = pc + norm(K.log), k2 = norm(r.catn) + norm(K.log); r.log = (has(k1) ? rateOf(ref.rate, r.ch, k1) : r.catn ? rateOf(ref.rate, r.ch, k2) : 0) * r.amt * r.taxF; }
     else r.log = norm(r.tyn) === norm("직납-전환대상아님") ? rateOf(ref.rate, r.ch, pc + norm(K.log)) * r.amt : 0;
     r.fee = norm(r.tyn) === norm("도매위탁전환대상") ? rateOf(ref.rate, r.ch, pc + norm(K.fee)) * r.amt : 0;
     r.pDist = amtOf(ref.dist, r.ch, pc + norm(K.pDist)) * r.catP;
