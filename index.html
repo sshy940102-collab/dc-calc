@@ -535,9 +535,9 @@ function total(rows) { const a = { key: "합계" }; NUMK.forEach(n => a[n] = row
 /* ================= 렌더 ================= */
 const COLS = {
   sum: [["ch", "채널"], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
-  prod: [["ch", "채널"], ["code", "제품코드"], ["name", "제품명"], ["big", "대분류"], ["evt", "세분류"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
-  evt: [["ch", "채널"], ["evt", "세분류"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
-  day: [["ch", "채널"], ["day", "일자"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["cost", "비용계", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
+  prod: [["ch", "채널"], ["code", "제품코드"], ["name", "제품명"], ["big", "대분류"], ["evt", "세분류"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
+  evt: [["ch", "채널"], ["evt", "세분류"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
+  day: [["ch", "채널"], ["day", "일자"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
   det: [["ch", "채널"], ["dayRaw", "일자"], ["edi", "EDI관리코드명"], ["bar", "EDI상품코드"], ["ediName", "EDI상품명"], ["ty", "전환유형"], ["tyn", "전환유형명"], ["code", "제품코드"], ["name", "제품명"], ["ediq", "EDI수량", 1], ["qty", "전환수량", 1], ["amt", "매입금액", 1],
     ["jCls", "Prom_장려금분류"], ["pCls", "Prom_판관비분류"], ["big", "대분류"], ["small", "소분류"], ["evt", "세분류"], ["tax", "면과세"], ["skuR", "SKU구성비", 2], ["catJ", "CAT(장려금)", 2], ["catP", "CAT(판관비)", 2],
     ["inPrice", "납품가(EA)", 1], ["outPrice", "출고가(EA)", 1], ["vcU", "변동원가(EA)", 1], ["trU", "운송비(EA)", 1], ["sales", "총매출", 1], ["dc", "DC", 1],
@@ -554,9 +554,9 @@ function dataFor(tab, rows) {
   return rows;
 }
 
-// 채널 요약: 금액 옆 (총매출 대비 %) 합쳐 표시 — 다운로드는 COLS.sum 그대로(금액·율 분리)
+// 화면 표(상세 제외): 금액 옆 (총매출 대비 %) 합쳐 표시 — 다운로드는 COLS 그대로(금액·율 분리)
 const RATEK = new Set(["dc", "jTot", "pTot", "cost", "vc", "tr", "cm"]);
-const viewCols = tab => tab === "sum" ? COLS.sum.filter(c => c[2] !== 2).map(c => RATEK.has(c[0]) ? [c[0], c[1] + "(%)", 3] : c) : COLS[tab];
+const viewCols = tab => tab !== "det" ? COLS[tab].filter(c => c[2] !== 2).map(c => RATEK.has(c[0]) ? [c[0], c[1] + "(%)", 3] : c) : COLS[tab];
 function cell(v, t, k, r) {
   if (t === 3) { const b = cell(v, 1, k), x = r && r.sales && v != null ? v / r.sales : null; return x == null ? b : b.replace(/<\/td>$/, ` <span style="color:var(--muted,#888);font-size:.92em">(${pct(x)})</span></td>`); }
   if (t === 1) { const n = v == null ? null : (Math.abs(v) < 1000 && k !== "qty" && k !== "ediq" && v % 1 ? +v.toFixed(2) : Math.round(v)); return `<td class="n${v < 0 ? " neg" : ""}">${n == null ? '<span class="flag">없음</span>' : fmt(n, (Math.abs(v) < 1000 && v % 1) ? 2 : 0)}</td>`; }
