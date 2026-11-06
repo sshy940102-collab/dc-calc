@@ -546,6 +546,30 @@ function dash(rows, R) {
   return h + `</div><div class="help" style="margin-top:8px">금액 단위 백만원 · 율은 모두 <b>총매출(출고가 기준)</b> 대비 · 필터: <b>${fl.length ? fl.map(esc).join(" / ") : "전체"}</b> (장려금·판관비 배분은 전체 기준으로 계산 후 필터)</div>`;
 }
 
+// 비용 0 점검: 채널×장려금분류×판관비분류별 장려금·판관비·代수수료·물류비 중 0인 조합 (참고용, 경고 건수 제외)
+// 代수수료는 도매위탁 행이 있을 때만, 물류비는 직납 행이 있을 때만 점검
+function zeroCheck(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = r.ch + "\u0001" + r.jCls + "\u0001" + r.pCls;
+    let a = m.get(k); if (!a) { a = { ch: r.ch, j: r.jCls, p: r.pCls, amt: 0, jTot: 0, pd: 0, fee: 0, log: 0, hasA: false, hasZ: false }; m.set(k, a); }
+    a.amt += r.amt; a.jTot += r.jTot; a.pd += r.pDist + r.pSku; a.fee += r.fee; a.log += r.log;
+    if (norm(r.tyn) === norm("도매위탁전환대상")) a.hasA = true;
+    if (norm(r.tyn) === norm("직납-전환대상아님")) a.hasZ = true;
+  }
+  const all = [...m.values()];
+  all.forEach(a => { a.z = { j: a.jTot === 0, p: a.pd === 0, fee: a.hasA && a.fee === 0, log: a.hasZ && a.log === 0 }; a.any = Object.values(a.z).some(Boolean); });
+  return { n: all.length, list: all.filter(a => a.any).sort((x, y) => y.amt - x.amt) };
+}
+function renderZero(R) {
+  const Z = zeroCheck(R.rows);
+  const c = (v, zero, app = true) => !app ? `<td class="n muted">–</td>` : zero ? `<td class="n flag">0</td>` : `<td class="n">${fmt(v)}</td>`;
+  const sameCls = Z.list.every(a => a.j === a.p);
+  const body = Z.list.length ? `<div class="tw" style="max-height:320px;margin-top:8px"><table><thead><tr><th>채널</th><th>${sameCls ? "분류" : "장려금분류"}</th>${sameCls ? "" : "<th>판관비분류</th>"}<th>매입금액</th><th>장려금</th><th>판관비(분배+SKU)</th><th>代수수료</th><th>물류비</th></tr></thead><tbody>${Z.list.map(a => `<tr><td>${esc(a.ch)}</td><td>${esc(a.j)}</td>${sameCls ? "" : `<td>${esc(a.p)}</td>`}<td class="n">${fmt(a.amt)}</td>${c(a.jTot, a.z.j)}${c(a.pd, a.z.p)}${c(a.fee, a.z.fee, a.hasA)}${c(a.log, a.z.log, a.hasZ)}</tr>`).join("")}</tbody></table></div>
+    <div class="help" style="margin-top:6px"><span class="flag">0</span> = 거래조건에 해당 채널+분류 조건이 없어 0으로 계산됨. 원래 조건이 없는 거면 정상, 누락이면 거래조건 보완 · – = 해당 없음 (代수수료는 도매위탁, 물류비는 직납 매입만) · 필터와 무관하게 전체 기준</div>` : `<div class="help" style="margin-top:6px">모든 채널×분류에 장려금·판관비·代수수료/물류비가 잡혀 있어요.</div>`;
+  return `<details class="card" style="margin:0 0 12px"><summary style="cursor:pointer"><b>🔎 비용 0 점검 (참고)</b> <span class="muted">채널×분류 ${Z.n}개 중 0 있는 조합</span> <b class="${Z.list.length ? "flag" : ""}">${Z.list.length}개</b></summary>${body}</details>`;
+}
+
 function renderWarn(R) {
   const W = R.W; const items = [];
   const list = (m, title, why) => { if (m.size) items.push(`<details><summary><b>${title}</b> ${m.size}개 — ${why}</summary><ul>${[...m].slice(0, 300).map(([k, v]) => `<li>${esc(k)} ${esc(v ?? "")}</li>`).join("")}</ul></details>`); };
@@ -558,6 +582,7 @@ function renderWarn(R) {
   if (W.noMonth.size) items.push(`<details><summary><b>금액(월) 없음</b> ${W.noMonth.size}개 — 거래조건 S/AF 금액을 일할 없이 그대로 사용</summary><ul>${[...W.noMonth].map(k => `<li>${esc(k)}</li>`).join("")}</ul></details>`);
   if (W.noDay) items.push(`<div><b>일자 인식 실패</b> ${W.noDay}행</div>`);
   $("#warn").innerHTML = items.length ? `<div class="warnbox"><h3>⚠️ 확인 필요 ${items.length}건</h3>${items.join("")}</div>` : `<div class="warnbox okb"><h3>✅ 매칭 문제 없음</h3></div>`;
+  $("#warn").innerHTML += renderZero(R);
 }
 
 /* ================= 엑셀 다운로드 ================= */
@@ -582,6 +607,10 @@ function download() {
   const W = R.W; const wr = [["구분", "제품코드", "제품명"]];
   [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 미매칭", W.cls], ["비용배부 분류 없음", W.cost]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wr), "경고");
+  const zr = [["채널", "장려금분류", "판관비분류", "매입금액", "장려금", "판관비(분배+SKU)", "代수수료", "물류비", "0인 항목"]];
+  zeroCheck(R.rows).list.forEach(a => zr.push([a.ch, a.j, a.p, Math.round(a.amt), Math.round(a.jTot), Math.round(a.pd), a.hasA ? Math.round(a.fee) : "해당없음", a.hasZ ? Math.round(a.log) : "해당없음",
+    [a.z.j && "장려금", a.z.p && "판관비", a.z.fee && "代수수료", a.z.log && "물류비"].filter(Boolean).join(", ")]));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(zr), "비용0점검");
   const ym = $("#ym").value || "";
   const tag = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체";
   XLSX.writeFile(wb, `DC_CM_${ym}_${tag}.xlsx`.replace(/[\\/:*?"<>|]/g, ""));
