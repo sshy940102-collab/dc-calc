@@ -92,6 +92,13 @@ tr.tot td{font-weight:700;background:#f0f3f8;position:sticky;bottom:0}
 svg.ln{width:100%;height:auto;max-height:300px;display:block}
 svg.ln text{font-size:11px;fill:var(--sub)}
 @media (max-width:600px){.hbr{grid-template-columns:80px 1fr 100px}}
+.pst{margin-top:12px}
+.pst>summary{cursor:pointer;font-size:14px;font-weight:700;color:var(--navy);list-style:none}
+.ptabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0 6px}
+.ptabs button{background:#e7ebf2;color:var(--txt);padding:6px 12px;font-size:12.5px}
+.ptabs button.on{background:var(--navy);color:#fff}
+.ptabs button i{font-style:normal;font-size:11px;margin-left:4px;opacity:.8}
+.pst textarea{width:100%;height:180px;font:12px/1.4 Consolas,monospace;border:1px solid var(--line);border-radius:4px;padding:8px;white-space:pre;resize:vertical;background:#fff;color:var(--txt)}
 footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 @media (max-width:600px){main{padding:10px}header{padding:12px 16px}}
 </style>
@@ -123,6 +130,21 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
       <div class="days" id="days"></div>
     </section>
   </div>
+  <details class="card pst" id="pst">
+    <summary>📋 엑셀에서 복사 → 붙여넣기로 입력 (파일 업로드가 안 될 때)</summary>
+    <div class="help" style="margin-top:8px">
+      각 시트에서 <b>A1 셀 클릭 → Ctrl+A → Ctrl+C</b> 후 아래 칸에 <b>Ctrl+V</b>. 열 위치(A, B, C…)를 그대로 읽으니 <b>꼭 A1부터 통째로</b> 복사하세요.<br>
+      · 매입 로우: 머리글 행(제품코드·매입금액 등)이 포함되면 위치 상관없음 · 화면에 보이는 값 그대로 들어가니 <b>율·단가는 소수점이 다 보이게</b> 해두세요 (예: 0.95%가 1%로 보이면 1%로 계산)<br>
+      · 기준 4개 시트는 이 PC 브라우저에 저장돼서 다음엔 매입 로우만 붙여넣으면 됩니다 (외부 전송 없음)
+    </div>
+    <div class="ptabs" id="ptabs"></div>
+    <textarea id="pTxt" spellcheck="false" placeholder="여기에 Ctrl+V"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button type="button" id="pApply">붙여넣은 내용으로 계산</button>
+      <button type="button" class="sec" id="pClear">이 칸 지우기</button>
+      <span class="muted" id="pMsg"></span>
+    </div>
+  </details>
 
   <div id="warn"></div>
   <div id="out"></div>
@@ -608,6 +630,81 @@ setupDrop("#dropRaw", "#fRaw", async files => {
     ST.raw = all; ST.rawFiles = files.map(f => f.name); rawChips(); rebuildDays(); run();
   } catch (e) { alert("로우 읽기 실패: " + e.message); }
 });
+/* ================= 붙여넣기 입력 ================= */
+const PS = [
+  { k: "raw", t: "매입 로우", sheet: "Raw" },
+  { k: "rate", t: "거래조건", sheet: "거래조건" },
+  { k: "cost", t: "비용배부분류", sheet: "비용배부분류" },
+  { k: "prod", t: "제품분류", sheet: "제품분류" },
+  { k: "base", t: "기준정보", sheet: "기준정보" }
+];
+const PT = {}; let pCur = "raw";
+PS.forEach(p => { PT[p.k] = p.k === "raw" ? "" : (ls.get("dc_p_" + p.k) || ""); });
+// 엑셀 복사 텍스트(TSV, 따옴표 처리) → 2차원 배열
+function parseTSV(s) {
+  const rows = []; let row = [], cell = "", q = false, i = 0;
+  s = s.replace(/\r\n?/g, "\n");
+  while (i < s.length) {
+    const ch = s[i];
+    if (q) { if (ch === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if (ch === '"' && cell === "") q = true;
+    else if (ch === "\t") { row.push(cell); cell = ""; }
+    else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += ch;
+    i++;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+// 화면 표시값 → 값 (1,234 / 9% / (1,234) / - / #N/A)
+function pVal(v) {
+  const t = v.trim(); if (t === "") return null;
+  if (/^#(N\/A|VALUE!|REF!|DIV\/0!|NAME\?|NUM!|NULL!)$/i.test(t)) return null;
+  if (t === "-") return 0;
+  let m = t.match(/^\(?-?[₩$]?\s*[\d,]*\.?\d+\)?%?$/);
+  if (m && /\d/.test(t)) {
+    let x = t.replace(/[₩$,\s()%]/g, ""); let n = +x;
+    if (!isFinite(n)) return t;
+    if (/^\(.*\)%?$/.test(t)) n = -Math.abs(n);
+    if (t.endsWith("%")) n /= 100;
+    // 앞자리 0 있는 코드(예: 0123)·13자리 바코드는 문자 유지
+    if (/^0\d/.test(x) || /^\d{12,}$/.test(x)) return x;
+    return n;
+  }
+  return t;
+}
+const pSheet = txt => XLSX.utils.aoa_to_sheet(parseTSV(txt).map(r => r.map(pVal)));
+function pTabs() {
+  $("#ptabs").innerHTML = PS.map(p => { const n = PT[p.k] ? parseTSV(PT[p.k]).length : 0; return `<button type="button" data-k="${p.k}" class="${p.k === pCur ? "on" : ""}">${p.t}<i>${n ? n.toLocaleString() + "행" : "비어있음"}</i></button>`; }).join("");
+  $("#ptabs").querySelectorAll("button").forEach(b => b.onclick = () => { pCur = b.dataset.k; $("#pTxt").value = PT[pCur]; pTabs(); });
+}
+$("#pTxt").oninput = () => { PT[pCur] = $("#pTxt").value; pTabs(); };
+$("#pClear").onclick = () => { PT[pCur] = ""; $("#pTxt").value = ""; if (pCur !== "raw") try { localStorage.removeItem("dc_p_" + pCur); } catch (e) { } pTabs(); };
+$("#pApply").onclick = () => {
+  const msg = [];
+  try {
+    const refPs = PS.filter(p => p.k !== "raw" && PT[p.k].trim());
+    if (refPs.length) {
+      const wb = XLSX.utils.book_new();
+      refPs.forEach(p => XLSX.utils.book_append_sheet(wb, pSheet(PT[p.k]), p.sheet));
+      ST.ref = parseRef(wb); ST.ref.fname = "붙여넣기 (" + refPs.map(p => p.t).join("·") + ")"; refChips();
+      let saved = true;
+      refPs.forEach(p => { try { localStorage.setItem("dc_p_" + p.k, PT[p.k]); } catch (e) { saved = false; } });
+      msg.push("기준 " + refPs.length + "개 시트 적용" + (saved ? " · 이 PC에 저장됨" : " · ⚠ 용량 초과로 저장 못함 (다음에 다시 붙여넣기)"));
+    }
+    if (PT.raw.trim()) {
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, pSheet(PT.raw), "Raw");
+      ST.raw = parseRaw(wb, "붙여넣기"); ST.rawFiles = ["붙여넣기"]; rawChips();
+      msg.push("매입 로우 " + ST.raw.length.toLocaleString() + "행");
+    }
+    if (!msg.length) { $("#pMsg").textContent = "붙여넣은 내용이 없어요"; return; }
+    rebuildDays(); run();
+    $("#pMsg").textContent = "✅ " + msg.join(" / ") + (ST.ref ? "" : " — 기준 시트도 필요해요");
+  } catch (e) { $("#pMsg").textContent = "❌ " + e.message; }
+};
+$("#pTxt").value = PT[pCur]; pTabs();
+if (PS.some(p => p.k !== "raw" && PT[p.k])) $("#pMsg").textContent = "저장된 기준 시트 있음 → 매입 로우만 붙여넣고 [계산]";
+
 $("#ym").oninput = () => { ls.set("dc_ym", $("#ym").value); run(); };
 $("#defCh").oninput = () => { ls.set("dc_defCh", $("#defCh").value); if (ST.raw.length) { rawChips(); rebuildDays(); } run(); };
 (function init() {
