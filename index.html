@@ -94,7 +94,7 @@ tr.tot td{font-weight:700;background:#f0f3f8;position:sticky;bottom:0}
 .lntip div span{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}
 .lntip em{font-style:normal;color:var(--sub);font-weight:400;margin-left:4px}
 .evwrap{overflow-x:auto}
-.evr.ev6{grid-template-columns:minmax(90px,150px) repeat(5,minmax(95px,1fr));min-width:640px}
+.evr.ev6{grid-template-columns:minmax(90px,150px) repeat(6,minmax(95px,1fr));min-width:740px}
 .evr.tot{border-top:2px solid var(--line);font-weight:700}
 .lg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px}
 .lg span{display:inline-flex;align-items:center;gap:5px}
@@ -700,14 +700,22 @@ function dash(rows, R) {
   const negN = pr.filter(a => a.cm < 0).length;
   h += `<section class="card"><h2>공헌이익 TOP 10 <small>제품별</small></h2>${hbars(top.map(a => ({ label: lab(a), v: a.cm, c: CLR.cm, txt: `${mil1(a.cm)} <em>${pct(a.cmR)}</em>` })))}</section>`;
   h += `<section class="card"><h2>공헌이익 하위 10 <small>${negN ? `<span class="neg">마이너스 ${negN}개 제품</span>` : "마이너스 제품 없음"}</small></h2>${hbars(bot.map(a => ({ label: lab(a), v: a.cm, c: "#9aa3b2", txt: `${mil1(a.cm)} <em>${pct(a.cmR)}</em>` })))}</section>`;
+  // 공헌이익율 기준 (매출 0 이하 제품 제외)
+  const prR = pr.filter(a => a.sales > 0 && a.cmR != null);
+  const topR = [...prR].sort((a, b) => b.cmR - a.cmR).slice(0, 10);
+  const botR = [...prR].sort((a, b) => a.cmR - b.cmR).slice(0, 10);
+  const negR = prR.filter(a => a.cmR < 0).length;
+  h += `<section class="card"><h2>공헌이익율 TOP 10 <small>제품별 · 율 높은 순</small></h2>${hbars(topR.map(a => ({ label: lab(a), v: a.cmR, c: CLR.cm, txt: `${pct(a.cmR)} <em>${mil1(a.cm)}</em>` })))}</section>`;
+  h += `<section class="card"><h2>공헌이익율 하위 10 <small>${negR ? `<span class="neg">마이너스 ${negR}개 제품</span>` : "마이너스 제품 없음"}</small></h2>${hbars(botR.map(a => ({ label: lab(a), v: a.cmR, c: "#9aa3b2", txt: `${pct(a.cmR)} <em>${mil1(a.cm)}</em>` })))}</section>`;
   // ④ 행사분류별 DC율 · 장려금율 · 판관비율 · 비용율 · 공헌이익율
   const ev = agg(rows, r => r.evt ?? "(미분류)", r => ({ evt: r.evt ?? "(미분류)" })).sort((a, b) => b.sales - a.sales);
   ev.forEach(a => { a.jR = a.sales ? a.jTot / a.sales : null; a.pR = a.sales ? a.pTot / a.sales : null; });
-  const EC = [["dcR", "DC율", CLR.dc], ["jR", "장려금율", CLR.j], ["pR", "판관비율", CLR.p], ["costR", "비용율", "#c0504d"], ["cmR", "공헌이익율", CLR.cm]];
-  const em = Math.max(1e-9, ...ev.flatMap(a => EC.map(([k]) => Math.abs(a[k] || 0))));
-  const eb = (v, c) => `<div class="evb"><span class="hbt"><i style="width:${(Math.abs(v || 0) / em * 100).toFixed(1)}%;background:${v < 0 ? "var(--red)" : c}"></i></span><span class="${v < 0 ? "neg" : ""}">${pct(v)}</span></div>`;
+  const EC = [["dcR", "DC율", CLR.dc], ["jR", "장려금율", CLR.j], ["pR", "판관비율", CLR.p], ["costR", "비용율", "#c0504d"], ["cm", "공헌이익액", CLR.cm, 1], ["cmR", "공헌이익율", CLR.cm]];
+  const em = Math.max(1e-9, ...ev.flatMap(a => EC.filter(c => !c[3]).map(([k]) => Math.abs(a[k] || 0))));
+  const emA = Math.max(1e-9, ...ev.map(a => Math.abs(a.cm || 0)));
+  const eb = (v, c, amt) => `<div class="evb"><span class="hbt"><i style="width:${Math.min(100, Math.abs(v || 0) / (amt ? emA : em) * 100).toFixed(1)}%;background:${v < 0 ? "var(--red)" : c}"></i></span><span class="${v < 0 ? "neg" : ""}">${amt ? mil1(v) : pct(v)}</span></div>`;
   const evT = total(rows); evT.jR = evT.sales ? evT.jTot / evT.sales : null; evT.pR = evT.sales ? evT.pTot / evT.sales : null;
-  h += `<section class="card wide"><h2>행사분류별 <small>매출 큰 순 · 비용율 = DC+장려금+판관비</small></h2><div class="evwrap"><div class="evr ev6 hd"><span>행사분류 (매출)</span>${EC.map(c => `<span>${c[1]}</span>`).join("")}</div>${ev.map(a => `<div class="evr ev6"><span class="hbl" title="${esc(a.evt)}">${esc(a.evt)} <span class="muted">${mil1(a.sales)}</span></span>${EC.map(([k, , c]) => eb(a[k], c)).join("")}</div>`).join("")}<div class="evr ev6 tot"><span><b>전체</b> <span class="muted">${mil1(evT.sales)}</span></span>${EC.map(([k, , c]) => eb(evT[k], c)).join("")}</div></div></section>`;
+  h += `<section class="card wide"><h2>행사분류별 <small>매출 큰 순 · 비용율 = DC+장려금+판관비</small></h2><div class="evwrap"><div class="evr ev6 hd"><span>행사분류 (매출)</span>${EC.map(c => `<span>${c[1]}</span>`).join("")}</div>${ev.map(a => `<div class="evr ev6"><span class="hbl" title="${esc(a.evt)}">${esc(a.evt)} <span class="muted">${mil1(a.sales)}</span></span>${EC.map(([k, , c, m]) => eb(a[k], c, m)).join("")}</div>`).join("")}<div class="evr ev6 tot"><span><b>전체</b> <span class="muted">${mil1(evT.sales)}</span></span>${EC.map(([k, , c, m]) => eb(evT[k], c, m)).join("")}</div></div></section>`;
   // ⑤ 고정비 스프레드 영향 품목: 율이 아니라 월 고정금액(장려금_분배기준·SKU금액, 판관비_분배·SKU)을 매입비중으로 나눠 받아 CM율이 깎이는 제품
   h += fixedSpread(rows, t);
   const fl = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체");
