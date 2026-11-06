@@ -1034,8 +1034,15 @@ $("#arcCh").onchange = arcRender;
 $("#arcSave").onclick = async () => {
   const R = ST.res; if (!R || R.archived) return;
   const ym = $("#ym").value; if (!ym) { alert("기준월을 먼저 정해주세요"); return; }
-  if (ARC[ym] && !confirm(`${ym}은 이미 저장돼 있어요 (${ARC[ym].savedAt}). 지금 결과로 덮어쓸까요?`)) return;
-  ARC[ym] = makeSnap(R, ym);
+  const nw = makeSnap(R, ym), old = ARC[ym];
+  if (old) {
+    // 채널 단위로 합치기: 같은 월이라도 이번에 계산한 채널만 교체, 다른 채널은 유지 (EM 저장 후 농협 저장해도 EM 안 날아감)
+    const same = old.chs.filter(c => nw.chs.includes(c)), keep = old.chs.filter(c => !nw.chs.includes(c));
+    if (same.length && !confirm(`${ym} ${same.join(", ")} 결과가 이미 있어요 (${old.savedAt}). 지금 결과로 덮어쓸까요?${keep.length ? `\n(${keep.join(", ")}는 그대로 유지)` : ""}`)) return;
+    nw.rows = [...old.rows.filter(r => keep.includes(r.ch)), ...nw.rows]; nw.days = [...old.days.filter(r => keep.includes(r.ch)), ...nw.days];
+    nw.prorate = { ...old.prorate, ...nw.prorate }; nw.chs = [...keep, ...nw.chs];
+  }
+  ARC[ym] = nw;
   const ok = await DB.set("archive", ARC);
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { }
   arcRender();
