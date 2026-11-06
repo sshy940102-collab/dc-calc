@@ -344,7 +344,8 @@ function compute() {
     const cst = ref.cost[r.code];
     r.jCls = cst && cst.j != null ? String(cst.j) : (r.catn ?? "");
     r.pCls = cst && cst.p != null ? String(cst.p) : (r.catn ?? "");
-    if (!cst) W.cost.set(r.code, r.name);
+    // 비용배부분류 미매칭 → 로우 카테고리명 대체는 정상 운영. 대체할 카테고리명도 없을 때만 경고
+    if (!String(r.jCls).trim() || !String(r.pCls).trim()) W.cost.set(r.code, r.name);
     const pj = ref.prodJ[r.code];
     r.big = pj ? pj.L : null; r.small = pj ? pj.M : null;
     r.evt = ref.prodA[r.code] ?? null;
@@ -552,7 +553,7 @@ function renderWarn(R) {
   list(W.tr, "운송비 없음", "기준정보 물류비 공란/#N/A → 운송비 0 (CM 과대 가능)");
   list(W.vc, "변동원가 없음", "기준정보 변동/봉 공란 → 변동원가 0 (CM 과대 가능)");
   list(W.cls, "제품분류 미매칭", "대/소분류 없음");
-  list(W.cost, "비용배부분류 미매칭", "장려금·판관비 분류를 로우의 카테고리명으로 대체");
+  list(W.cost, "비용배부 분류 없음", "비용배부분류에도 없고 로우 카테고리명도 공란 → 장려금·판관비 배분 안 됨");
   if (W.chref.size) items.push(`<div><b>거래조건에 없는 채널</b>: ${[...W.chref].map(esc).join(", ")} — 채널 공란인 공통조건만 적용됨 (이름 띄어쓰기 확인)</div>`);
   if (W.noMonth.size) items.push(`<details><summary><b>금액(월) 없음</b> ${W.noMonth.size}개 — 거래조건 S/AF 금액을 일할 없이 그대로 사용</summary><ul>${[...W.noMonth].map(k => `<li>${esc(k)}</li>`).join("")}</ul></details>`);
   if (W.noDay) items.push(`<div><b>일자 인식 실패</b> ${W.noDay}행</div>`);
@@ -579,7 +580,7 @@ function download() {
   XLSX.utils.book_append_sheet(wb, toSheet("day", dataFor("day", rowsF)), "일자별");
   XLSX.utils.book_append_sheet(wb, toSheet("det", rowsF), "상세");
   const W = R.W; const wr = [["구분", "제품코드", "제품명"]];
-  [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 미매칭", W.cls], ["비용배부분류 미매칭", W.cost]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
+  [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 미매칭", W.cls], ["비용배부 분류 없음", W.cost]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wr), "경고");
   const ym = $("#ym").value || "";
   const tag = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체";
