@@ -683,6 +683,29 @@ document.addEventListener("click", e => {
   const px = x * sc, tw = tip.offsetWidth, sw = svg.getBoundingClientRect().width;
   tip.style.left = (px + 12 + tw > sw ? Math.max(0, px - tw - 12) : px + 12) + "px";
 });
+// CM 브릿지(폭포): 총매출에서 비용을 차례로 빼서 CM까지. 비용이 마이너스(예: 농협 DC)면 위로 올라가는 막대
+function bridge(t) {
+  const steps = [["DC", t.dc, CLR.dc], ["장려금", t.jTot, CLR.j], ["판관비", t.pTot, CLR.p], ["변동원가", t.vc, CLR.vc], ["운송비", t.tr, CLR.tr]];
+  const bars = [{ n: "총매출", a: 0, b: t.sales, v: t.sales, c: CLR.sales, tot: 1 }];
+  let run = t.sales;
+  for (const [n, v, c] of steps) { const nx = run - v; bars.push({ n, a: run, b: nx, v: -v, c: v >= 0 ? c : "#4a9d5b" }); run = nx; }
+  bars.push({ n: "공헌이익", a: 0, b: t.cm, v: t.cm, c: t.cm >= 0 ? CLR.cm : "#c0392b", tot: 1 });
+  const W = 900, H = 270, L = 10, Rm = 10, T = 26, B = 46, ys = bars.flatMap(x => [x.a, x.b]);
+  const lo = Math.min(0, ...ys), hi = Math.max(0, ...ys) || 1, y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const bw = (W - L - Rm) / bars.length, w = bw * 0.62;
+  let s = `<svg class="ln" viewBox="0 0 ${W} ${H}" role="img" aria-label="CM 브릿지">`;
+  s += `<line x1="${L}" x2="${W - Rm}" y1="${y(0)}" y2="${y(0)}" stroke="var(--sub)" stroke-opacity=".4"/>`;
+  bars.forEach((x, i) => {
+    const cx = L + bw * i + bw / 2, top = y(Math.max(x.a, x.b)), bot = y(Math.min(x.a, x.b)), hgt = Math.max(1, bot - top);
+    if (i < bars.length - 1) { const nb = bars[i + 1], ly = y(x.b); s += `<line x1="${cx + w / 2}" x2="${L + bw * (i + 1) + bw / 2 - w / 2}" y1="${ly}" y2="${ly}" stroke="var(--sub)" stroke-dasharray="3 3" stroke-opacity=".6"/>`; }
+    s += `<rect x="${cx - w / 2}" y="${top}" width="${w}" height="${hgt}" rx="2" fill="${x.c}"><title>${x.n} ${mil1(x.v)}백만 (${pct(t.sales ? x.v / t.sales : null)})</title></rect>`;
+    const sign = x.tot ? "" : (x.v > 0 ? "+" : "");
+    s += `<text x="${cx}" y="${top - 6}" text-anchor="middle" style="font-weight:700;fill:var(--txt);font-size:12.5px">${sign}${mil1(x.v)}</text>`;
+    s += `<text x="${cx}" y="${H - B + 18}" text-anchor="middle" style="font-size:12px;fill:var(--txt)">${x.n}</text>`;
+    s += `<text x="${cx}" y="${H - B + 34}" text-anchor="middle">${pct(t.sales ? x.v / t.sales : null)}</text>`;
+  });
+  return s + `</svg>`;
+}
 function dash(rows, R) {
   const t = total(rows);
   const rt = v => t.sales ? v / t.sales : null;
@@ -697,6 +720,7 @@ function dash(rows, R) {
       return `<i style="width:${w.toFixed(2)}%;background:${p[2]}" title="${p[0]} ${mil1(p[1])}백만 (${pct(rt(p[1]))})">${lbl}</i>`; }).join("")}</div>
     <div class="lg">${parts.map(p => `<span><b style="background:${p[2]}"></b>${p[0]} ${mil1(p[1])} <em>${pct(rt(p[1]))}</em></span>`).join("")}</div>
     ${t.cm < 0 ? `<div class="neg" style="margin-top:6px">⚠️ 공헌이익 마이너스 — 막대는 비용 항목만 표시</div>` : ""}</section>`;
+  h += `<section class="card wide"><h2>CM 브릿지 <small>총매출 → 비용 차감 → 공헌이익 · 백만원 (총매출 대비 %)</small></h2>${bridge(t)}</section>`;
   // ② 일자별 추이
   const dy = agg(R.days ? filt(R.days) : rows.filter(r => r.day != null), r => r.day, r => ({ day: r.day })).sort((a, b) => a.day - b.day);
   h += `<section class="card wide"><h2>일자별 매출 추이 <small>총매출 · 공헌이익</small></h2>${lineChart(dy.map(a => ({ x: a.day, a: a.sales, b: a.cm, s: a.sales, d: a })))}</section>`;
