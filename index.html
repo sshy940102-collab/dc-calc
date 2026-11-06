@@ -369,7 +369,12 @@ function compute() {
     const pj = ref.prodJ[r.code];
     r.big = pj ? pj.L : null; r.small = pj ? pj.M : null;
     r.evt = ref.prodA[r.code] ?? null;
-    if (!pj) W.cls.set(r.code, r.name);
+    // 제품분류: 코드 없음 또는 대·소카테고리·행사분류 중 공란이면 경고 (필터·집계에서 '(미분류)'로 빠짐)
+    if (!W.cls.has(r.code)) {
+      const blank = v => v == null || String(v).trim() === "";
+      const miss = !pj ? ["제품분류에 코드 없음"] : [blank(r.big) && "대카테고리", blank(r.small) && "소카테고리", blank(r.evt) && "행사분류"].filter(Boolean);
+      if (miss.length) W.cls.set(r.code, `${r.name ?? ""} → ${pj ? miss.join("·") + " 공란" : miss[0]}`);
+    }
     r.inPrice = String(r.big ?? "") === "단산" ? 0 : (r.qty ? r.amt / r.qty : 0);
     const b = ref.base[r.code];
     r.outPrice = b ? b.out : null; r.vcU = b ? b.vc : null; r.trU = b ? b.tr : null;
@@ -596,7 +601,7 @@ function renderWarn(R) {
   list(W.out, "출고가 미매칭", "기준정보에 없음 → 총매출·DC 0 처리됨");
   list(W.tr, "운송비 없음", "기준정보 물류비 공란/#N/A → 운송비 0 (CM 과대 가능)");
   list(W.vc, "변동원가 없음", "기준정보 변동/봉 공란 → 변동원가 0 (CM 과대 가능)");
-  list(W.cls, "제품분류 미매칭", "대/소분류 없음");
+  list(W.cls, "제품분류 누락", "대·소카테고리·행사분류 중 빈 칸 → 필터·집계에서 '(미분류)'로 표시 (금액 계산엔 영향 없음)");
   list(W.cost, "비용배부 분류 없음", "비용배부분류에도 없고 로우 카테고리명도 공란 → 장려금·판관비 배분 안 됨");
   if (W.chref.size) items.push(`<div><b>거래조건에 없는 채널</b>: ${[...W.chref].map(esc).join(", ")} — 채널 공란인 공통조건만 적용됨 (이름 띄어쓰기 확인)</div>`);
   if (W.noMonth.size) items.push(`<details><summary><b>금액(월) 없음</b> ${W.noMonth.size}개 — 거래조건 S/AF 금액을 일할 없이 그대로 사용</summary><ul>${[...W.noMonth].map(k => `<li>${esc(k)}</li>`).join("")}</ul></details>`);
@@ -625,7 +630,7 @@ function download() {
   XLSX.utils.book_append_sheet(wb, toSheet("day", dataFor("day", rowsF)), "일자별");
   XLSX.utils.book_append_sheet(wb, toSheet("det", rowsF), "상세");
   const W = R.W; const wr = [["구분", "제품코드", "제품명"]];
-  [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 미매칭", W.cls], ["비용배부 분류 없음", W.cost]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
+  [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 누락", W.cls], ["비용배부 분류 없음", W.cost]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wr), "경고");
   const zr = [["채널", "장려금분류", "판관비분류", "매입금액", "장려금", "판관비(분배+SKU)", "代수수료", "물류비", "0인 항목"]];
   zeroCheck(R.rows).list.forEach(a => zr.push([a.ch, a.j, a.p, Math.round(a.amt), Math.round(a.jTot), Math.round(a.pd), a.hasA ? Math.round(a.fee) : "해당없음", a.hasZ ? Math.round(a.log) : "해당없음",
