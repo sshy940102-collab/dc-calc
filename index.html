@@ -106,7 +106,15 @@ svg.ln text{font-size:11px;fill:var(--sub)}
 .stages button.on{color:var(--red);border-bottom-color:var(--red);font-weight:700}
 .stages button.on b{background:var(--red)}
 .stages .arr{align-self:center;color:#c9d0dc;padding:0 4px}
-body[data-stage="1"] #stage2,body[data-stage="1"] #stage3,body[data-stage="2"] #stage1,body[data-stage="2"] #stage3,body[data-stage="3"] #stage1,body[data-stage="3"] #stage2{display:none}
+.stg{display:none}
+body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4{display:block}
+.stages button.chk b{background:#e0a100}
+.stages button.chk.on{color:#b26a00;border-bottom-color:#e0a100}
+.stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
+.fx td input,.fx td select{width:100%;min-width:70px;padding:3px 5px}
+.fx tr.done td{background:#eaf6ec}
+.fx tr.ps td{color:#9aa3b2}
+.fx h3{font-size:13.5px;margin:14px 0 6px;color:var(--navy)}
 .ins{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:12px;margin-top:12px}
 .ins .card{border-left:4px solid #c9d0dc}
 .ins .card.r{border-left-color:var(--red)}.ins .card.y{border-left-color:#e0a100}.ins .card.g{border-left-color:var(--ok)}.ins .card.b{border-left-color:var(--navy2)}
@@ -125,10 +133,11 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 <nav class="stages" id="stages">
   <button type="button" data-stage="1"><b>1</b>업로드 / 보관 <small id="stg1s"></small></button><span class="arr">›</span>
   <button type="button" data-stage="2"><b>2</b>데이터 산출 <small id="stg2s"></small></button><span class="arr">›</span>
-  <button type="button" data-stage="3"><b>3</b>INSIGHT <small id="stg3s"></small></button>
+  <button type="button" data-stage="3"><b>3</b>INSIGHT <small id="stg3s"></small></button><span class="arr" style="margin-left:14px">|</span>
+  <button type="button" data-stage="4" class="chk"><b>※</b>기준정보 점검 <span id="stg4s"></span></button>
 </nav>
 <main>
- <div id="stage1">
+ <div id="stage1" class="stg">
   <div class="grid">
     <section class="card">
       <h2><span class="step">1</span>기준 파일</h2>
@@ -187,11 +196,12 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
     <div id="arcList" style="margin-top:8px"></div>
   </details>
  </div>
- <div id="stage2">
+ <div id="stage2" class="stg">
   <div id="warn"></div>
   <div id="out"></div>
  </div>
- <div id="stage3"><div id="ins"></div></div>
+ <div id="stage3" class="stg"><div id="ins"></div></div>
+ <div id="stage4" class="stg"><div id="fix"></div></div>
 </main>
 <footer>계산 로직은 기존 엑셀 수식과 동일 · 출고가/변동원가/운송비 = 기준정보, 율·금액 = 거래조건</footer>
 
@@ -250,7 +260,7 @@ const readFile = f => new Promise((ok, ng) => { const fr = new FileReader(); fr.
 const findSheet = (wb, pred) => wb.SheetNames.find(pred);
 
 /* ================= 상태 ================= */
-const ST = { ref: null, raw: [], rawFiles: [], res: null, tab: "dash", ch: "전체", big: "전체", small: "전체", evt: "전체", q: "", sort: {} };
+const ST = { ref: null, raw: [], rawFiles: [], res: null, fix: { base: {}, prod: {}, cost: {}, pass: {} }, tab: "dash", ch: "전체", big: "전체", small: "전체", evt: "전체", q: "", sort: {} };
 
 /* ================= 기준 파일 파싱 ================= */
 function parseRef(wb) {
@@ -433,33 +443,42 @@ function compute() {
   const amtOf = (list, ch, key) => { let t = 0; for (const e of list) if (e.key === key && chOk(e, ch)) { if (e.w != null) t += e.w * prorate[ch]; else { t += e.s || 0; W.noMonth.add(e.key); } } return t; };
 
   // 1차: 행 단위 기초값
+  // ※ 기준정보 점검: 빠진 항목을 (종류|채널|코드) 단위로 모음. FX = 점검 탭에서 수기 보완한 값(기준 시트가 비었을 때만 사용) + 패스 목록
+  const FX = ST.fix, CK = new Map(); W.items = CK;
+  const blank = v => v == null || String(v).trim() === "";
+  const miss = (type, ch, r, info) => {   // 패스한 항목이면 경고에서 뺌 (계산은 그대로)
+    const k = type + "|" + ch + "|" + r.code; let it = CK.get(k);
+    if (!it) { it = { key: k, type, ch, code: r.code, name: r.name, catn: r.catn, amt: 0, pass: !!FX.pass[k], info }; CK.set(k, it); }
+    it.amt += r.amt; return !it.pass;
+  };
   for (const r of rows) {
-    const cst = ref.costCh[norm(r.ch) + "|" + r.code] ?? ref.cost[r.code];   // 채널 전용 → 공통 순
-    r.jCls = cst && cst.j != null ? String(cst.j) : (r.catn ?? "");
-    r.pCls = cst && cst.p != null ? String(cst.p) : (r.catn ?? "");
+    const cK = norm(r.ch) + "|" + r.code;
+    const cst = ref.costCh[cK] ?? ref.cost[r.code] ?? FX.cost[cK] ?? FX.cost["*|" + r.code];   // 채널 전용 → 공통 → 수기보완
+    r.jCls = cst && !blank(cst.j) ? String(cst.j) : (r.catn ?? "");
+    r.pCls = cst && !blank(cst.p) ? String(cst.p) : (r.catn ?? "");
     // 비용배부분류 미매칭 → 로우 카테고리명 대체는 정상 운영. 대체할 카테고리명도 없을 때만 경고
-    if (!String(r.jCls).trim() || !String(r.pCls).trim()) W.cost.set(r.code, r.name);
-    const pj = ref.prodJ[r.code];
-    r.big = pj ? pj.L : null; r.small = pj ? pj.M : null;
-    r.evt = ref.prodA[r.code] ?? null;
+    if ((blank(r.jCls) || blank(r.pCls)) && miss("cost", r.ch, r)) W.cost.set(r.code, r.name);
+    const pj = ref.prodJ[r.code], fp = FX.prod[r.code] || {};
+    r.big = pj && !blank(pj.L) ? pj.L : (fp.big ?? null); r.small = pj && !blank(pj.M) ? pj.M : (fp.small ?? null);
+    r.evt = !blank(ref.prodA[r.code]) ? ref.prodA[r.code] : (fp.evt ?? null);
     // 제품분류: 코드 없음 또는 대·소카테고리·행사분류 중 공란이면 경고 (필터·집계에서 '(미분류)'로 빠짐)
-    if (!W.cls.has(r.code)) {
-      const blank = v => v == null || String(v).trim() === "";
-      const miss = !pj ? ["제품분류에 코드 없음"] : [blank(r.big) && "대카테고리", blank(r.small) && "소카테고리", blank(r.evt) && "행사분류"].filter(Boolean);
-      if (miss.length) W.cls.set(r.code, `${r.name ?? ""} → ${pj ? miss.join("·") + " 공란" : miss[0]}`);
+    if (blank(r.big) || blank(r.small) || blank(r.evt)) {
+      const m = [blank(r.big) && "대카테고리", blank(r.small) && "소카테고리", blank(r.evt) && "행사분류"].filter(Boolean);
+      const info = !pj && !FX.prod[r.code] ? "제품분류에 코드 없음" : m.join("·") + " 공란";
+      if (miss("cls", "*", r, info)) W.cls.set(r.code, `${r.name ?? ""} → ${info}`);
     }
     // 농협 전용: 물류비가 부가세 포함 구조 → 과세 제품은 ×1.1 (물류비, 우유 장려금_분배기준(%))
-    r.nh = isNH(r.ch); r.tax = ref.tax[r.code] ?? null;
+    r.nh = isNH(r.ch); r.tax = ref.tax[r.code] ?? fp.tax ?? null;
     r.taxF = r.nh && norm(r.tax) === "과세" ? 1.1 : 1;
-    if (r.nh && r.tax == null) W.tax.set(r.code, r.name);
+    if (r.nh && blank(r.tax) && miss("tax", "*", r)) W.tax.set(r.code, r.name);
     r.inPrice = String(r.big ?? "") === "단산" ? 0 : (r.qty ? r.amt / r.qty : 0);
-    // 기준정보: 출고가·변동원가 = 채널행 → 공통행 → 다른 채널행(전 채널 동일) / 운송비 = 채널행 → 공통행 (채널마다 달라서 다른 채널 값은 안 씀)
-    const bc = ref.baseCh[norm(r.ch) + "|" + r.code] || {}, bb = ref.base[r.code] || {}, ba = ref.baseAny[r.code] || {};
-    r.outPrice = bc.out ?? bb.out ?? ba.out ?? null; r.vcU = bc.vc ?? bb.vc ?? ba.vc ?? null; r.trU = bc.tr ?? bb.tr ?? null;
+    // 기준정보: 출고가·변동원가 = 채널행 → 공통행 → 수기보완 → 다른 채널행(전 채널 동일) / 운송비 = 채널행 → 공통행 → 수기보완(그 채널)
+    const bc = ref.baseCh[cK] || {}, bb = ref.base[r.code] || {}, ba = ref.baseAny[r.code] || {}, fb = FX.base["*|" + r.code] || {}, fc = FX.base[cK] || {};
+    r.outPrice = bc.out ?? bb.out ?? fb.out ?? ba.out ?? null; r.vcU = bc.vc ?? bb.vc ?? fb.vc ?? ba.vc ?? null; r.trU = bc.tr ?? bb.tr ?? fc.tr ?? null;
     const wAdd = (m) => { const p = m.get(r.code); if (!p) m.set(r.code, `${r.name ?? ""} [${r.ch}]`); else if (!p.includes(`[${r.ch}]`) && !p.includes(`, ${r.ch}]`)) m.set(r.code, p.replace(/\]$/, `, ${r.ch}]`)); };
-    if (r.outPrice == null) wAdd(W.out);
-    if (r.vcU == null) wAdd(W.vc);
-    if (r.trU == null) wAdd(W.tr);
+    if (r.outPrice == null && miss("out", "*", r)) wAdd(W.out);
+    if (r.vcU == null && miss("vc", "*", r)) wAdd(W.vc);
+    if (r.trU == null && miss("tr", r.ch, r)) wAdd(W.tr);
     r.sales = (r.outPrice ?? 0) * r.qty;
     r.dc = r.outPrice == null ? 0 : (r.outPrice - r.inPrice) * r.qty;
     if (r.outPrice != null && r.qty > 0 && r.inPrice > r.outPrice) W.neg.set(r.code, r.name);
@@ -541,6 +560,7 @@ const sel = (id, lbl, opts, cur) => `<label class="f" style="flex-direction:row;
 function render() {
   const R = ST.res;
   try { renderIns(); stageStatus(); } catch (e) { console.error(e); }
+  try { renderFix(); } catch (e) { console.error(e); }
   if (!R) { $("#out").innerHTML = `<div class="card empty">① 기준 파일과 ② 매입 로우를 올리면 자동으로 계산돼요. <button type="button" data-go="1">1단계로</button></div>`; $("#warn").innerHTML = ""; return; }
   if (R.archived) $("#warn").innerHTML = `<div class="warnbox" style="background:#eef3fb;border-color:#b8c9e8"><h3>📦 보관함 ${esc(R.archived)} 보기 중 <span class="muted" style="font-weight:400">(저장 ${esc(R.savedAt)} 시점 결과 · 경고·상세는 저장 안 됨)</span></h3><button type="button" id="arcBack">← 현재 데이터로 돌아가기</button></div>`;
   else renderWarn(R);
@@ -766,6 +786,94 @@ function renderIns() {
     $("#insCopy").textContent = "✅ 복사됨"; setTimeout(() => { const b = $("#insCopy"); if (b) b.textContent = "📋 텍스트 복사 (보고용)"; }, 1500);
   };
 }
+/* ================= ※ 기준정보 점검 (빠진 기준정보 입력 / 패스) ================= */
+const FXT = {
+  out: { t: "출고가 없음", s: "기준정보", why: "총매출·DC 0 → 매출 누락", f: [["out", "출고가(EA)", "n"]] },
+  vc: { t: "변동원가 없음", s: "기준정보", why: "원가 0 → CM 과대", f: [["vc", "변동원가(EA)", "n"]] },
+  tr: { t: "운송비 없음", s: "기준정보 (채널별)", why: "운송비 0 → CM 과대", f: [["tr", "운송비(EA)", "n"]] },
+  cost: { t: "비용배부 분류 없음", s: "비용배부분류", why: "장려금·판관비 배분 안 됨", f: [["j", "장려금분류", "t"], ["p", "판관비분류", "t"]] },
+  cls: { t: "제품분류 누락", s: "제품분류", why: "필터·집계에서 (미분류)", f: [["big", "대카테고리", "t"], ["small", "소카테고리", "t"], ["evt", "행사분류", "t"]] },
+  tax: { t: "면과세 없음 (농협)", s: "제품분류 면과세", why: "×1.1 미적용 → CM 과대", f: [["tax", "면과세", "s"]] }
+};
+const saveFix = async () => { await DB.set("fix", ST.fix); run(); };
+function fixSlot(it) {   // 점검 항목 → ST.fix 저장 위치
+  const F = ST.fix, ck = norm(it.ch) + "|" + it.code;
+  if (it.type === "out" || it.type === "vc") return F.base["*|" + it.code] ??= {};
+  if (it.type === "tr") return F.base[ck] ??= {};
+  if (it.type === "cost") return F.cost[ck] ??= {};
+  return F.prod[it.code] ??= {};
+}
+function renderFix() {
+  const R = ST.res, el = $("#fix");
+  if (!R || R.archived || !R.W.items) { $("#stg4s").innerHTML = ""; el.innerHTML = `<div class="card empty">${R && R.archived ? "보관함 보기 중에는 점검할 수 없어요 (현재 데이터로 돌아가면 보여요)" : "1단계에서 기준·매입 로우를 넣으면 빠진 기준정보가 여기 모여요."}</div>`; return; }
+  const items = [...R.W.items.values()], open = items.filter(i => !i.pass), ps = items.filter(i => i.pass);
+  $("#stg4s").innerHTML = open.length ? `<span class="badge">${open.length}</span>` : `<small>✓</small>`;
+  const first = new Map(); R.rows.forEach(r => { if (!first.has(r.code)) first.set(r.code, r); });
+  const opts = k => [...new Set(R.rows.map(r => r[k]).filter(v => v != null && String(v).trim()))].sort().map(v => `<option value="${esc(v)}">`).join("");
+  let h = `<datalist id="dl_big">${opts("big")}</datalist><datalist id="dl_small">${opts("small")}</datalist><datalist id="dl_evt">${opts("evt")}</datalist><datalist id="dl_j">${opts("jCls")}</datalist><datalist id="dl_p">${opts("pCls")}</datalist>
+  <div class="warnbox" style="margin-top:0;background:#fffaf0">
+    <b>※ 기준정보 점검</b> — 계산에 필요한데 기준 시트에 없는 항목 <b>${open.length}건</b>${ps.length ? ` · 패스 ${ps.length}건` : ""}<br>
+    <span class="muted">· <b>입력</b>: 빈칸에 값을 넣고 「입력값 적용」 → 바로 재계산 (이 PC에만 저장, 기준 시트에 값이 생기면 시트 값이 우선)<br>
+    · <b>패스</b>: 원래 없어도 되는 항목 → 경고에서 빠짐 (계산은 0 그대로) · 같은 제품이 다음 달에 또 나와도 계속 패스<br>
+    · 다 넣었으면 「📋 보완 내용 복사」 → 원본 엑셀 기준 시트에 붙여넣어 원본도 채워두세요</span>
+  </div>
+  <div class="row" style="margin:8px 0"><button type="button" id="fxApply">✅ 입력값 적용 (재계산)</button><button type="button" class="sec" id="fxCopy">📋 보완 내용 복사 (원본 엑셀용)</button><span class="muted" id="fxMsg"></span></div><div class="fx">`;
+  for (const type of Object.keys(FXT)) {
+    const L = open.filter(i => i.type === type).sort((a, b) => b.amt - a.amt); if (!L.length) continue;
+    const T = FXT[type], perCh = type === "tr" || type === "cost";
+    h += `<h3>${T.t} ${L.length}건 <span class="muted" style="font-weight:400;font-size:12px">→ ${T.s} · ${T.why}</span></h3><div class="tw" style="max-height:420px"><table><thead><tr>${perCh ? "<th>채널</th>" : ""}<th>제품코드</th><th>제품명</th><th>로우 카테고리</th><th>매입금액</th>${type === "cls" ? "<th>상태</th>" : ""}${T.f.map(f => `<th>${f[1]}</th>`).join("")}<th></th></tr></thead><tbody>`;
+    h += L.map(it => {
+      const r0 = first.get(it.code) || {};
+      const inp = T.f.map(([k, , ty]) => {
+        const cur = type === "cls" ? r0[k] : type === "cost" ? (k === "j" ? r0.jCls : r0.pCls) : null;
+        if (ty === "s") return `<td><select data-f="${k}"><option value="">선택</option><option>과세</option><option>면세</option></select></td>`;
+        return `<td><input data-f="${k}" ${ty === "n" ? 'inputmode="decimal" placeholder="숫자"' : `list="dl_${k}"`} value="${esc(cur ?? "")}"></td>`;
+      }).join("");
+      return `<tr data-k="${esc(it.key)}">${perCh ? `<td>${esc(it.ch)}</td>` : ""}<td>${esc(it.code)}</td><td>${esc(it.name ?? "")}</td><td>${esc(it.catn ?? "")}</td><td class="n">${fmt(it.amt)}</td>${type === "cls" ? `<td class="muted">${esc(it.info)}</td>` : ""}${inp}<td><button type="button" class="sec" data-pass="${esc(it.key)}" style="padding:3px 10px">패스</button></td></tr>`;
+    }).join("");
+    h += `</tbody></table></div>`;
+  }
+  if (!open.length) h += `<div class="warnbox okb"><h3>✅ 빠진 기준정보 없음</h3></div>`;
+  // 수기 보완한 값 목록
+  const F = ST.fix, nm = c => (first.get(c) || {}).name ?? "";
+  const done = [
+    ...Object.entries(F.base).map(([k, v]) => { const [ch, c] = k.split("|"); return [k, "기준정보", ch === "*" ? "공통" : ch, c, nm(c), [v.out != null && `출고가 ${v.out}`, v.vc != null && `변동원가 ${v.vc}`, v.tr != null && `운송비 ${v.tr}`].filter(Boolean).join(" · "), "base"]; }),
+    ...Object.entries(F.cost).map(([k, v]) => { const [ch, c] = k.split("|"); return [k, "비용배부분류", ch, c, nm(c), `장려금 ${v.j ?? "-"} · 판관비 ${v.p ?? "-"}`, "cost"]; }),
+    ...Object.entries(F.prod).map(([c, v]) => [c, "제품분류", "공통", c, nm(c), [v.big, v.small, v.evt, v.tax].filter(Boolean).join(" → "), "prod"])
+  ].filter(d => d[5]);
+  if (done.length) h += `<h3>✏️ 수기 보완한 값 ${done.length}건 <span class="muted" style="font-weight:400;font-size:12px">이 PC에 저장 · 원본 엑셀에도 넣어두세요</span></h3><div class="tw" style="max-height:300px"><table><thead><tr><th>시트</th><th>채널</th><th>제품코드</th><th>제품명</th><th>값</th><th></th></tr></thead><tbody>${done.map(d => `<tr class="done"><td>${d[1]}</td><td>${esc(d[2])}</td><td>${esc(d[3])}</td><td>${esc(d[4])}</td><td>${esc(d[5])}</td><td><button type="button" class="sec" data-undo="${d[6]}|${esc(d[0])}" style="padding:3px 10px">삭제</button></td></tr>`).join("")}</tbody></table></div>`;
+  if (ps.length) h += `<details style="margin-top:12px"><summary class="muted" style="cursor:pointer">⏭ 패스한 항목 ${ps.length}건 (경고에서 제외됨)</summary><div class="tw" style="max-height:300px;margin-top:6px"><table><thead><tr><th>항목</th><th>채널</th><th>제품코드</th><th>제품명</th><th>매입금액</th><th></th></tr></thead><tbody>${ps.map(it => `<tr class="ps"><td>${FXT[it.type].t}</td><td>${esc(it.ch === "*" ? "전체" : it.ch)}</td><td>${esc(it.code)}</td><td>${esc(it.name ?? "")}</td><td class="n">${fmt(it.amt)}</td><td><button type="button" class="sec" data-unpass="${esc(it.key)}" style="padding:3px 10px">되돌리기</button></td></tr>`).join("")}</tbody></table></div></details>`;
+  el.innerHTML = h + `</div>`;
+  el.querySelectorAll("[data-pass]").forEach(b => b.onclick = () => { ST.fix.pass[b.dataset.pass] = 1; saveFix(); });
+  el.querySelectorAll("[data-unpass]").forEach(b => b.onclick = () => { delete ST.fix.pass[b.dataset.unpass]; saveFix(); });
+  el.querySelectorAll("[data-undo]").forEach(b => b.onclick = () => { const [g, ...k] = b.dataset.undo.split("|"); delete ST.fix[g][k.join("|")]; saveFix(); });
+  $("#fxApply").onclick = () => {
+    let n = 0;
+    el.querySelectorAll("tr[data-k]").forEach(tr => {
+      const it = R.W.items.get(tr.dataset.k); if (!it) return;
+      const vals = {}; tr.querySelectorAll("[data-f]").forEach(i => { const v = i.value.trim(); if (v) vals[i.dataset.f] = FXT[it.type].f.find(f => f[0] === i.dataset.f)[2] === "n" ? num(v) : v; });
+      // 제품분류·비용배부: 미리 채워진 기존 값만 있고 바뀐 게 없으면 저장 안 함
+      const r0 = first.get(it.code) || {};
+      if (it.type === "cls" && FXT.cls.f.every(([k]) => blank0(vals[k]) || String(vals[k]) === String(r0[k] ?? ""))) return;
+      if (it.type === "cost" && blank0(vals.j) && blank0(vals.p)) return;
+      const ok = Object.entries(vals).filter(([, v]) => v != null && v !== ""); if (!ok.length) return;
+      const s = fixSlot(it); ok.forEach(([k, v]) => s[k] = v); n++;
+    });
+    if (!n) { $("#fxMsg").textContent = "입력한 값이 없어요"; return; }
+    saveFix(); setTimeout(() => { const m = $("#fxMsg"); if (m) m.textContent = `✅ ${n}건 적용 · 재계산 완료`; }, 50);
+  };
+  $("#fxCopy").onclick = async () => {
+    const T = [];
+    const bs = Object.entries(F.base); if (bs.length) { T.push("[기준정보] 채널\t제품CODE\t제품\t공장도가(출고가)\t변동/봉(변동원가)\t운송비(EA)"); bs.forEach(([k, v]) => { const [ch, c] = k.split("|"); T.push([ch === "*" ? "" : ch, c, nm(c), v.out ?? "", v.vc ?? "", v.tr ?? ""].join("\t")); }); T.push(""); }
+    const cs = Object.entries(F.cost); if (cs.length) { T.push("[비용배부분류] 채널\t88바코드\t바코드명\t제품코드\t제품명\t장려금분배구분\t판매비분배구분"); cs.forEach(([k, v]) => { const [ch, c] = k.split("|"); T.push([ch === "*" ? "" : ch, "", "", c, nm(c), v.j ?? "", v.p ?? ""].join("\t")); }); T.push(""); }
+    const ps2 = Object.entries(F.prod); if (ps2.length) { T.push("[제품분류] 제품번호\tName\t대카테고리\t소카테고리\t행사분류\t면과세"); ps2.forEach(([c, v]) => T.push([c, nm(c), v.big ?? "", v.small ?? "", v.evt ?? "", v.tax ?? ""].join("\t"))); }
+    if (!T.length) { $("#fxMsg").textContent = "수기 보완한 값이 없어요"; return; }
+    const txt = T.join("\n");
+    try { await navigator.clipboard.writeText(txt); } catch (e) { const tx = document.createElement("textarea"); tx.value = txt; document.body.appendChild(tx); tx.select(); document.execCommand("copy"); tx.remove(); }
+    $("#fxMsg").textContent = "✅ 복사됨 → 원본 엑셀 각 시트 맨 아래에 붙여넣고, [시트명] 머리글 줄은 지우세요";
+  };
+}
+const blank0 = v => v == null || String(v).trim() === "";
 function stageStatus() {
   const R = ST.res;
   $("#stg1s").textContent = ST.ref && ST.raw.length ? `✓ 로우 ${ST.raw.length.toLocaleString()}행` : ST.ref ? "로우 필요" : "";
@@ -1017,6 +1125,7 @@ $("#pTxt").value = PT[pCur]; pTabs();
 
 // 새로고침 시 마지막 입력 복원
 async function restore() {
+  const fx = await DB.get("fix"); if (fx) ST.fix = { base: {}, prod: {}, cost: {}, pass: {}, ...fx };
   const [pt, refSrc, rawSrc] = [await DB.get("pt"), await DB.get("refSrc"), await DB.get("rawSrc")];
   if (pt) { PS.forEach(p => { if (typeof pt[p.k] === "string") PT[p.k] = pt[p.k]; }); $("#pTxt").value = PT[pCur]; pTabs(); }
   if (!refSrc && !rawSrc && !PS.some(p => p.k !== "raw" && PT[p.k])) return;
@@ -1093,7 +1202,7 @@ const b64 = { enc: u8 => { let s = ""; for (let i = 0; i < u8.length; i += 0x800
 const gz = async (u8, mode) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(mode === "c" ? new CompressionStream("gzip") : new DecompressionStream("gzip"))).arrayBuffer());
 async function makeBackup() {
   const ref = {}; PS.forEach(p => { if (p.k !== "raw" && PT[p.k]) ref[p.k] = PT[p.k]; });
-  const json = JSON.stringify({ v: 1, at: new Date().toISOString(), archive: ARC, ref });
+  const json = JSON.stringify({ v: 1, at: new Date().toISOString(), archive: ARC, ref, fix: ST.fix });
   // 3만 자마다 줄바꿈 → 엑셀에 붙여넣으면 A열 여러 행으로 나뉘어 들어감 (셀 한도 32,767자). 불러올 땐 줄바꿈 무시
   // v2: 각 줄 앞에 "번호/총줄수|" 표시, 마지막 줄 끝에 "|END" → 행이 빠지거나 잘리면 정확히 알려줌. 줄 순서는 상관없음
   const ch = b64.enc(await gz(new TextEncoder().encode(json), "c")).match(/.{1,30000}/g), n = ch.length;
@@ -1144,6 +1253,10 @@ $("#arcGo").onclick = async () => {
     if (refKeys.length && confirm(`백업에 기준 시트 ${refKeys.length}개도 있어요. 지금 기준 시트를 백업 것으로 바꿀까요?`)) {
       refKeys.forEach(k => PT[k] = b.ref[k]); await DB.set("pt", { ...PT }); await DB.set("refSrc", { type: "paste" });
       $("#pTxt").value = PT[pCur]; pTabs(); applyPasteRef(); rebuildDays(); run(); refMsg = " · 기준 시트 복원";
+    }
+    if (b.fix) {   // 기준정보 점검 수기 보완·패스: 합치기 (같은 키는 백업 값)
+      const F = ST.fix; for (const g of ["base", "prod", "cost", "pass"]) F[g] = { ...F[g], ...(b.fix[g] || {}) };
+      await DB.set("fix", F); refMsg += " · 기준정보 점검 보완값 복원"; run();
     }
     arcRender();
     $("#arcMsg").textContent = `✅ 보관함 ${add.length}개월 불러옴${refMsg}`;
