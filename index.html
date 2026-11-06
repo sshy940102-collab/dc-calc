@@ -206,7 +206,7 @@ const readFile = f => new Promise((ok, ng) => { const fr = new FileReader(); fr.
 const findSheet = (wb, pred) => wb.SheetNames.find(pred);
 
 /* ================= 상태 ================= */
-const ST = { ref: null, raw: [], rawFiles: [], res: null, tab: "dash", ch: "전체", big: "전체", small: "전체", q: "", sort: {} };
+const ST = { ref: null, raw: [], rawFiles: [], res: null, tab: "dash", ch: "전체", big: "전체", small: "전체", evt: "전체", q: "", sort: {} };
 
 /* ================= 기준 파일 파싱 ================= */
 function parseRef(wb) {
@@ -408,7 +408,8 @@ const catOf = v => v == null || v === "" ? NOCAT : String(v);
 const uniq = a => [...new Set(a)].sort((x, y) => (x === NOCAT) - (y === NOCAT) || x.localeCompare(y, "ko"));
 const bigs = rows => uniq(rows.map(r => catOf(r.big)));
 const smalls = rows => uniq(rows.filter(r => ST.big === "전체" || catOf(r.big) === ST.big).map(r => catOf(r.small)));
-const filt = rows => rows.filter(r => (ST.ch === "전체" || r.ch === ST.ch) && (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small));
+const evts = rows => uniq(rows.filter(r => (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small)).map(r => catOf(r.evt)));
+const filt = rows => rows.filter(r => (ST.ch === "전체" || r.ch === ST.ch) && (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small) && (ST.evt === "전체" || catOf(r.evt) === ST.evt));
 const sel = (id, lbl, opts, cur) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lbl} <select id="${id}">${opts.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
 
 function render() {
@@ -417,6 +418,7 @@ function render() {
   renderWarn(R);
   if (ST.big !== "전체" && !bigs(R.rows).includes(ST.big)) ST.big = "전체";
   if (ST.small !== "전체" && !smalls(R.rows).includes(ST.small)) ST.small = "전체";
+  if (ST.evt !== "전체" && !evts(R.rows).includes(ST.evt)) ST.evt = "전체";
   const rowsF = filt(R.rows);
   const t = total(rowsF);
   const mil = v => fmt(v / 1e6, 1);
@@ -437,6 +439,7 @@ function render() {
     ${sel("chSel", "채널", ["전체", ...R.chs], ST.ch)}
     ${sel("bigSel", "대카테고리", ["전체", ...bigs(R.rows)], ST.big)}
     ${sel("smallSel", "소카테고리", ["전체", ...smalls(R.rows)], ST.small)}
+    ${sel("evtSel", "행사분류", ["전체", ...evts(R.rows)], ST.evt)}
     ${ST.tab === "dash" ? "" : `<input type="text" id="q" placeholder="제품코드·제품명 검색" value="${esc(ST.q)}" style="width:200px">`}
     <span class="sp"></span>
     <span class="muted">월일수 ${R.mdays}일 · 일할 ${R.chs.map(c => `${esc(c)} ${(R.prorate[c] * R.mdays).toFixed(0)}/${R.mdays}`).join(", ")}</span>
@@ -460,8 +463,9 @@ function finishRender(h) {
   $("#out").querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { ST.tab = b.dataset.tab; render(); });
   $("#out").querySelectorAll("th").forEach(th => th.onclick = () => { const k = th.dataset.k; const c = ST.sort[ST.tab]; ST.sort[ST.tab] = { k, d: c && c.k === k ? -c.d : -1 }; render(); });
   $("#chSel").onchange = e => { ST.ch = e.target.value; render(); };
-  $("#bigSel").onchange = e => { ST.big = e.target.value; ST.small = "전체"; render(); };
-  $("#smallSel").onchange = e => { ST.small = e.target.value; render(); };
+  $("#bigSel").onchange = e => { ST.big = e.target.value; ST.small = "전체"; ST.evt = "전체"; render(); };
+  $("#smallSel").onchange = e => { ST.small = e.target.value; ST.evt = "전체"; render(); };
+  $("#evtSel").onchange = e => { ST.evt = e.target.value; render(); };
   const q = $("#q"); if (q) q.oninput = e => { ST.q = e.target.value; clearTimeout(q._t); q._t = setTimeout(() => { render(); const n = $("#q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
   $("#dl").onclick = download;
 }
@@ -518,7 +522,7 @@ function dash(rows, R) {
   const em = Math.max(1e-9, ...ev.flatMap(a => [Math.abs(a.dcR || 0), Math.abs(a.cmR || 0)]));
   const eb = (v, c) => `<div class="evb"><span class="hbt"><i style="width:${(Math.abs(v || 0) / em * 100).toFixed(1)}%;background:${v < 0 ? "var(--red)" : c}"></i></span><span class="${v < 0 ? "neg" : ""}">${pct(v)}</span></div>`;
   h += `<section class="card wide"><h2>행사분류별 <small>매출 큰 순</small></h2><div class="evr hd"><span>행사분류 (매출)</span><span>DC율</span><span>공헌이익율</span></div>${ev.map(a => `<div class="evr"><span class="hbl" title="${esc(a.evt)}">${esc(a.evt)} <span class="muted">${mil1(a.sales)}</span></span>${eb(a.dcR, CLR.dc)}${eb(a.cmR, CLR.cm)}</div>`).join("")}</section>`;
-  const fl = [ST.ch, ST.big, ST.small].filter(x => x !== "전체");
+  const fl = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체");
   return h + `</div><div class="help" style="margin-top:8px">금액 단위 백만원 · 율은 모두 <b>총매출(출고가 기준)</b> 대비 · 필터: <b>${fl.length ? fl.map(esc).join(" / ") : "전체"}</b> (장려금·판관비 배분은 전체 기준으로 계산 후 필터)</div>`;
 }
 
@@ -560,7 +564,7 @@ function download() {
   [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 미매칭", W.cls], ["비용배부분류 미매칭", W.cost], ["역마진", W.neg]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wr), "경고");
   const ym = $("#ym").value || "";
-  const tag = [ST.ch, ST.big, ST.small].filter(x => x !== "전체").join("_") || "전체";
+  const tag = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체";
   XLSX.writeFile(wb, `DC_CM_${ym}_${tag}.xlsx`.replace(/[\\/:*?"<>|]/g, ""));
 }
 
