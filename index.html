@@ -83,8 +83,19 @@ tr.tot td{font-weight:700;background:#f0f3f8;position:sticky;bottom:0}
 .evb{display:flex;align-items:center;gap:6px}
 .evb .hbt{flex:1}
 .evb span{width:52px;text-align:right;font-variant-numeric:tabular-nums}
-.stk{display:flex;height:30px;border-radius:4px;overflow:hidden;margin:6px 0 10px}
-.stk i{display:block;height:100%}
+.stk{display:flex;height:34px;border-radius:4px;overflow:hidden;margin:6px 0 10px}
+.stk i{display:flex;height:100%;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;color:#fff;font-size:11.5px;font-style:normal;text-shadow:0 0 2px rgba(0,0,0,.35)}
+.stk i span{overflow:hidden;text-overflow:ellipsis;padding:0 4px}
+.lnw{position:relative}
+.lntip{position:absolute;top:8px;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,.15);padding:8px 10px;font-size:12px;min-width:190px;z-index:5}
+.lntip h4{margin:0 0 4px;font-size:12.5px;color:var(--navy)}
+.lntip div{display:flex;align-items:center;gap:6px;padding:1px 0}
+.lntip div b{width:9px;height:9px;border-radius:2px;display:inline-block}
+.lntip div span{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}
+.lntip em{font-style:normal;color:var(--sub);font-weight:400;margin-left:4px}
+.evwrap{overflow-x:auto}
+.evr.ev6{grid-template-columns:minmax(90px,150px) repeat(5,minmax(95px,1fr));min-width:640px}
+.evr.tot{border-top:2px solid var(--line);font-weight:700}
 .lg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px}
 .lg span{display:inline-flex;align-items:center;gap:5px}
 .lg b{width:11px;height:11px;border-radius:2px;display:inline-block}
@@ -641,10 +652,29 @@ function lineChart(pts) {
   pts.forEach((p, i) => { if (i % step === 0 || i === pts.length - 1) s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${p.x}일</text>`; });
   for (const [k, c] of [["a", CLR.sales], ["b", CLR.cm]]) {
     s += `<path d="${pts.map((p, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(p[k]).toFixed(1)}`).join("")}" fill="none" stroke="${c}" stroke-width="2.2"/>`;
-    s += pts.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p[k]).toFixed(1)}" r="3" fill="${p[k] < 0 ? "var(--red)" : c}"><title>${p.x}일 ${k === "a" ? "총매출" : "공헌이익"} ${mil1(p[k])}백만${k === "b" && p.s ? ` (${pct(p[k] / p.s)})` : ""}</title></circle>`).join("");
+    s += pts.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p[k]).toFixed(1)}" r="3.5" fill="${p[k] < 0 ? "var(--red)" : c}"/>`).join("");
   }
-  return s + `</svg><div class="lg"><span><b style="background:${CLR.sales}"></b>총매출</span><span><b style="background:${CLR.cm}"></b>공헌이익</span><span class="muted">단위 백만 · 점에 마우스 올리면 값 표시</span></div>`;
+  // 클릭 영역: 날짜마다 세로 띠 (클릭하면 그날 숫자 표시)
+  const half = pts.length > 1 ? (W - L - Rr) / (pts.length - 1) / 2 : 20;
+  s += `<line class="lnmk" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="#1f3864" stroke-dasharray="3 3" style="display:none"/>`;
+  s += pts.map((p, i) => `<rect class="lnhit" data-i="${i}" data-x="${X(i).toFixed(1)}" x="${(X(i) - half).toFixed(1)}" y="${T}" width="${(half * 2).toFixed(1)}" height="${H - T - B}" fill="transparent" style="cursor:pointer"/>`).join("");
+  LNPTS = pts;
+  return `<div class="lnw">` + s + `</svg><div class="lntip" style="display:none"></div></div><div class="lg"><span><b style="background:${CLR.sales}"></b>총매출</span><span><b style="background:${CLR.cm}"></b>공헌이익</span><span class="muted">단위 백만 · 날짜를 클릭하면 그날 숫자 표시 (다시 클릭하면 닫힘)</span></div>`;
 }
+let LNPTS = [];
+document.addEventListener("click", e => {
+  const w = e.target.closest && e.target.closest(".lnw"); if (!w) { document.querySelectorAll(".lntip").forEach(x => x.style.display = "none"); document.querySelectorAll(".lnmk").forEach(x => x.style.display = "none"); return; }
+  const hit = e.target.closest(".lnhit"), tip = w.querySelector(".lntip"), mk = w.querySelector(".lnmk");
+  if (!hit || tip.dataset.i === hit.dataset.i && tip.style.display !== "none") { tip.style.display = "none"; mk.style.display = "none"; tip.dataset.i = ""; return; }
+  const p = LNPTS[+hit.dataset.i]; if (!p) return; const d = p.d || {};
+  const ln = (l, v, r, c) => `<div><b style="background:${c}"></b>${l}<span>${mil1(v)}${r != null ? ` <em>${pct(r)}</em>` : ""}</span></div>`;
+  tip.innerHTML = `<h4>${p.x}일</h4>${ln("총매출", p.a, null, CLR.sales)}${d.dc != null ? ln("DC", d.dc, d.dcR, CLR.dc) + ln("장려금", d.jTot, p.s ? d.jTot / p.s : null, CLR.j) + ln("판관비", d.pTot, p.s ? d.pTot / p.s : null, CLR.p) + ln("원가+운송비", d.vc + d.tr, p.s ? (d.vc + d.tr) / p.s : null, CLR.vc) : ""}${ln("공헌이익", p.b, p.s ? p.b / p.s : null, CLR.cm)}`;
+  const x = +hit.dataset.x, svg = w.querySelector("svg"), sc = svg.getBoundingClientRect().width / 1100;
+  mk.setAttribute("x1", x); mk.setAttribute("x2", x); mk.style.display = "";
+  tip.dataset.i = hit.dataset.i; tip.style.display = "block";
+  const px = x * sc, tw = tip.offsetWidth, sw = svg.getBoundingClientRect().width;
+  tip.style.left = (px + 12 + tw > sw ? Math.max(0, px - tw - 12) : px + 12) + "px";
+});
 function dash(rows, R) {
   const t = total(rows);
   const rt = v => t.sales ? v / t.sales : null;
@@ -653,12 +683,15 @@ function dash(rows, R) {
   const parts = [["DC", t.dc, CLR.dc], ["장려금", t.jTot, CLR.j], ["판관비", t.pTot, CLR.p], ["변동원가", t.vc, CLR.vc], ["운송비", t.tr, CLR.tr], ["공헌이익", t.cm, CLR.cm]];
   const pos = parts.map(p => Math.max(0, p[1])); const ps = pos.reduce((a, b) => a + b, 0) || 1;
   h += `<section class="card wide"><h2>총매출 구성 <small>총매출 ${mil1(t.sales)}백만 = 아래 항목 합</small></h2>
-    <div class="stk">${parts.map((p, i) => pos[i] > 0 ? `<i style="width:${(pos[i] / ps * 100).toFixed(2)}%;background:${p[2]}" title="${p[0]} ${mil1(p[1])}백만 (${pct(rt(p[1]))})"></i>` : "").join("")}</div>
+    <div class="stk">${parts.map((p, i) => { if (!(pos[i] > 0)) return ""; const w = pos[i] / ps * 100;
+      // 칸이 넓으면 이름+금액+율, 좁으면 율만, 아주 좁으면 비움 (마우스 올리면 전체)
+      const lbl = w >= 11 ? `<span><b>${p[0]}</b> ${mil1(p[1])} · ${pct(rt(p[1]))}</span>` : w >= 4 ? `<span>${pct(rt(p[1]), 0)}</span>` : "";
+      return `<i style="width:${w.toFixed(2)}%;background:${p[2]}" title="${p[0]} ${mil1(p[1])}백만 (${pct(rt(p[1]))})">${lbl}</i>`; }).join("")}</div>
     <div class="lg">${parts.map(p => `<span><b style="background:${p[2]}"></b>${p[0]} ${mil1(p[1])} <em>${pct(rt(p[1]))}</em></span>`).join("")}</div>
     ${t.cm < 0 ? `<div class="neg" style="margin-top:6px">⚠️ 공헌이익 마이너스 — 막대는 비용 항목만 표시</div>` : ""}</section>`;
   // ② 일자별 추이
   const dy = agg(R.days ? filt(R.days) : rows.filter(r => r.day != null), r => r.day, r => ({ day: r.day })).sort((a, b) => a.day - b.day);
-  h += `<section class="card wide"><h2>일자별 매출 추이 <small>총매출 · 공헌이익</small></h2>${lineChart(dy.map(a => ({ x: a.day, a: a.sales, b: a.cm, s: a.sales })))}</section>`;
+  h += `<section class="card wide"><h2>일자별 매출 추이 <small>총매출 · 공헌이익</small></h2>${lineChart(dy.map(a => ({ x: a.day, a: a.sales, b: a.cm, s: a.sales, d: a })))}</section>`;
   // ③ 제품 TOP / BOTTOM
   const pr = agg(rows, r => r.code, r => ({ code: r.code, name: r.name }));
   const lab = a => `${a.name ?? ""} (${a.code})`;
@@ -667,13 +700,35 @@ function dash(rows, R) {
   const negN = pr.filter(a => a.cm < 0).length;
   h += `<section class="card"><h2>공헌이익 TOP 10 <small>제품별</small></h2>${hbars(top.map(a => ({ label: lab(a), v: a.cm, c: CLR.cm, txt: `${mil1(a.cm)} <em>${pct(a.cmR)}</em>` })))}</section>`;
   h += `<section class="card"><h2>공헌이익 하위 10 <small>${negN ? `<span class="neg">마이너스 ${negN}개 제품</span>` : "마이너스 제품 없음"}</small></h2>${hbars(bot.map(a => ({ label: lab(a), v: a.cm, c: "#9aa3b2", txt: `${mil1(a.cm)} <em>${pct(a.cmR)}</em>` })))}</section>`;
-  // ④ 행사분류별 DC율 · 공헌이익율
+  // ④ 행사분류별 DC율 · 장려금율 · 판관비율 · 비용율 · 공헌이익율
   const ev = agg(rows, r => r.evt ?? "(미분류)", r => ({ evt: r.evt ?? "(미분류)" })).sort((a, b) => b.sales - a.sales);
-  const em = Math.max(1e-9, ...ev.flatMap(a => [Math.abs(a.dcR || 0), Math.abs(a.cmR || 0)]));
+  ev.forEach(a => { a.jR = a.sales ? a.jTot / a.sales : null; a.pR = a.sales ? a.pTot / a.sales : null; });
+  const EC = [["dcR", "DC율", CLR.dc], ["jR", "장려금율", CLR.j], ["pR", "판관비율", CLR.p], ["costR", "비용율", "#c0504d"], ["cmR", "공헌이익율", CLR.cm]];
+  const em = Math.max(1e-9, ...ev.flatMap(a => EC.map(([k]) => Math.abs(a[k] || 0))));
   const eb = (v, c) => `<div class="evb"><span class="hbt"><i style="width:${(Math.abs(v || 0) / em * 100).toFixed(1)}%;background:${v < 0 ? "var(--red)" : c}"></i></span><span class="${v < 0 ? "neg" : ""}">${pct(v)}</span></div>`;
-  h += `<section class="card wide"><h2>행사분류별 <small>매출 큰 순</small></h2><div class="evr hd"><span>행사분류 (매출)</span><span>DC율</span><span>공헌이익율</span></div>${ev.map(a => `<div class="evr"><span class="hbl" title="${esc(a.evt)}">${esc(a.evt)} <span class="muted">${mil1(a.sales)}</span></span>${eb(a.dcR, CLR.dc)}${eb(a.cmR, CLR.cm)}</div>`).join("")}</section>`;
+  const evT = total(rows); evT.jR = evT.sales ? evT.jTot / evT.sales : null; evT.pR = evT.sales ? evT.pTot / evT.sales : null;
+  h += `<section class="card wide"><h2>행사분류별 <small>매출 큰 순 · 비용율 = DC+장려금+판관비</small></h2><div class="evwrap"><div class="evr ev6 hd"><span>행사분류 (매출)</span>${EC.map(c => `<span>${c[1]}</span>`).join("")}</div>${ev.map(a => `<div class="evr ev6"><span class="hbl" title="${esc(a.evt)}">${esc(a.evt)} <span class="muted">${mil1(a.sales)}</span></span>${EC.map(([k, , c]) => eb(a[k], c)).join("")}</div>`).join("")}<div class="evr ev6 tot"><span><b>전체</b> <span class="muted">${mil1(evT.sales)}</span></span>${EC.map(([k, , c]) => eb(evT[k], c)).join("")}</div></div></section>`;
+  // ⑤ 고정비 스프레드 영향 품목: 율이 아니라 월 고정금액(장려금_분배기준·SKU금액, 판관비_분배·SKU)을 매입비중으로 나눠 받아 CM율이 깎이는 제품
+  h += fixedSpread(rows, t);
   const fl = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체");
   return h + `</div><div class="help" style="margin-top:8px">금액 단위 백만원 · 율은 모두 <b>총매출(출고가 기준)</b> 대비 · 필터: <b>${fl.length ? fl.map(esc).join(" / ") : "전체"}</b> (장려금·판관비 배분은 전체 기준으로 계산 후 필터)</div>`;
+}
+
+// 고정비 스프레드 = 월 고정금액을 매입비중으로 나눠 받은 비용 (장려금_분배기준 금액 + 장려금_SKU기준(금액) + 판관비_분배 + 판관비_SKU). 율(%) 비용은 제외
+const fixOf = a => (a.jAmt || 0) + (a.sAmt || 0) + (a.pDist || 0) + (a.pSku || 0);
+function fixedSpread(rows, t) {
+  const tf = fixOf(t), avg = t.sales ? tf / t.sales : 0;
+  if (!tf) return `<section class="card wide"><h2>고정비 스프레드 영향 품목 <small>월 고정금액 배분 없음</small></h2><div class="empty" style="padding:16px">이 필터에는 고정금액(장려금_분배기준·판관비_분배·SKU금액) 배분이 없어요</div></section>`;
+  const pr = agg(rows, r => r.code, r => ({ code: r.code, name: r.name, evt: r.evt, big: r.big })).filter(a => a.sales > 0);
+  // 적자 전환 = 고정비 빼면 흑자인데 고정비 때문에 마이너스 / 절반 이상 잠식 = 고정비가 (고정비 제외 CM)의 50% 이상
+  pr.forEach(a => { a.f = fixOf(a); a.fR = a.f / a.sales; a.cmEx = (a.cm + a.f) / a.sales; a.turn = a.cm < 0 && a.cm + a.f >= 0; a.heavy = !a.turn && a.cm + a.f > 0 && a.f >= 0.5 * (a.cm + a.f); });
+  const hit = pr.filter(a => a.f > 0 && (a.turn || a.heavy)).sort((a, b) => (b.turn - a.turn) || (b.fR - a.fR));
+  const nT = hit.filter(a => a.turn).length, nH = hit.filter(a => !a.turn).length;
+  const body = hit.length ? `<div class="tw" style="max-height:420px"><table><thead><tr><th>구분</th><th>제품</th><th>행사분류</th><th>총매출</th><th>고정비 스프레드</th><th>고정비율</th><th>CM율 (고정비 제외)</th><th>CM율 (실제)</th><th>깎인 폭</th></tr></thead><tbody>${hit.slice(0, 30).map(a => `<tr><td>${a.turn ? '<b class="neg">적자 전환</b>' : '<b class="flag">절반 이상 잠식</b>'}</td><td>${esc(a.name ?? "")} <span class="muted">${esc(a.code)}</span></td><td>${esc(a.evt ?? "-")}</td><td class="n">${mil1(a.sales)}</td><td class="n">${mil1(a.f)}</td><td class="n"><b>${pct(a.fR)}</b></td><td class="n">${pct(a.cmEx)}</td><td class="n${a.cmR < 0 ? " neg" : ""}">${pct(a.cmR)}</td><td class="n neg">${dpp(-a.fR)}</td></tr>`).join("")}</tbody></table></div>${hit.length > 30 ? `<div class="help">상위 30개만 표시 (전체 ${hit.length}개)</div>` : ""}`
+    : `<div class="help" style="margin-top:6px">✅ 고정비 때문에 적자 전환되거나 CM이 절반 이상 깎인 품목 없음</div>`;
+  return `<section class="card wide"><h2>고정비 스프레드 영향 품목 <small>고정비 ${mil1(tf)}백만 · 평균 고정비율 ${pct(avg)} · ${nT ? `<span class="neg">적자 전환 ${nT}개</span> · ` : ""}CM 절반 이상 잠식 ${nH}개</small></h2>${body}
+    <div class="help" style="margin-top:6px">고정비 스프레드 = 월 고정금액(장려금_분배기준 금액 · 장려금_SKU기준(금액) · 판관비_분배 · 판관비_SKU)을 매입비중으로 나눠 받은 몫 (율로 붙는 장려율·물류비·代수수료는 제외)<br>
+    <b class="neg">적자 전환</b> = 고정비 빼면 흑자인데 고정비 때문에 CM 마이너스 · <b class="flag">절반 이상 잠식</b> = 고정비가 고정비 제외 CM의 50% 이상을 깎음 · 깎인 폭 큰 순</div></section>`;
 }
 
 /* ================= 3단계 INSIGHT (규칙 기반, 브라우저 안에서만 계산) ================= */
