@@ -131,8 +131,8 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 <body>
 <header><h1>일자별 손익 Simulation</h1><span>매입 로우 → DC · 장려금/판관비 스프레드 · CM 일자별 산출 | 모든 계산은 이 PC 브라우저 안에서만 처리 (외부 전송 없음)</span></header>
 <nav class="stages" id="stages">
-  <button type="button" data-stage="1"><b>1</b>업로드 / 보관 <small id="stg1s"></small></button><span class="arr">›</span>
-  <button type="button" data-stage="2"><b>2</b>데이터 산출 <small id="stg2s"></small></button><span class="arr">›</span>
+  <button type="button" data-stage="1"><b>1</b>업로드 / 백업 <small id="stg1s"></small></button><span class="arr">›</span>
+  <button type="button" data-stage="2"><b>2</b>대시보드 <small id="stg2s"></small></button><span class="arr">›</span>
   <button type="button" data-stage="3"><b>3</b>INSIGHT <small id="stg3s"></small></button><span class="arr" style="margin-left:14px">|</span>
   <button type="button" data-stage="4" class="chk"><b>※</b>기준정보 점검 <span id="stg4s"></span></button>
 </nav>
@@ -1125,7 +1125,7 @@ $("#pApply").onclick = async () => {
     const ok = await DB.set("pt", { ...PT });
     if (nRef) DB.set("refSrc", { type: "paste" }); if (nRaw) DB.set("rawSrc", { type: "paste" });
     $("#pMsg").textContent = "✅ " + msg.join(" / ") + (ok ? " · 이 PC에 저장됨 (새로고침해도 유지)" : " · ⚠ 저장 못함") + (ST.ref ? "" : " — 기준 시트도 필요해요");
-    if (ST.res) $("#pMsg").insertAdjacentHTML("beforeend", ` <button type="button" data-go="2" style="padding:4px 10px">2단계 결과 보기 →</button>`);
+    if (ST.res) $("#pMsg").insertAdjacentHTML("beforeend", ` <button type="button" data-go="2" style="padding:4px 10px">대시보드 보기 →</button>`);
   } catch (e) { $("#pMsg").textContent = "❌ " + e.message; }
 };
 $("#pTxt").value = PT[pCur]; pTabs();
