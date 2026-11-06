@@ -536,6 +536,8 @@ function total(rows) { const a = { key: "합계" }; NUMK.forEach(n => a[n] = row
 const COLS = {
   sum: [["ch", "채널"], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
   prod: [["ch", "채널"], ["code", "제품코드"], ["name", "제품명"], ["big", "대분류"], ["evt", "세분류"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
+  big: [["ch", "채널"], ["big", "대카테고리"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
+  small: [["ch", "채널"], ["big", "대카테고리"], ["small", "소카테고리"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
   evt: [["ch", "채널"], ["evt", "세분류"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
   day: [["ch", "채널"], ["day", "일자"], ["qty", "수량", 1], ["amt", "매입금액", 1], ["sales", "총매출", 1], ["dc", "DC", 1], ["dcR", "DC율", 2], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용계", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "CM", 1], ["cmR", "CM율", 2]],
   det: [["ch", "채널"], ["dayRaw", "일자"], ["edi", "EDI관리코드명"], ["bar", "EDI상품코드"], ["ediName", "EDI상품명"], ["ty", "전환유형"], ["tyn", "전환유형명"], ["code", "제품코드"], ["name", "제품명"], ["ediq", "EDI수량", 1], ["qty", "전환수량", 1], ["amt", "매입금액", 1],
@@ -544,11 +546,13 @@ const COLS = {
     ["jPct", "장려금_분배기준(%)", 1], ["jAmt", "장려금_분배기준", 1], ["sPct", "장려금_SKU기준(%)", 1], ["sAmt", "장려금_SKU기준(금액)", 1], ["jTot", "장려금계", 1],
     ["log", "물류비", 1], ["fee", "代수수료", 1], ["pDist", "판관비_분배", 1], ["pSku", "판관비_SKU", 1], ["pTot", "판관비계", 1], ["cost", "비용계", 1], ["vc", "변동원가계", 1], ["tr", "운송비계", 1], ["cm", "공헌이익(CM)", 1]]
 };
-const TABS = [["dash", "📊 대시보드"], ["sum", "채널 요약"], ["prod", "제품별"], ["evt", "세분류별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
+const TABS = [["dash", "📊 대시보드"], ["sum", "채널 요약"], ["big", "대카테고리별"], ["small", "소카테고리별"], ["evt", "세분류별"], ["prod", "제품별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
 
 function dataFor(tab, rows) {
   if (tab === "sum") return agg(rows, r => r.ch, r => ({ ch: r.ch }));
   if (tab === "prod") return agg(rows, r => r.ch + "|" + r.code, r => ({ ch: r.ch, code: r.code, name: r.name, big: r.big, evt: r.evt }));
+  if (tab === "big") return agg(rows, r => r.ch + "|" + catOf(r.big), r => ({ ch: r.ch, big: catOf(r.big) }));
+  if (tab === "small") return agg(rows, r => r.ch + "|" + catOf(r.big) + "|" + catOf(r.small), r => ({ ch: r.ch, big: catOf(r.big), small: catOf(r.small) }));
   if (tab === "evt") return agg(rows, r => r.ch + "|" + (r.evt ?? "(미분류)"), r => ({ ch: r.ch, evt: r.evt ?? "(미분류)" }));
   if (tab === "day") return agg(rows, r => r.ch + "|" + r.day, r => ({ ch: r.ch, day: r.day })).sort((a, b) => (a.ch > b.ch) - (a.ch < b.ch) || (a.day ?? 0) - (b.day ?? 0));
   return rows;
@@ -605,14 +609,14 @@ function render() {
     ${sel("bigSel", "대카테고리", ["전체", ...bigs(R.rows)], ST.big)}
     ${sel("smallSel", "소카테고리", ["전체", ...smalls(R.rows)], ST.small)}
     ${sel("evtSel", "세분류", ["전체", ...evts(R.rows)], ST.evt)}
-    ${ST.tab === "dash" ? "" : `<input type="text" id="q" placeholder="제품코드·제품명 검색" value="${esc(ST.q)}" style="width:200px">`}
+    ${ST.tab === "dash" ? "" : `<input type="text" id="q" placeholder="제품·분류 검색" value="${esc(ST.q)}" style="width:200px">`}
     <span class="sp"></span>
     <span class="muted">월일수 ${R.mdays}일 · 일할 ${R.chs.map(c => `${esc(c)} ${(R.prorate[c] * R.mdays).toFixed(0)}/${R.mdays}`).join(", ")}</span>
     <button id="dl">엑셀 다운로드</button>
   </div>`;
   if (ST.tab === "dash") { h += dash(rowsF, R); finishRender(h); return; }
   let data = ST.tab === "day" && R.days ? dataFor("day", filt(R.days)) : dataFor(ST.tab, rowsF);
-  if (ST.q && ST.tab !== "sum" && ST.tab !== "day") { const q = ST.q.toLowerCase(); data = data.filter(r => String(r.code ?? "").includes(q) || String(r.name ?? "").toLowerCase().includes(q) || String(r.evt ?? "").toLowerCase().includes(q)); }
+  if (ST.q && ST.tab !== "sum" && ST.tab !== "day") { const q = ST.q.toLowerCase(); data = data.filter(r => String(r.code ?? "").includes(q) || String(r.name ?? "").toLowerCase().includes(q) || ["evt", "big", "small"].some(k => String(r[k] ?? "").toLowerCase().includes(q))); }
   const cols = viewCols(ST.tab); const s = ST.sort[ST.tab];
   if (s) data = [...data].sort((a, b) => { const x = a[s.k], y = b[s.k]; if (x == null) return 1; if (y == null) return -1; return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "ko")) * s.d; });
   const LIM = 3000; const shown = data.slice(0, LIM);
@@ -1017,8 +1021,10 @@ function download() {
     return ws;
   };
   XLSX.utils.book_append_sheet(wb, toSheet("sum", dataFor("sum", rowsF).concat([Object.assign(total(rowsF), { ch: "합계" })])), "채널요약");
-  XLSX.utils.book_append_sheet(wb, toSheet("prod", dataFor("prod", rowsF)), "제품별");
+  XLSX.utils.book_append_sheet(wb, toSheet("big", dataFor("big", rowsF)), "대카테고리별");
+  XLSX.utils.book_append_sheet(wb, toSheet("small", dataFor("small", rowsF)), "소카테고리별");
   XLSX.utils.book_append_sheet(wb, toSheet("evt", dataFor("evt", rowsF)), "세분류별");
+  XLSX.utils.book_append_sheet(wb, toSheet("prod", dataFor("prod", rowsF)), "제품별");
   XLSX.utils.book_append_sheet(wb, toSheet("day", dataFor("day", R.days ? filt(R.days) : rowsF)), "일자별");
   if (R.archived) { XLSX.writeFile(wb, `DC_CM_${R.archived}_보관함_${[ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체"}.xlsx`.replace(/[\\/:*?"<>|]/g, "")); return; }
   XLSX.utils.book_append_sheet(wb, toSheet("det", rowsF), "상세");
