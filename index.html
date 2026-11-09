@@ -118,7 +118,14 @@ svg.ln text{font-size:11px;fill:var(--sub)}
 .stages button.on b{background:var(--red)}
 .stages .arr{align-self:center;color:#c9d0dc;padding:0 4px}
 .stg{display:none}
-body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4{display:block}
+body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4,body[data-stage="5"] #stage5{display:block}
+.pbar{position:relative;height:8px;background:#eef1f6;border-radius:4px;min-width:90px;margin-top:4px}
+.pbar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;max-width:100%}
+.pbar b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--txt);opacity:.7}
+.kpi .pbar{margin-top:6px}
+.gt td.l{white-space:nowrap}
+.gt tr.cur td{background:#fff8e6}
+.gt tr.fut td{color:#8a93a3}
 .stages button.chk b{background:#e0a100}
 .stages button.chk.on{color:#b26a00;border-bottom-color:#e0a100}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
@@ -144,7 +151,8 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 <nav class="stages" id="stages">
   <button type="button" data-stage="1"><b>1</b>업로드 / 백업 <small id="stg1s"></small></button><span class="arr">›</span>
   <button type="button" data-stage="2"><b>2</b>대시보드 <small id="stg2s"></small></button><span class="arr">›</span>
-  <button type="button" data-stage="3"><b>3</b>INSIGHT <small id="stg3s"></small></button><span class="arr" style="margin-left:14px">|</span>
+  <button type="button" data-stage="3"><b>3</b>INSIGHT <small id="stg3s"></small></button><span class="arr">›</span>
+  <button type="button" data-stage="5"><b>4</b>목표 진척 <small id="stg5s"></small></button><span class="arr" style="margin-left:14px">|</span>
   <button type="button" data-stage="4" class="chk"><b>※</b>기준정보 점검 <span id="stg4s"></span></button>
 </nav>
 <main>
@@ -180,7 +188,8 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
     <div class="help" style="margin-top:8px">
       각 시트에서 <b>A1 셀 클릭 → Ctrl+A → Ctrl+C</b> 후 아래 칸에 <b>Ctrl+V</b>. 열 위치(A, B, C…)를 그대로 읽으니 <b>꼭 A1부터 통째로</b> 복사하세요.<br>
       · 매입 로우: 머리글 행(제품코드·매입금액 등)이 포함되면 위치 상관없음 · 화면에 보이는 값 그대로 들어가니 <b>율·단가는 소수점이 다 보이게</b> 해두세요 (예: 0.95%가 1%로 보이면 1%로 계산)<br>
-      · 기준 4개 시트는 이 PC 브라우저에 저장돼서 다음엔 매입 로우만 붙여넣으면 됩니다 (외부 전송 없음)
+      · 기준 4개 시트는 이 PC 브라우저에 저장돼서 다음엔 매입 로우만 붙여넣으면 됩니다 (외부 전송 없음)<br>
+      · <b>목표</b>: 머리글 포함 통째로 (채널 · 대카테고리 · 소카테고리 · 세분류 · 연도 · 월 · 총매출 목표 · 비용율 목표 · CM 목표) → 「4 목표 진척」 탭에서 확인
     </div>
     <div class="ptabs" id="ptabs"></div>
     <textarea id="pTxt" spellcheck="false" placeholder="여기에 Ctrl+V"></textarea>
@@ -213,6 +222,7 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
  </div>
  <div id="stage3" class="stg"><div id="ins"></div></div>
  <div id="stage4" class="stg"><div id="fix"></div></div>
+ <div id="stage5" class="stg"><div id="goal"></div></div>
 </main>
 <footer>계산 로직은 기존 엑셀 수식과 동일 · 출고가/변동원가/운송비 = 기준정보, 율·금액 = 거래조건</footer>
 
@@ -365,6 +375,9 @@ function parseRef(wb) {
       }
     }
   }
+  // 목표 (있으면): 26년 목표 대비 진척률용
+  n = findSheet(wb, s => s.replace(/\s/g, "").includes("목표"));
+  if (n) { try { ref.goal = parseGoal(grid(wb.Sheets[n])); } catch (e) { console.error(e); } }
   ref.channels = [...ref.channels];
   return ref;
 }
@@ -581,6 +594,7 @@ function render() {
   const R = ST.res;
   try { renderIns(); stageStatus(); } catch (e) { console.error(e); }
   try { renderFix(); } catch (e) { console.error(e); }
+  try { renderGoal(); } catch (e) { console.error(e); }
   if (!R) { $("#out").innerHTML = `<div class="card empty">① 기준 파일과 ② 매입 로우를 올리면 자동으로 계산돼요. <button type="button" data-go="1">1단계로</button></div>`; $("#warn").innerHTML = ""; return; }
   if (R.archived) $("#warn").innerHTML = `<div class="warnbox" style="background:#eef3fb;border-color:#b8c9e8"><h3>📦 보관함 ${esc(R.archived)} 보기 중 <span class="muted" style="font-weight:400">(저장 ${esc(R.savedAt)} 시점 결과 · 경고·상세는 저장 안 됨)</span></h3><button type="button" id="arcBack">← 현재 데이터로 돌아가기</button></div>`;
   else renderWarn(R);
@@ -771,6 +785,333 @@ function fixedSpread(rows, t) {
     <b class="neg">적자 전환</b> = 고정비 빼면 흑자인데 고정비 때문에 CM 마이너스 · <b class="flag">절반 이상 잠식</b> = 고정비가 고정비 제외 CM의 50% 이상을 깎음 · 깎인 폭 큰 순</div></section>`;
 }
 
+/* ================= 4단계 목표 진척 (목표 대비 진척률 · 잔여일 월말 예상 · 연간 YTD) ================= */
+// 목표 1행 = (채널·대·소·세분류 중 아는 데까지) × 월. 빈 칸 = 그 단계 전체. 실적은 현재 계산(기준월) + 📦 보관함(지난 달)
+// 월말 예상 = 실적 × 월일수 ÷ 경과일 (= 실적 + 일평균 × 잔여일, 채널별 경과일). 연말 예상 = 지난 달 실적 + 이번 달 예상 + 남은 달 목표
+const GLV = [["ch", "채널"], ["big", "대카테고리"], ["small", "소카테고리"], ["evt", "세분류"]];
+const gk = v => norm(v ?? "");
+const gTxt = v => v == null ? "" : String(v).trim();
+const unitOf = h => /억/.test(h) ? 1e8 : /백만/.test(h) ? 1e6 : /천/.test(h) ? 1e3 : 1;
+const rateV = v => { const x = num(v); return x == null ? null : Math.abs(x) > 1.5 ? x / 100 : x; };   // 25 → 25%, 0.25 → 25%
+const yearV = v => { const x = num(v) ?? num(String(v ?? "").replace(/[^\d]/g, "")); return x == null ? null : x < 100 ? 2000 + x : x; };
+function goalMonth(v) {   // 월 칸 → { y|null, m }  (3 · 3월 · 2026-03 · 26년 3월 · 202603 · 엑셀 날짜)
+  if (v == null || v === "") return null;
+  const ok = (y, m) => m >= 1 && m <= 12 ? { y, m } : null;
+  if (typeof v === "number") {
+    if (Number.isInteger(v) && v >= 1 && v <= 12) return { y: null, m: v };
+    if (v >= 190001 && v <= 210012) return ok(Math.floor(v / 100), v % 100);
+    if (v > 31) { const o = XLSX.SSF.parse_date_code(v); return o ? ok(o.y, o.m) : null; }
+    return null;
+  }
+  const s = String(v).trim(); let m;
+  if ((m = s.match(/(\d{4})\s*[-./년]\s*(\d{1,2})/))) return ok(+m[1], +m[2]);
+  if ((m = s.match(/^(\d{2})\s*[년.\-/]\s*(\d{1,2})\s*월?$/))) return ok(2000 + +m[1], +m[2]);
+  if ((m = s.match(/^(\d{4})(\d{2})$/))) return ok(+m[1], +m[2]);
+  if ((m = s.match(/^(\d{1,2})\s*월?$/))) return ok(null, +m[1]);
+  return null;
+}
+// 목표 시트 → { rows:[{ch,big,small,evt,y,m,s,c,cm,u}], layout, unit, bad }
+// 세로형: 월 열 + 총매출 목표 · 비용율 목표 · CM 목표 열 / 가로형: 지표(총매출·비용율·CM) 열 + 1월~12월 열
+function parseGoal(g) {
+  const out = { rows: [], layout: null, unit: 1, bad: 0 };
+  const SUB = /^(합계|소계|총계|계|total)$/i;
+  for (let i = 0; i < Math.min(g.length, 15); i++) {
+    const r = g[i]; if (!r) continue; const h = r.map(norm);
+    const f = re => h.findIndex(v => re.test(v)), fA = re => h.findIndex(v => re.test(v) && !/[율률%]/.test(v));
+    const ix = { ch: f(/^채널(명)?$/), big: f(/대카테고리|대분류/), small: f(/소카테고리|소분류/), evt: f(/세분류|행사분류/) };
+    if (ix.ch < 0 && ix.big < 0) continue;
+    const mon = f(/^(월|기준월|대상월|연월|년월)$/), yr = f(/^(연도|년도|년)$/);
+    const sal = fA(/매출/), cr = f(/비용[율률]/), cm = fA(/^CM|공헌이익/i);
+    const mcols = h.map((v, c) => [c, /^(\d{1,2})월/.exec(v)]).filter(([, m]) => m && +m[1] >= 1 && +m[1] <= 12).map(([c, m]) => [c, +m[1]]);
+    const met = f(/^(지표|구분|항목|계정)$/);
+    const wide = mon < 0 && mcols.length >= 1 && met >= 0;
+    if (!(mon >= 0 && (sal >= 0 || cr >= 0 || cm >= 0)) && !wide) continue;
+    out.layout = wide ? "wide" : "long";
+    const M = new Map();
+    const lab = rr => { const o = {}; GLV.forEach(([k]) => o[k] = ix[k] >= 0 ? gTxt(rr[ix[k]]) : ""); return o; };
+    const slot = (o, y, m, u) => { const k = [...GLV.map(([kk]) => gk(o[kk])), y ?? "", m, u].join("\u0001"); let e = M.get(k); if (!e) { e = { ...o, y, m, u, s: null, c: null, cm: null }; M.set(k, e); } return e; };
+    const addv = (e, f2, v) => { if (v == null) return; e[f2] = f2 === "c" ? v : (e[f2] ?? 0) + v; };
+    if (!wide) {
+      const uS = unitOf(sal >= 0 ? h[sal] : ""), uC = unitOf(cm >= 0 ? h[cm] : ""); out.unit = sal >= 0 ? uS : uC;
+      for (let j = i + 1; j < g.length; j++) {
+        const rr = g[j]; if (!rr) continue; const o = lab(rr);
+        if (GLV.some(([k]) => SUB.test(norm(o[k])))) continue;
+        const sv = sal >= 0 ? num(rr[sal]) : null, cv = cr >= 0 ? rateV(rr[cr]) : null, mv = cm >= 0 ? num(rr[cm]) : null;
+        if (sv == null && cv == null && mv == null) continue;
+        const mo = goalMonth(rr[mon]); if (!mo) { out.bad++; continue; }
+        const y = (yr >= 0 ? yearV(rr[yr]) : null) ?? mo.y;
+        // 총매출·CM 단위가 다르면 (드묾) 각자 단위로: CM은 총매출 단위로 맞춰 저장
+        const e = slot(o, y, mo.m, uS); addv(e, "s", sv); addv(e, "c", cv); addv(e, "cm", mv == null ? null : mv * uC / uS);
+      }
+    } else {
+      const uH = h.some(v => /백만|억|천원/.test(v)) ? unitOf(h.join(" ")) : 1; out.unit = uH;
+      for (let j = i + 1; j < g.length; j++) {
+        const rr = g[j]; if (!rr) continue; const o = lab(rr);
+        if (GLV.some(([k]) => SUB.test(norm(o[k])))) continue;
+        const t = norm(rr[met]); const kind = /비용[율률]/.test(t) ? "c" : /[율률%]/.test(t) ? null : /매출/.test(t) ? "s" : /^CM|공헌이익/i.test(t) ? "cm" : null;
+        if (!kind) continue;
+        const u = kind === "c" ? uH : (/백만|억|천/.test(t) ? unitOf(t) : uH);
+        const y = yr >= 0 ? yearV(rr[yr]) : null;
+        for (const [c, m] of mcols) { const v = kind === "c" ? rateV(rr[c]) : num(rr[c]); if (v == null) continue; addv(slot(o, y, m, uH), kind, kind === "c" ? v : v * u / uH); }
+      }
+    }
+    out.rows = [...M.values()].filter(e => e.s != null || e.c != null || e.cm != null);
+    return out;
+  }
+  out.err = "머리글을 못 찾았어요 — 채널(또는 대카테고리) + 월 + 총매출 목표/비용율 목표/CM 목표 머리글이 한 줄에 있어야 해요";
+  return out;
+}
+let GC = { t: null, v: null };
+function goalData() {   // 붙여넣은 목표 우선, 없으면 기준 파일의 '목표' 시트
+  const t = (typeof PT !== "undefined" && PT.goal) || "";
+  if (t.trim()) { if (GC.t !== t) GC = { t, v: parseGoal(parseTSV(t).map(r => r.map(pVal))) }; return GC.v; }
+  return ST.ref && ST.ref.goal || null;
+}
+const gUnit = () => +(ls.get("dc_gunit") || 0);   // 0 = 자동(머리글 단위)
+function goalsOf(GD, Y, M, chF) {
+  const ov = gUnit();
+  return GD.rows.filter(g => (g.y ?? Y) === Y && g.m === M && (chF === "전체" || gk(g.ch) === gk(chF)))
+    .map(g => { const u = ov || g.u; return { ...g, S: g.s != null ? g.s * u : null, CM: g.cm != null ? g.cm * u : null, COST: g.s != null && g.c != null ? g.s * u * g.c : null }; });
+}
+const gPat = g => GLV.map(([k]) => gk(g[k]));
+const gHit = (p, r) => (!p[0] || p[0] === gk(r.ch)) && (!p[1] || p[1] === gk(catOf(r.big))) && (!p[2] || p[2] === gk(catOf(r.small))) && (!p[3] || p[3] === gk(catOf(r.evt)));
+// 그 달 실적: 기준월 = 지금 계산 결과, 그 외 = 보관함
+function goalSrc(ym) {
+  const R = ST.res;
+  if (R && !R.archived && $("#ym").value === ym) return { rows: R.rows, days: R.rows, prorate: R.prorate, mdays: R.mdays, kind: "live" };
+  const s = ARC[ym]; if (s) return { rows: s.rows, days: s.days, prorate: s.prorate, mdays: s.mdays, kind: "arc", savedAt: s.savedAt };
+  return null;
+}
+function goalCalc(GD, ym, chF, L) {
+  const [Y, M] = ym.split("-").map(Number);
+  const G = goalsOf(GD, Y, M, chF), src = goalSrc(ym);
+  const mdays = src ? src.mdays : new Date(Y, M, 0).getDate();
+  const dOf = ch => src && src.prorate && src.prorate[ch] != null ? Math.round(src.prorate[ch] * mdays) : 0;
+  const mk = (key, lab) => ({ key, lab, pats: new Map(), S: 0, hasS: false, COST: 0, sC: 0, CM: 0, hasCM: false, act: new Map() });
+  const grp = new Map(), all = mk("*", ["합계"]);
+  for (const g of G) {
+    const p = gPat(g), k = p.slice(0, L).join("\u0001");
+    let a = grp.get(k); if (!a) { a = mk(k, GLV.slice(0, L).map(([kk]) => g[kk] ? String(g[kk]) : "전체")); grp.set(k, a); }
+    for (const x of [a, all]) { x.pats.set(p.join("|"), p); if (g.S != null) { x.S += g.S; x.hasS = true; } if (g.COST != null) { x.COST += g.COST; x.sC += g.S; } if (g.CM != null) { x.CM += g.CM; x.hasCM = true; } }
+  }
+  const rows = src ? src.rows.filter(r => chF === "전체" || gk(r.ch) === gk(chF)) : [];
+  const addA = (x, r) => { let c = x.act.get(r.ch); if (!c) x.act.set(r.ch, c = { sales: 0, cost: 0, cm: 0 }); c.sales += r.sales || 0; c.cost += r.cost || 0; c.cm += r.cm || 0; };
+  const pl = [...grp.values()].map(x => [x, [...x.pats.values()]]);
+  let unS = 0;
+  for (const r of rows) { let any = false; for (const [x, ps] of pl) if (ps.some(p => gHit(p, r))) { addA(x, r); any = true; } if (any) addA(all, r); else unS += r.sales || 0; }
+  const dAll = src ? Math.max(0, ...Object.keys(src.prorate || {}).filter(c => chF === "전체" || gk(c) === gk(chF)).map(dOf)) : 0;
+  const fin = x => {
+    let s = 0, c = 0, m = 0, fs = 0, fc = 0, fm = 0, d = 0;
+    for (const [ch, v] of x.act) { const dd = dOf(ch); d = Math.max(d, dd); s += v.sales; c += v.cost; m += v.cm; if (dd > 0) { const k = mdays / dd; fs += v.sales * k; fc += v.cost * k; fm += v.cm * k; } }
+    if (!x.act.size) d = dAll;
+    Object.assign(x, { d, time: mdays ? d / mdays : null, sales: s, cost: c, cm: m, fS: d ? fs : null, fCost: d ? fc : null, fCM: d ? fm : null });
+    x.pS = x.hasS && x.S ? s / x.S : null; x.aS = x.hasS && x.S && x.fS != null ? x.fS / x.S : null;
+    x.pCM = x.hasCM && x.CM > 0 ? m / x.CM : null; x.aCM = x.hasCM && x.CM > 0 && x.fCM != null ? x.fCM / x.CM : null;
+    x.crT = x.sC ? x.COST / x.sC : null; x.cr = s ? c / s : null; x.fCr = x.fS ? x.fCost / x.fS : null;
+    x.daily = d ? s / d : null; x.need = x.hasS && d < mdays ? Math.max(0, x.S - s) / (mdays - d) : null;
+    return x;
+  };
+  const groups = [...grp.values()].map(fin).sort((a, b) => b.S - a.S || b.sales - a.sales);
+  return { Y, M, ym, mdays, src, groups, all: fin(all), unS, nG: G.length, dAll };
+}
+function goalYear(GD, Y, curYm, chF) {
+  const ms = [], T = { S: 0, CM: 0, COST: 0, sC: 0, ytdA: 0, ytdT: 0, ytdCM: 0, ytdCMT: 0, ytdCost: 0, fS: 0, fCM: 0, miss: [] };
+  for (let m = 1; m <= 12; m++) {
+    const ym = `${Y}-${String(m).padStart(2, "0")}`, c = goalCalc(GD, ym, chF, 0), x = c.all;
+    const st = ym < curYm ? "past" : ym === curYm ? "cur" : "fut";
+    const o = { m, ym, st, src: c.src, x, mdays: c.mdays, hasG: c.nG > 0 };
+    if (x.hasS) T.S += x.S; if (x.hasCM) T.CM += x.CM; T.COST += x.COST; T.sC += x.sC;
+    if (st === "past") {
+      if (c.src) { T.ytdA += x.sales; T.ytdCM += x.cm; T.ytdCost += x.cost; T.fS += x.sales; T.fCM += x.cm; T.ytdT += x.hasS ? x.S : 0; T.ytdCMT += x.hasCM ? x.CM : 0; if (x.d < c.mdays && c.src.kind === "arc") o.part = `${x.d}/${c.mdays}일만 저장`; }
+      else { if (o.hasG) T.miss.push(m); T.fS += x.hasS ? x.S : 0; T.fCM += x.hasCM ? x.CM : 0; }   // 보관함 없음 → YTD 비교에서 빼고, 연말 예상엔 목표로 대체
+    } else if (st === "cur") {
+      T.ytdA += x.sales; T.ytdCM += x.cm; T.ytdCost += x.cost;
+      T.ytdT += x.hasS ? x.S * (x.time || 0) : 0; T.ytdCMT += x.hasCM ? x.CM * (x.time || 0) : 0;
+      T.fS += x.fS ?? (x.hasS ? x.S : 0); T.fCM += x.fCM ?? (x.hasCM ? x.CM : 0);
+    } else { T.fS += x.hasS ? x.S : 0; T.fCM += x.hasCM ? x.CM : 0; }
+    ms.push(o);
+  }
+  T.crT = T.sC ? T.COST / T.sC : null; T.cr = T.ytdA ? T.ytdCost / T.ytdA : null;
+  T.pS = T.S ? T.ytdA / T.S : null; T.pT = T.S ? T.ytdT / T.S : null; T.aS = T.S ? T.fS / T.S : null;
+  T.aCM = T.CM > 0 ? T.fCM / T.CM : null; T.pCM = T.CM > 0 ? T.ytdCM / T.CM : null;
+  return { ms, T };
+}
+const gIcon = a => a == null ? "" : a >= 1 ? "🟢" : a >= 0.95 ? "🟡" : "🔴";
+const gClr = a => a == null ? "#9aa3b2" : a >= 1 ? "var(--ok)" : a >= 0.95 ? "#e0a100" : "var(--red)";
+const pbar = (p, t) => p == null ? "" : `<div class="pbar" title="진척 ${pct(p)}${t != null ? ` · 시간 ${pct(t)}` : ""}"><i style="width:${Math.min(100, Math.max(0, p * 100)).toFixed(1)}%;background:${t == null ? "var(--navy2)" : p >= t ? "var(--ok)" : p >= t * 0.95 ? "#e0a100" : "var(--red)"}"></i>${t != null ? `<b style="left:${Math.min(100, t * 100).toFixed(1)}%"></b>` : ""}</div>`;
+// 일 누적 실적 vs 목표 페이스 vs 월말 예상
+function cumChart(c, GD, chF) {
+  const x = c.all; if (!c.src || !x.hasS) return "";
+  const pats = [...x.pats.values()], dd = new Map();
+  for (const r of c.src.days) { if (r.day == null || !(chF === "전체" || gk(r.ch) === gk(chF)) || !pats.some(p => gHit(p, r))) continue; dd.set(r.day, (dd.get(r.day) || 0) + (r.sales || 0)); }
+  const N = c.mdays, d0 = x.d; if (!d0) return "";
+  const cum = []; let a = 0; for (let d = 1; d <= d0; d++) { a += dd.get(d) || 0; cum.push(a); }
+  const W = 1100, H = 260, L = 56, Rr = 70, Tp = 16, B = 28, mx = Math.max(x.S, x.fS || 0, a) * 1.05 || 1;
+  const X = d => L + (W - L - Rr) * d / N, Y = v => Tp + (H - Tp - B) * (1 - v / mx);
+  let s = `<svg class="ln" viewBox="0 0 ${W} ${H}" role="img" aria-label="일 누적 실적과 목표 페이스">`;
+  for (let k = 0; k <= 4; k++) { const v = mx * k / 4; s += `<line x1="${L}" x2="${W - Rr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#e6e9ef"/><text x="${L - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${mil1(v)}</text>`; }
+  for (let d = 1; d <= N; d++) if (d === 1 || d % 5 === 0 || d === N) s += `<text x="${X(d).toFixed(1)}" y="${H - 8}" text-anchor="middle">${d}일</text>`;
+  s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(N)}" y2="${Y(x.S)}" stroke="#9aa3b2" stroke-width="2" stroke-dasharray="6 4"/><text x="${X(N) + 6}" y="${Y(x.S) + 4}" style="fill:var(--sub)">목표 ${mil1(x.S)}</text>`;
+  s += `<path d="M${X(0)},${Y(0)}${cum.map((v, i) => `L${X(i + 1).toFixed(1)},${Y(v).toFixed(1)}`).join("")}" fill="none" stroke="${CLR.sales}" stroke-width="2.6"/>`;
+  if (x.fS != null && d0 < N) s += `<line x1="${X(d0)}" y1="${Y(a)}" x2="${X(N)}" y2="${Y(x.fS)}" stroke="${gClr(x.aS)}" stroke-width="2.2" stroke-dasharray="3 4"/><circle cx="${X(N)}" cy="${Y(x.fS)}" r="4" fill="${gClr(x.aS)}"/><text x="${X(N) + 6}" y="${Y(x.fS) + (Math.abs(Y(x.fS) - Y(x.S)) < 14 ? 16 : 4)}" style="font-weight:700;fill:${gClr(x.aS)}">예상 ${mil1(x.fS)}</text>`;
+  s += `<circle cx="${X(d0)}" cy="${Y(a)}" r="4.5" fill="${CLR.sales}"/><text x="${X(d0)}" y="${Y(a) - 9}" text-anchor="middle" style="font-weight:700;fill:var(--txt)">${d0}일 ${mil1(a)}</text>`;
+  return s + `</svg><div class="lg"><span><b style="background:${CLR.sales}"></b>누적 실적</span><span><b style="background:#9aa3b2"></b>목표 페이스 (일할)</span><span><b style="background:${gClr(x.aS)}"></b>월말 예상 (일평균 × 잔여일)</span><span class="muted">단위 백만</span></div>`;
+}
+// 월별 목표 vs 실적(지난 달) · 예상(이번 달) 막대
+function yearChart(Yr) {
+  const ms = Yr.ms, W = 1100, H = 230, L = 56, Rr = 10, Tp = 16, B = 28;
+  const val = o => o.st === "past" ? (o.src ? o.x.sales : null) : o.st === "cur" ? o.x.fS : null;
+  const mx = Math.max(1, ...ms.map(o => Math.max(o.x.hasS ? o.x.S : 0, val(o) || 0))) * 1.08;
+  const bw = (W - L - Rr) / 12, Y = v => Tp + (H - Tp - B) * (1 - v / mx);
+  let s = `<svg class="ln" viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 목표 대비 실적">`;
+  for (let k = 0; k <= 4; k++) { const v = mx * k / 4; s += `<line x1="${L}" x2="${W - Rr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#e6e9ef"/><text x="${L - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${mil1(v)}</text>`; }
+  ms.forEach((o, i) => {
+    const cx = L + bw * i + bw / 2, w = bw * 0.34, T = o.x.hasS ? o.x.S : 0, v = val(o);
+    if (T) s += `<rect x="${cx - w - 1}" y="${Y(T)}" width="${w}" height="${Y(0) - Y(T)}" rx="2" fill="#d5dbe6"><title>${o.m}월 목표 ${mil1(T)}백만</title></rect>`;
+    if (v != null) { const a = T ? v / T : null; s += `<rect x="${cx + 1}" y="${Y(Math.max(0, v))}" width="${w}" height="${Math.max(1, Y(0) - Y(Math.max(0, v)))}" rx="2" fill="${gClr(a)}" ${o.st === "cur" ? 'fill-opacity=".55" stroke="' + gClr(a) + '" stroke-dasharray="3 2"' : ""}><title>${o.m}월 ${o.st === "cur" ? "월말 예상" : "실적"} ${mil1(v)}백만${a != null ? ` (${pct(a)})` : ""}</title></rect>`; if (a != null) s += `<text x="${cx + w / 2 + 1}" y="${Y(Math.max(0, v)) - 5}" text-anchor="middle" style="font-size:10.5px;fill:${gClr(a)};font-weight:700">${(a * 100).toFixed(0)}%</text>`; }
+    s += `<text x="${cx}" y="${H - 8}" text-anchor="middle" style="${o.st === "cur" ? "font-weight:700;fill:var(--txt)" : ""}">${o.m}월</text>`;
+  });
+  return s + `</svg><div class="lg"><span><b style="background:#d5dbe6"></b>목표</span><span><b style="background:var(--ok)"></b>실적 (달성 🟢100%↑ 🟡95%↑ 🔴95%↓)</span><span><b style="background:var(--ok);opacity:.55"></b>이번 달 = 월말 예상</span><span class="muted">단위 백만 · 지난 달 실적은 📦 보관함 기준</span></div>`;
+}
+function renderGoal() {
+  const el = $("#goal"); if (!el) return;
+  const GD = goalData(); $("#stg5s").textContent = "";
+  const fmtHelp = `<div class="help" style="margin-top:8px"><b>목표 양식</b> (한 행 = 한 달 목표, 머리글 포함 통째로 복사)<br>
+    <code>채널 | 대카테고리 | 소카테고리 | 세분류 | 연도 | 월 | 총매출 목표 | 비용율 목표 | CM 목표</code><br>
+    · 세분류까지 없으면 아는 단계까지만 (빈 칸 = 그 단계 전체) · 연도 없으면 기준월 연도 · 월은 1~12 / 3월 / 2026-03 다 됨<br>
+    · 금액 단위는 머리글에 (원)/(천원)/(백만원) 적으면 자동 인식 · 비용율은 25% 또는 25 · 합계·소계 행은 자동 제외<br>
+    · 가로형(지표 열에 총매출/비용율/CM + 1월~12월 열)도 인식 · 지난 달 실적은 📦 보관함에 저장된 달만 잡혀요</div>`;
+  if (!GD || !GD.rows.length) {
+    el.innerHTML = `<div class="card"><h2>🎯 목표 진척</h2>${GD && GD.err ? `<div class="warnbox">⚠️ ${esc(GD.err)}</div>` : `<div class="empty" style="padding:16px">아직 목표가 없어요 → 1단계 「📋 붙여넣기」의 <b>🎯 목표</b> 칸에 목표 시트를 붙여넣고 「붙여넣은 내용으로 계산」<br>(또는 기준 파일에 <b>'목표'</b> 시트를 넣어 올리기)</div>`}
+      <button type="button" class="sec" id="gTpl">📋 목표 양식 복사 (현재 데이터 분류 목록 포함)</button> <span class="muted" id="gMsg"></span>${fmtHelp}</div>`;
+    bindGoalTpl(); return;
+  }
+  const R = ST.res, baseYm = (R && R.archived) || $("#ym").value;
+  const yrs = [...new Set(GD.rows.map(g => g.y).filter(Boolean))].sort();
+  let gym = ST.gym || baseYm; if (!/^\d{4}-\d{2}$/.test(gym || "")) gym = `${yrs[0] || new Date().getFullYear()}-01`;
+  const Y = +gym.slice(0, 4);
+  const chs = uniq([...GD.rows.map(g => g.ch).filter(Boolean), ...(R ? R.chs : [])]);
+  const chF = ST.gch && (ST.gch === "전체" || chs.includes(ST.gch)) ? ST.gch : "전체";
+  const maxL = Math.max(1, ...GD.rows.map(g => GLV.reduce((n, [k], i) => g[k] ? i + 1 : n, 0)));
+  const L = Math.min(ST.glv || maxL, 4);
+  const c = goalCalc(GD, gym, chF, L), x = c.all, Yr = goalYear(GD, Y, gym, chF), T = Yr.T;
+  $("#stg5s").textContent = x.aS != null ? `${gIcon(x.aS)} 예상 ${(x.aS * 100).toFixed(0)}%` : "";
+  const ov = gUnit(), uLbl = { 1: "원", 1000: "천원", 1000000: "백만원" };
+  const mOpts = Array.from({ length: 12 }, (_, i) => `${Y}-${String(i + 1).padStart(2, "0")}`);
+  const yOpts = uniq([...yrs.map(String), String(Y)]);
+  let h = `<div class="toolbar" style="margin-top:0">
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">연도 <select id="gY">${yOpts.map(y => `<option ${+y === Y ? "selected" : ""}>${y}</option>`).join("")}</select></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">월 <select id="gM">${mOpts.map(m => `<option value="${m}" ${m === gym ? "selected" : ""}>${+m.slice(5)}월${m === baseYm ? " (현재)" : ARC[m] ? " 📦" : ""}</option>`).join("")}</select></label>
+    ${sel("gCh", "채널", ["전체", ...chs], chF)}
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">보는 단계 <select id="gL">${GLV.map(([, l], i) => `<option value="${i + 1}" ${i + 1 === L ? "selected" : ""}>${l}까지</option>`).join("")}</select></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">목표 금액 단위 <select id="gU"><option value="0" ${!ov ? "selected" : ""}>자동 (${uLbl[GD.unit] || GD.unit})</option>${[1, 1000, 1000000].map(u => `<option value="${u}" ${ov === u ? "selected" : ""}>${uLbl[u]}</option>`).join("")}</select></label>
+    <span class="sp"></span><button type="button" class="sec" id="gTpl">📋 목표 양식 복사</button><button type="button" id="gDl">엑셀 다운로드</button></div><span class="muted" id="gMsg"></span>`;
+  // 경고
+  const wn = [];
+  if (GD.bad) wn.push(`월을 못 읽은 목표 ${GD.bad}행 (빠짐)`);
+  if (!c.src) wn.push(`${gym} 실적 없음 — ${gym === baseYm ? "1단계에서 계산하면 나와요" : "📦 보관함에 이 달이 없어요"}`);
+  if (T.miss.length) wn.push(`보관함 없는 지난 달: ${T.miss.map(m => m + "월").join(", ")} → YTD 비교(실적·목표 둘 다)에서 빠지고, 연말 예상엔 목표로 대체 (그 달 결과를 보관함에 저장하면 반영)`);
+  if (c.src && c.unS > 0 && x.sales > 0) wn.push(`목표 없는 분류의 실적 ${mil1(c.unS)}백만 (진척률 계산에서 제외)`);
+  if (!c.nG) wn.push(`${gym} 목표가 없어요 (${chF === "전체" ? "" : chF + " · "}연도 ${Y})`);
+  if (x.hasS && x.sales && x.S && (x.sales / x.S > 50 || x.sales / x.S < 0.002)) wn.push(`목표와 실적 규모가 너무 달라요 (진척 ${pct(x.pS)}) — 목표 금액 단위(원/천원/백만원)를 확인하세요`);
+  if (wn.length) h += `<div class="warnbox" style="margin-top:6px">${wn.map(w => `<div>⚠️ ${esc(w)}</div>`).join("")}</div>`;
+  // KPI (월)
+  const k = (lbl, v, sub, cls = "", bar = "") => `<div class="kpi ${cls}"><small>${lbl}</small><div class="${v < 0 ? "neg" : ""}">${v == null ? "-" : mil1(v)}<em>백만</em></div>${sub ? `<span class="sb">${sub}</span>` : ""}${bar}</div>`;
+  const mm = +gym.slice(5), dTxt = c.src ? `${x.d}/${c.mdays}일` : "실적 없음";
+  h += `<h3 style="margin:14px 0 4px;color:var(--navy)">📅 ${Y}년 ${mm}월 <span class="muted" style="font-weight:400;font-size:12px">경과 ${dTxt} · 시간 진척 ${pct(x.time)}${c.src ? ` · ${c.src.kind === "live" ? "현재 계산" : "보관함 " + esc(c.src.savedAt)}` : ""}</span></h3>
+  <div class="kpis top">
+    ${k("월 목표 (총매출)", x.hasS ? x.S : null, `비용율 목표 ${pct(x.crT)} · CM 목표 ${x.hasCM ? mil1(x.CM) : "-"}`)}
+    ${k(`실적 (${dTxt})`, x.sales, `<b style="color:${gClr(x.pS != null && x.time ? x.pS / x.time : null)}">진척 ${pct(x.pS)}</b> vs 시간 ${pct(x.time)}`, "", pbar(x.pS, x.time))}
+    ${k("월말 예상 (총매출)", x.fS, `<b style="color:${gClr(x.aS)}">${gIcon(x.aS)} 목표 대비 ${pct(x.aS)}</b>${x.hasS && x.fS != null ? ` (${x.fS - x.S >= 0 ? "+" : ""}${mil1(x.fS - x.S)})` : ""}`, "cm")}
+    ${k("남은 기간 필요 일평균", x.need, x.daily != null ? `현재 일평균 ${mil1(x.daily)}${x.need != null && x.daily ? ` → <b class="${x.need > x.daily ? "neg" : ""}">${x.need > x.daily ? "+" : ""}${pct(x.need / x.daily - 1)}</b>` : ""}` : "")}
+    ${k("비용 (DC+장려금+판관비)", x.cost, `비용율 <b class="${x.crT != null && x.cr > x.crT ? "neg" : ""}">${pct(x.cr)}</b> vs 목표 ${pct(x.crT)} ${x.crT != null && x.cr != null ? `(${dpp(x.cr - x.crT)})` : ""}`)}
+    ${k("CM 실적", x.cm, `진척 ${pct(x.pCM)} vs 시간 ${pct(x.time)} · CM율 ${pct(x.sales ? x.cm / x.sales : null)}`, "", pbar(x.pCM, x.time))}
+    ${k("CM 월말 예상", x.fCM, `<b style="color:${gClr(x.aCM)}">${gIcon(x.aCM)} 목표 대비 ${pct(x.aCM)}</b>${x.hasCM && x.fCM != null ? ` (${x.fCM - x.CM >= 0 ? "+" : ""}${mil1(x.fCM - x.CM)})` : ""}`, "cm")}
+    ${k(`${Y}년 연말 예상 (총매출)`, T.S ? T.fS : null, `<b style="color:${gClr(T.aS)}">${gIcon(T.aS)} 연간 목표 ${mil1(T.S)} 대비 ${pct(T.aS)}</b>`, "")}
+  </div>`;
+  h += `<div class="dgrid"><section class="card wide"><h2>일 누적 실적 vs 목표 <small>${mm}월 · ${esc(chF)} · 점선 = 목표 페이스 / 월말 예상</small></h2>${cumChart(c, GD, chF) || `<div class="empty" style="padding:16px">실적 또는 총매출 목표가 없어요</div>`}</section></div>`;
+  // 분류별 표
+  const gr = c.groups, lv = GLV.slice(0, L);
+  const td = (v, cls = "") => `<td class="n ${cls}">${v}</td>`;
+  const rowH = (a, tot) => `<tr${tot ? ' class="tot"' : ""}>${tot ? `<td colspan="${L}"><b>합계</b></td>` : a.lab.map(t => `<td class="l">${esc(t)}</td>`).join("")}
+    ${td(a.hasS ? mil1(a.S) : "-")}${td(mil1(a.sales))}<td class="n">${pct(a.pS)}${pbar(a.pS, a.time)}</td>${td(a.fS != null ? mil1(a.fS) : "-")}${td(`<b style="color:${gClr(a.aS)}">${pct(a.aS)}</b>`)}${td(a.need != null ? mil1(a.need) : "-")}${td(a.daily != null ? mil1(a.daily) : "-")}
+    ${td(pct(a.crT))}${td(pct(a.cr), a.crT != null && a.cr > a.crT ? "neg" : "")}${td(a.crT != null && a.cr != null ? dpp(a.cr - a.crT) : "-", a.crT != null && a.cr > a.crT ? "neg" : "")}
+    ${td(a.hasCM ? mil1(a.CM) : "-")}${td(mil1(a.cm), a.cm < 0 ? "neg" : "")}${td(a.fCM != null ? mil1(a.fCM) : "-", a.fCM < 0 ? "neg" : "")}${td(`<b style="color:${gClr(a.aCM)}">${pct(a.aCM)}</b>`)}<td>${gIcon(a.aS)}${gIcon(a.aCM)}</td></tr>`;
+  h += `<section class="card" style="margin-top:12px"><h2>분류별 진척 <small>${mm}월 · ${lv.map(v => v[1]).join(" > ")} · 목표 큰 순 · 🟢 100%↑ 🟡 95%↑ 🔴 95%↓ (총매출·CM 예상 달성)</small></h2>
+    <div class="tw gt" style="max-height:520px"><table><thead><tr>${lv.map(v => `<th>${v[1]}</th>`).join("")}<th>목표 총매출</th><th>실적</th><th>진척률 | 시간</th><th>월말 예상</th><th>예상 달성</th><th>필요 일평균</th><th>현재 일평균</th><th>비용율 목표</th><th>비용율 실적</th><th>차이</th><th>CM 목표</th><th>CM 실적</th><th>CM 예상</th><th>CM 예상 달성</th><th>상태</th></tr></thead>
+    <tbody>${gr.map(a => rowH(a)).join("")}${gr.length > 1 ? rowH(x, 1) : ""}</tbody></table></div>
+    <div class="help" style="margin-top:6px">진척률 막대의 세로선 = 시간 진척 (경과일 ÷ 월일수) — 막대가 선보다 길면 페이스 앞섬 · 월말 예상 = 실적 ÷ 경과일 × 월일수 (= 실적 + 일평균 × 잔여일, 채널별 경과일) · 필요 일평균 = (목표 − 실적) ÷ 잔여일 · 비용율 = (DC+장려금+판관비) ÷ 총매출 · 금액 백만원</div></section>`;
+  // 연간
+  const yr = Yr.ms.map(o => {
+    const a = o.x, has = !!o.src, v = o.st === "past" ? (has ? a.sales : null) : o.st === "cur" ? a.fS : null, vc = o.st === "past" ? (has ? a.cm : null) : o.st === "cur" ? a.fCM : null;
+    const note = o.st === "fut" ? "예정" : o.st === "cur" ? `이번 달 · ${a.d}/${o.mdays}일 실적 ${mil1(a.sales)} → 월말 예상` : has ? (o.part ? `⚠ 보관함 (${o.part})` : "보관함") : (o.hasG ? '<span class="neg">보관함 없음</span>' : "");
+    return `<tr class="${o.st}"><td><b>${o.m}월</b></td>${td(a.hasS ? mil1(a.S) : "-")}${td(v != null ? mil1(v) : "-")}${td(`<b style="color:${gClr(a.hasS && v != null ? v / a.S : null)}">${a.hasS && v != null && a.S ? pct(v / a.S) : "-"}</b>`)}${td(pct(a.crT))}${td(o.st !== "fut" && has ? pct(a.cr) : "-")}${td(a.hasCM ? mil1(a.CM) : "-")}${td(vc != null ? mil1(vc) : "-", vc < 0 ? "neg" : "")}${td(a.hasCM && vc != null && a.CM > 0 ? pct(vc / a.CM) : "-")}<td class="muted">${note}</td></tr>`;
+  }).join("");
+  h += `<section class="card" style="margin-top:12px"><h2>${Y}년 연간 진척 <small>${esc(chF)} · 지난 달 = 실적, 이번 달 = 월말 예상, 남은 달 = 목표</small></h2>
+    <div class="kpis top" style="margin-top:4px">
+      ${k("연간 목표 (총매출)", T.S || null, `비용율 목표 ${pct(T.crT)} · CM 목표 ${T.CM ? mil1(T.CM) : "-"}`)}
+      ${k("YTD 실적 (총매출)", T.ytdA, `연간 진척 <b>${pct(T.pS)}</b> · 지금까지 목표 대비 <b style="color:${gClr(T.ytdT ? T.ytdA / T.ytdT : null)}">${T.ytdT ? pct(T.ytdA / T.ytdT) : "-"}</b>`, "", pbar(T.pS, T.pT))}
+      ${k("연말 예상 (총매출)", T.S ? T.fS : null, `<b style="color:${gClr(T.aS)}">${gIcon(T.aS)} 목표 대비 ${pct(T.aS)}</b> (${T.S ? (T.fS - T.S >= 0 ? "+" : "") + mil1(T.fS - T.S) : "-"})`, "cm")}
+      ${k("CM 연말 예상", T.CM ? T.fCM : null, `<b style="color:${gClr(T.aCM)}">${gIcon(T.aCM)} 목표 대비 ${pct(T.aCM)}</b> · YTD CM ${mil1(T.ytdCM)} · YTD 비용율 ${pct(T.cr)} (목표 ${pct(T.crT)})`, "cm")}
+    </div>${yearChart(Yr)}
+    <div class="tw gt" style="margin-top:8px"><table><thead><tr><th>월</th><th>목표 총매출</th><th>실적 / 예상</th><th>달성률</th><th>비용율 목표</th><th>비용율 실적</th><th>CM 목표</th><th>CM 실적 / 예상</th><th>CM 달성률</th><th>비고</th></tr></thead><tbody>${yr}
+    <tr class="tot"><td>연간</td>${td(mil1(T.S))}${td(mil1(T.fS) + " <span class='muted'>(예상)</span>")}${td(`<b style="color:${gClr(T.aS)}">${pct(T.aS)}</b>`)}${td(pct(T.crT))}${td(pct(T.cr))}${td(T.CM ? mil1(T.CM) : "-")}${td(mil1(T.fCM))}${td(pct(T.aCM))}<td class="muted">YTD 실적 ${mil1(T.ytdA)} · 연간 진척 ${pct(T.pS)}</td></tr></tbody></table></div>
+    <div class="help" style="margin-top:6px">YTD 진척 막대 세로선 = 지금까지 목표가 연간 목표에서 차지하는 비중 · 연말 예상 = 지난 달 실적(보관함) + 이번 달 월말 예상 + 남은 달 목표 · 보관함 없는 지난 달은 목표로 대체 · 매달 마감 후 📦 보관함 저장을 꼭 해주세요</div></section>`;
+  h += `<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b>목표 양식 안내</b> <span class="muted">읽은 목표 ${GD.rows.length.toLocaleString()}건 · ${GD.layout === "wide" ? "가로형" : "세로형"}</span></summary>${fmtHelp}</details>`;
+  el.innerHTML = h;
+  $("#gY").onchange = e => { ST.gym = `${e.target.value}-${gym.slice(5)}`; renderGoal(); };
+  $("#gM").onchange = e => { ST.gym = e.target.value; renderGoal(); };
+  $("#gCh").onchange = e => { ST.gch = e.target.value; renderGoal(); };
+  $("#gL").onchange = e => { ST.glv = +e.target.value; renderGoal(); };
+  $("#gU").onchange = e => { ls.set("dc_gunit", e.target.value); render(); };
+  $("#gDl").onclick = () => goalDownload(c, Yr, L, chF);
+  bindGoalTpl();
+}
+function bindGoalTpl() {
+  const b = $("#gTpl"); if (!b) return;
+  b.onclick = async () => {
+    const R = ST.res, Y = +(($("#ym").value || "").slice(0, 4)) || new Date().getFullYear();
+    const combos = R ? [...new Map(R.rows.map(r => [[r.ch, catOf(r.big), catOf(r.small), catOf(r.evt)].join("\t"), 1])).keys()].sort() : ["EM\t우유\t\t"];
+    const T = ["채널\t대카테고리\t소카테고리\t세분류\t연도\t월\t총매출 목표(원)\t비용율 목표(%)\tCM 목표(원)"];
+    for (let m = 1; m <= 12; m++) combos.forEach(cb => T.push(`${cb}\t${Y}\t${m}\t\t\t`));
+    const txt = T.join("\n");
+    try { await navigator.clipboard.writeText(txt); } catch (e) { const tx = document.createElement("textarea"); tx.value = txt; document.body.appendChild(tx); tx.select(); document.execCommand("copy"); tx.remove(); }
+    $("#gMsg").textContent = `✅ 복사됨 (${combos.length}개 분류 × 12개월 = ${(combos.length * 12).toLocaleString()}행) → 엑셀 빈 시트 A1에 붙여넣고 목표 숫자 채우기 · 세분류까지 필요 없으면 그 열 비우고 행 합쳐도 돼요`;
+  };
+}
+function goalDownload(c, Yr, L, chF) {
+  const wb = XLSX.utils.book_new(), lv = GLV.slice(0, L), r2 = v => v == null || !isFinite(v) ? null : Math.round(v), r4 = v => v == null || !isFinite(v) ? null : Math.round(v * 10000) / 10000;
+  const hd = [...lv.map(v => v[1]), "목표 총매출", "실적", "진척률", "시간 진척", "월말 예상", "예상 달성률", "필요 일평균", "현재 일평균", "비용율 목표", "비용율 실적", "CM 목표", "CM 실적", "CM 월말 예상", "CM 예상 달성률"];
+  const line = (a, tot) => [...(tot ? ["합계", ...Array(L - 1).fill("")] : a.lab), r2(a.hasS ? a.S : null), r2(a.sales), r4(a.pS), r4(a.time), r2(a.fS), r4(a.aS), r2(a.need), r2(a.daily), r4(a.crT), r4(a.cr), r2(a.hasCM ? a.CM : null), r2(a.cm), r2(a.fCM), r4(a.aCM)];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([hd, ...c.groups.map(a => line(a)), line(c.all, 1)]), `${c.M}월 분류별`);
+  const yh = ["월", "구분", "목표 총매출", "실적/예상", "달성률", "비용율 목표", "비용율 실적", "CM 목표", "CM 실적/예상", "CM 달성률"];
+  const yl = Yr.ms.map(o => { const a = o.x, v = o.st === "past" ? (o.src ? a.sales : null) : o.st === "cur" ? a.fS : null, vc = o.st === "past" ? (o.src ? a.cm : null) : o.st === "cur" ? a.fCM : null; return [o.m + "월", o.st === "past" ? (o.src ? "실적" : "보관함 없음") : o.st === "cur" ? "월말 예상" : "예정", r2(a.hasS ? a.S : null), r2(v), r4(a.hasS && v != null && a.S ? v / a.S : null), r4(a.crT), r4(o.st !== "fut" && o.src ? a.cr : null), r2(a.hasCM ? a.CM : null), r2(vc), r4(a.hasCM && vc != null && a.CM > 0 ? vc / a.CM : null)]; });
+  const T = Yr.T; yl.push(["연간", "연말 예상", r2(T.S), r2(T.fS), r4(T.aS), r4(T.crT), r4(T.cr), r2(T.CM), r2(T.fCM), r4(T.aCM)]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([yh, ...yl]), `${c.Y}년 연간`);
+  XLSX.writeFile(wb, `목표진척_${c.ym}_${chF}.xlsx`.replace(/[\\/:*?"<>|]/g, ""));
+}
+// INSIGHT 카드: 목표가 있으면 월말 예상 달성 · 뒤처진 분류 · 비용율 초과 · 연말 예상
+function goalIns(ym, add) {
+  const GD = goalData(); if (!GD || !GD.rows.length || !ym) return;
+  const c = goalCalc(GD, ym, ST.ch, 4), x = c.all; if (!c.nG || !c.src) return;
+  const mm = +ym.slice(5), lab = a => a.lab.filter(t => t !== "전체").join(" > ") || "전체";
+  if (x.hasS && x.aS != null) {
+    const lv = x.aS >= 1 ? "g" : x.aS >= 0.95 ? "y" : "r";
+    add(lv, "목표", `${mm}월 월말 예상 총매출 ${mil1(x.fS)}백만 — 목표 대비 ${pct(x.aS)} (${x.fS - x.S >= 0 ? "+" : ""}${mil1(x.fS - x.S)})`,
+      `경과 ${x.d}/${c.mdays}일 · 진척 ${pct(x.pS)} vs 시간 ${pct(x.time)}${x.aCM != null ? ` · CM 월말 예상 ${mil1(x.fCM)}백만 (목표 대비 ${pct(x.aCM)})` : ""}${x.crT != null ? ` · 비용율 ${pct(x.cr)} vs 목표 ${pct(x.crT)} (${dpp(x.cr - x.crT)})` : ""}.`,
+      x.need != null && x.daily ? (x.need > x.daily ? `목표 달성하려면 남은 ${c.mdays - x.d}일 일평균 ${mil1(x.need)}백만 필요 (현재 ${mil1(x.daily)}백만 대비 +${pct(x.need / x.daily - 1)})` : `현재 페이스 유지하면 달성 (필요 일평균 ${mil1(x.need)} < 현재 ${mil1(x.daily)}백만)`) : "");
+  }
+  const g = c.groups.filter(a => a.hasS && a.aS != null && a.aS < 0.95 && a.S > 0).sort((a, b) => (a.fS - a.S) - (b.fS - b.S));
+  if (g.length) add("y", "목표", `월말 예상 95% 미달 분류 ${g.length}개 · 부족분 합 ${mil1(g.reduce((s, a) => s + a.S - a.fS, 0))}백만`, "", "부족분 큰 순 — 남은 기간 행사·물량 우선순위 점검",
+    [["분류", "목표", "월말 예상", "달성", "필요 일평균", "현재 일평균"], ...g.slice(0, 6).map(a => [lab(a), mil1(a.S), mil1(a.fS), pct(a.aS), a.need != null ? mil1(a.need) : "-", a.daily != null ? mil1(a.daily) : "-"])]);
+  const cr = c.groups.filter(a => a.crT != null && a.cr != null && a.cr - a.crT >= 0.01 && a.sales > 0).sort((a, b) => (b.cr - b.crT) * b.sales - (a.cr - a.crT) * a.sales);
+  if (cr.length) add("y", "목표", `비용율 목표 1%p 이상 초과 분류 ${cr.length}개`, "", "DC·장려금·판관비 중 어느 항목이 늘었는지 대시보드에서 해당 분류 필터로 확인",
+    [["분류", "비용율 목표", "비용율 실적", "차이", "매출"], ...cr.slice(0, 6).map(a => [lab(a), pct(a.crT), pct(a.cr), dpp(a.cr - a.crT), mil1(a.sales)])]);
+  const Yr = goalYear(GD, c.Y, ym, ST.ch), T = Yr.T;
+  if (T.S && T.aS != null) add(T.aS >= 1 ? "g" : T.aS >= 0.95 ? "y" : "r", "목표", `${c.Y}년 연말 예상 총매출 ${mil1(T.fS)}백만 — 연간 목표 대비 ${pct(T.aS)}`,
+    `YTD 실적 ${mil1(T.ytdA)}백만 (연간 진척 ${pct(T.pS)}, 지금까지 목표 대비 ${T.ytdT ? pct(T.ytdA / T.ytdT) : "-"})${T.CM ? ` · CM 연말 예상 ${pct(T.aCM)}` : ""}${T.miss.length ? ` · ⚠ 보관함 없는 달 ${T.miss.map(m => m + "월").join(", ")}은 목표로 대체` : ""}.`, "");
+}
+
 /* ================= 3단계 INSIGHT (규칙 기반, 브라우저 안에서만 계산) ================= */
 const prevYm = ym => { const [y, m] = (ym || "").split("-").map(Number); if (!y || !m) return null; const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const dpp = v => v == null || !isFinite(v) ? "-" : Math.abs(v) < 0.0005 ? "0.0%p" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%p";
@@ -859,6 +1200,8 @@ function insights(R) {
       chg.length && chg[0].d < -0.02 ? `CM율 가장 하락한 세분류: 「${esc(chg[0].evt)}」 ${dpp(chg[0].d)}` : "",
       chg.length ? [["세분류", "전월 CM율", "당월 CM율", "변화"], ...[...chg.slice(0, 3), ...chg.slice(-2).filter(a => !chg.slice(0, 3).includes(a))].map(a => [a.evt, pct(pe.get(a.evt).cmR), pct(a.cmR), dpp(a.d)])] : null);
   } else add("b", "전월 대비", "비교할 전월 데이터 없음", `보관함에 ${pv || "전월"} 결과를 저장해 두면 다음 달부터 전월 대비 인사이트가 나와요.`);
+  // ⑩ 목표 대비 (목표를 넣었을 때)
+  try { goalIns(ym, add); } catch (e) { console.error(e); }
   return { t, list: L };
 }
 function renderIns() {
@@ -1154,8 +1497,10 @@ const PS = [
   { k: "rate", t: "거래조건", sheet: "거래조건" },
   { k: "cost", t: "비용배부분류", sheet: "비용배부분류" },
   { k: "prod", t: "제품분류", sheet: "제품분류" },
-  { k: "base", t: "기준정보", sheet: "기준정보" }
+  { k: "base", t: "기준정보", sheet: "기준정보" },
+  { k: "goal", t: "🎯 목표", sheet: "목표" }
 ];
+const isRefP = p => p.k !== "raw" && p.k !== "goal";   // 기준 4개 시트 (목표는 따로 읽음 → 목표만 붙여넣어도 기준 파일 유지)
 const PT = {}; let pCur = "raw";
 PS.forEach(p => { PT[p.k] = p.k === "raw" ? "" : (ls.get("dc_p_" + p.k) || ""); });
 // 엑셀 복사 텍스트(TSV, 따옴표 처리) → 2차원 배열
@@ -1199,7 +1544,7 @@ function pTabs() {
 $("#pTxt").oninput = () => { PT[pCur] = $("#pTxt").value; pTabs(); };
 $("#pClear").onclick = () => { PT[pCur] = ""; $("#pTxt").value = ""; if (pCur !== "raw") try { localStorage.removeItem("dc_p_" + pCur); } catch (e) { } DB.set("pt", { ...PT }); pTabs(); };
 function applyPasteRef() {
-  const refPs = PS.filter(p => p.k !== "raw" && PT[p.k].trim()); if (!refPs.length) return 0;
+  const refPs = PS.filter(p => isRefP(p) && PT[p.k].trim()); if (!refPs.length) return 0;
   const wb = XLSX.utils.book_new();
   refPs.forEach(p => XLSX.utils.book_append_sheet(wb, pSheet(PT[p.k]), p.sheet));
   ST.ref = parseRef(wb); ST.ref.fname = "붙여넣기 (" + refPs.map(p => p.t).join("·") + ")"; refChips();
@@ -1217,6 +1562,7 @@ $("#pApply").onclick = async () => {
     const nRef = applyPasteRef(), nRaw = applyPasteRaw();
     if (nRef) msg.push("기준 " + nRef + "개 시트 적용");
     if (nRaw) msg.push("매입 로우 " + nRaw.toLocaleString() + "행");
+    if (PT.goal.trim()) { const g = goalData(); msg.push(g && g.rows.length ? `목표 ${g.rows.length.toLocaleString()}건` : "⚠ 목표 머리글 못 찾음"); }
     if (!msg.length) { $("#pMsg").textContent = "붙여넣은 내용이 없어요"; return; }
     rebuildDays(); run();
     const ok = await DB.set("pt", { ...PT });
@@ -1232,7 +1578,7 @@ async function restore() {
   const fx = await DB.get("fix"); if (fx) ST.fix = { base: {}, prod: {}, cost: {}, pass: {}, ...fx };
   const [pt, refSrc, rawSrc] = [await DB.get("pt"), await DB.get("refSrc"), await DB.get("rawSrc")];
   if (pt) { PS.forEach(p => { if (typeof pt[p.k] === "string") PT[p.k] = pt[p.k]; }); $("#pTxt").value = PT[pCur]; pTabs(); }
-  if (!refSrc && !rawSrc && !PS.some(p => p.k !== "raw" && PT[p.k])) return;
+  if (!refSrc && !rawSrc && !PS.some(p => isRefP(p) && PT[p.k])) { if (PT.goal) render(); return; }
   try {
     // 로우 먼저 (파일/붙여넣기), 그다음 기준 (기준 파일 안 Raw 시트는 로우가 비었을 때만 사용)
     if (rawSrc && rawSrc.type === "files") { const all = []; for (const f of rawSrc.files) all.push(...parseRaw(wbOf(f.buf), f.name)); ST.raw = all; ST.rawFiles = rawSrc.files.map(f => f.name); autoYm(); rawChips(); }
@@ -1281,6 +1627,7 @@ function arcRender() {
   }).join("");
   $("#arcList").innerHTML = `<div class="tw" style="max-height:300px"><table><thead><tr><th>월</th><th>저장시각</th>${cols.map(([, l]) => `<th>${l}</th>`).join("")}<th>DC율</th><th>CM율</th><th></th></tr></thead><tbody>${rowsH}</tbody></table></div><div class="help" style="margin-top:4px">단위 백만원 · 율은 총매출 대비 · 채널 선택은 이 표에만 적용</div>`;
   $("#arcList").querySelectorAll("[data-av]").forEach(b => b.onclick = () => { const s = ARC[b.dataset.av]; ST.view = s.ym; ST.res = snapRes(s); render(); arcRender(); setStage(2); });
+  try { renderGoal(); } catch (e) { console.error(e); }
   $("#arcList").querySelectorAll("[data-ad]").forEach(b => b.onclick = async () => { const y = b.dataset.ad; if (!confirm(`${y} 보관 결과를 삭제할까요? (백업 텍스트가 있으면 다시 불러올 수 있어요)`)) return; delete ARC[y]; await DB.set("archive", ARC); if (ST.res && ST.res.archived === y) run(); arcRender(); });
 }
 $("#arcCh").onchange = arcRender;
