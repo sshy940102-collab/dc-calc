@@ -131,6 +131,7 @@ body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .fx td input,.fx td select{width:100%;min-width:70px;padding:3px 5px}
 .fx tr.done td{background:#eaf6ec}
+.sg,.fx td input.sg{background:#e8f1ff;color:#1f4fbf;border-color:#9dbcf0}
 .fx tr.ps td{color:#9aa3b2}
 .fx h3{font-size:13.5px;margin:14px 0 6px;color:var(--navy)}
 .ins{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:12px;margin-top:12px}
@@ -285,7 +286,7 @@ const ST = { ref: null, raw: [], rawFiles: [], res: null, fix: { base: {}, prod:
 
 /* ================= 기준 파일 파싱 ================= */
 function parseRef(wb) {
-  const ref = { found: {}, cost: {}, costCh: {}, costChs: new Set(), baseCh: {}, baseChs: new Set(), baseAny: {}, prodA: {}, prodJ: {}, tax: {}, base: {}, rate: [], dist: [], sku: [], channels: new Set() };
+  const ref = { found: {}, cost: {}, costCh: {}, costChs: new Set(), baseCh: {}, baseChs: new Set(), baseAny: {}, prodA: {}, prodJ: {}, prodName: {}, tax: {}, base: {}, rate: [], dist: [], sku: [], channels: new Set() };
   // 비용배부분류: C 제품코드, E 장려금분배구분, F 판매비분배구분
   let n = findSheet(wb, s => s.replace(/\s/g, "").includes("비용배부분류"));
   ref.found["비용배부분류"] = n || null;
@@ -316,19 +317,20 @@ function parseRef(wb) {
       const f = re => h.findIndex(v => re.test(v));
       const cd = f(/^(제품번호|제품코드|제품CODE)$/i), big = f(/대카테고리|대분류/), small = f(/소카테고리|소분류/), evt = f(/세분류|행사분류/);
       // 같은 행에 대·소카테고리와 세분류가 다 있고, 제품코드가 그 왼쪽 표에 있을 때 = 새 양식
-      if (cd >= 0 && big >= 0 && small >= 0 && evt >= 0 && Math.abs(evt - small) <= 3) { hi = i; ix = { cd, big, small, evt, tax: f(/면과세|과세구분/) }; break; }
+      if (cd >= 0 && big >= 0 && small >= 0 && evt >= 0 && Math.abs(evt - small) <= 3) { hi = i; ix = { cd, big, small, evt, tax: f(/면과세|과세구분/), nm: f(/^(name|제품명|품명|제품)$/i) }; break; }
     }
     if (ix) {
       ref.prodLayout = "new";
       for (let i = hi + 1; i < g.length; i++) {
         const r = g[i]; if (!r) continue; const k = code(r[ix.cd]); if (!k || !/\d/.test(k) || k in ref.prodJ) continue;
         ref.prodJ[k] = { L: r[ix.big], M: r[ix.small] }; ref.prodA[k] = r[ix.evt];
+        if (ix.nm >= 0 && r[ix.nm] != null) ref.prodName[k] = String(r[ix.nm]);
         if (ix.tax >= 0 && r[ix.tax] != null && String(r[ix.tax]).trim()) ref.tax[k] = String(r[ix.tax]).trim();
       }
     } else for (const r of g) {   // 기존 양식: A→D 세분류, J→L 대분류, M 소분류, O→Q 면과세
       if (!r) continue;
       const a = code(r[C("A")]); if (a && /\d/.test(a) && !(a in ref.prodA)) ref.prodA[a] = r[C("D")];
-      const j = code(r[C("J")]); if (j && /\d/.test(j) && !(j in ref.prodJ)) ref.prodJ[j] = { L: r[C("L")], M: r[C("M")] };
+      const j = code(r[C("J")]); if (j && /\d/.test(j) && !(j in ref.prodJ)) { ref.prodJ[j] = { L: r[C("L")], M: r[C("M")] }; if (r[C("K")] != null) ref.prodName[j] = String(r[C("K")]); }
       const o = code(r[C("O")]); if (o && /\d/.test(o) && !(o in ref.tax) && r[C("Q")] != null && String(r[C("Q")]).trim()) ref.tax[o] = String(r[C("Q")]).trim();
     }
   }
@@ -1256,19 +1258,23 @@ function renderFix() {
     · <b>패스</b>: 원래 없어도 되는 항목 → 경고에서 빠짐 (계산은 0 그대로) · 같은 제품이 다음 달에 또 나와도 계속 패스<br>
     · 다 넣었으면 「📋 보완 내용 복사」 → 원본 엑셀 기준 시트에 붙여넣어 원본도 채워두세요</span>
   </div>
-  <div class="row" style="margin:8px 0"><button type="button" id="fxApply">✅ 입력값 적용 (재계산)</button><button type="button" class="sec" id="fxCopy">📋 보완 내용 복사 (원본 엑셀용)</button><span class="muted" id="fxMsg"></span></div><div class="fx">`;
+  <div class="row" style="margin:8px 0"><button type="button" id="fxApply">✅ 입력값 적용 (재계산)</button><button type="button" class="sec" id="fxCopy">📋 보완 내용 복사 (원본 엑셀용)</button><button type="button" class="sec" id="fxDl">📥 누락 목록 엑셀 다운로드</button><span class="muted" id="fxMsg"></span></div><div class="fx">`;
+  const sugOf = suggestCls(R), SUG = new Map();
+  if (open.some(i => i.type === "cls")) h += `<div class="help" style="margin:4px 0 0"><span class="sg" style="padding:1px 6px;border-radius:3px">파란 칸</span> = 같은 소카테고리(없으면 대카테고리) 안에서 <b>제품명이 가장 비슷한 제품</b>의 값을 미리 넣어둔 추천값 — 확인·수정 후 「입력값 적용」 (적용 전엔 계산에 안 들어감)</div>`;
   for (const type of Object.keys(FXT)) {
     const L = open.filter(i => i.type === type).sort((a, b) => b.amt - a.amt); if (!L.length) continue;
     const T = FXT[type], perCh = type === "tr" || type === "cost";
     h += `<h3>${T.t} ${L.length}건 <span class="muted" style="font-weight:400;font-size:12px">→ ${T.s} · ${T.why}</span></h3><div class="tw" style="max-height:420px"><table><thead><tr>${perCh ? "<th>채널</th>" : ""}<th>제품코드</th><th>제품명</th><th>로우 카테고리</th><th>매입금액</th>${type === "cls" ? "<th>상태</th>" : ""}${T.f.map(f => `<th>${f[1]}</th>`).join("")}<th></th></tr></thead><tbody>`;
     h += L.map(it => {
       const r0 = first.get(it.code) || {};
+      const sg = type === "cls" ? sugOf(it, r0) : null; if (sg) SUG.set(it.key, sg);
       const inp = T.f.map(([k, , ty]) => {
         const cur = type === "cls" ? r0[k] : type === "cost" ? (k === "j" ? r0.jCls : r0.pCls) : null;
         if (ty === "s") return `<td><select data-f="${k}"><option value="">선택</option><option>과세</option><option>면세</option></select></td>`;
-        return `<td><input data-f="${k}" ${ty === "n" ? 'inputmode="decimal" placeholder="숫자"' : `list="dl_${k}"`} value="${esc(cur ?? "")}"></td>`;
+        const useS = blank0(cur) && sg && !blank0(sg[k]);
+        return `<td><input data-f="${k}" ${useS ? 'class="sg" title="유사 제품 추천값"' : ""} ${ty === "n" ? 'inputmode="decimal" placeholder="숫자"' : `list="dl_${k}"`} value="${esc(useS ? sg[k] : cur ?? "")}"></td>`;
       }).join("");
-      return `<tr data-k="${esc(it.key)}">${perCh ? `<td>${esc(it.ch)}</td>` : ""}<td>${esc(it.code)}</td><td>${esc(it.name ?? "")}</td><td>${esc(it.catn ?? "")}</td><td class="n">${fmt(it.amt)}</td>${type === "cls" ? `<td class="muted">${esc(it.info)}</td>` : ""}${inp}<td><button type="button" class="sec" data-pass="${esc(it.key)}" style="padding:3px 10px">패스</button></td></tr>`;
+      return `<tr data-k="${esc(it.key)}">${perCh ? `<td>${esc(it.ch)}</td>` : ""}<td>${esc(it.code)}</td><td>${esc(it.name ?? "")}${sg ? `<div class="muted" style="font-size:11px">↳ 유사: ${esc(sg.name ?? sg.code)} <span style="opacity:.7">(${(sg.sim * 100).toFixed(0)}%)</span></div>` : ""}</td><td>${esc(it.catn ?? "")}</td><td class="n">${fmt(it.amt)}</td>${type === "cls" ? `<td class="muted">${esc(it.info)}</td>` : ""}${inp}<td><button type="button" class="sec" data-pass="${esc(it.key)}" style="padding:3px 10px">패스</button></td></tr>`;
     }).join("");
     h += `</tbody></table></div>`;
   }
@@ -1317,8 +1323,48 @@ function renderFix() {
     try { await navigator.clipboard.writeText(txt); } catch (e) { const tx = document.createElement("textarea"); tx.value = txt; document.body.appendChild(tx); tx.select(); document.execCommand("copy"); tx.remove(); }
     $("#fxMsg").textContent = "✅ 복사됨 → 원본 엑셀 각 시트 맨 아래에 붙여넣고, [시트명] 머리글 줄은 지우세요";
   };
+  // 누락 목록 엑셀: 원본 기준 시트 양식대로, 화면에 입력·추천된 값까지 포함
+  $("#fxDl").onclick = () => {
+    if (!open.length) { $("#fxMsg").textContent = "누락 항목이 없어요"; return; }
+    const val = {}; el.querySelectorAll("tr[data-k]").forEach(tr => { const o = {}; tr.querySelectorAll("[data-f]").forEach(i => { const v = i.value.trim(); if (v) o[i.dataset.f] = i.dataset.f === "out" || i.dataset.f === "vc" || i.dataset.f === "tr" ? (num(v) ?? v) : v; }); val[tr.dataset.k] = o; });
+    const by = t => open.filter(i => i.type === t).sort((a, b) => b.amt - a.amt), wb = XLSX.utils.book_new(), add = (n, aoa, w) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = w.map(x => ({ wch: x })); XLSX.utils.book_append_sheet(wb, ws, n); };
+    const cls = by("cls"), tax = new Map(by("tax").map(i => [i.code, i]));
+    if (cls.length || tax.size) {
+      const codes = [...new Set([...cls.map(i => i.code), ...tax.keys()])], ck = new Map(cls.map(i => [i.code, i]));
+      add("제품분류 누락", [["제품번호", "Name", "대카테고리", "소카테고리", "세분류", "면과세", "상태", "매입금액", "추천 근거 (유사 제품)"], ...codes.map(c => { const it = ck.get(c), tx = tax.get(c), v = { ...(it ? val[it.key] : {}), ...(tx ? val[tx.key] : {}) }, sg = it && SUG.get(it.key), nm = (it || tx).name ?? "";
+        return [c, nm, v.big ?? "", v.small ?? "", v.evt ?? "", v.tax ?? "", [it && it.info, tx && "면과세 없음"].filter(Boolean).join(" · "), Math.round((it || tx).amt), sg ? `${sg.name ?? sg.code} (${sg.code}) 유사도 ${(sg.sim * 100).toFixed(0)}%` : ""]; })], [12, 40, 14, 22, 22, 8, 22, 14, 50]);
+    }
+    const bs = ["out", "vc", "tr"].flatMap(by);
+    if (bs.length) {
+      const m = new Map(); bs.forEach(it => { const k = (it.type === "tr" ? it.ch : "") + "|" + it.code; let o = m.get(k); if (!o) m.set(k, o = { ch: it.type === "tr" ? it.ch : "", code: it.code, name: it.name, amt: it.amt, miss: [], v: {} }); o.miss.push(FXT[it.type].t.replace(" 없음", "")); Object.assign(o.v, val[it.key]); o.amt = Math.max(o.amt, it.amt); });
+      add("기준정보 누락", [["채널", "제품CODE", "제품", "공장도가(출고가)", "변동/봉(변동원가)", "운송비(EA)", "빠진 항목", "매입금액"], ...[...m.values()].map(o => [o.ch, o.code, o.name ?? "", o.v.out ?? "", o.v.vc ?? "", o.v.tr ?? "", o.miss.join(", "), Math.round(o.amt)])], [10, 12, 40, 14, 14, 12, 22, 14]);
+    }
+    const cs = by("cost");
+    if (cs.length) add("비용배부분류 누락", [["채널", "88바코드", "바코드명", "제품코드", "제품명", "장려금분배구분", "판매비분배구분", "매입금액"], ...cs.map(it => { const v = val[it.key] || {}, r0 = first.get(it.code) || {}; return [it.ch, r0.bar ?? "", "", it.code, it.name ?? "", v.j ?? "", v.p ?? "", Math.round(it.amt)]; })], [10, 16, 10, 12, 40, 16, 16, 14]);
+    XLSX.writeFile(wb, `기준정보_누락_${$("#ym").value || ""}.xlsx`);
+    $("#fxMsg").textContent = `✅ 누락 ${open.length}건 엑셀 저장 (파란 추천값·입력값 포함) → 원본 시트에 붙여넣을 때 상태·매입금액·추천 근거 열은 빼세요`;
+  };
 }
 const blank0 = v => v == null || String(v).trim() === "";
+// 제품분류 누락 → 유사 제품 추천: 같은 소카테고리(없으면 대카테고리, 그것도 없으면 전체) 중 제품명 2글자 조각(bigram)이 가장 많이 겹치는 제품
+const nmKey = s => String(s ?? "").replace(/\(.*?\)|\[.*?\]/g, " ").replace(/^세트_|^\S+PB_/, "").replace(/[\d.*+]+\s*(g|ml|l|kg|t|입|ea|개|번들|봉|팩|구)?/gi, " ").replace(/기획|세트|증정/g, " ").replace(/[^가-힣a-zA-Z]/g, "").toLowerCase();
+const bigr = s => { const o = new Set(); for (let i = 0; i < s.length - 1; i++) o.add(s.slice(i, i + 2)); if (s.length === 1) o.add(s); return o; };
+const simOf = (a, b) => { if (!a.size || !b.size) return 0; let n = 0; for (const x of a) if (b.has(x)) n++; return 2 * n / (a.size + b.size); };
+function suggestCls(R) {
+  const cand = new Map(), full = c => !blank0(c.big) && !blank0(c.small) && !blank0(c.evt);
+  for (const r of R.rows) if (!cand.has(r.code)) { const c = { code: r.code, name: r.name, big: r.big, small: r.small, evt: r.evt }; if (full(c)) cand.set(r.code, c); }
+  const ref = ST.ref || {};
+  for (const [k, nm] of Object.entries(ref.prodName || {})) { if (cand.has(k)) continue; const pj = ref.prodJ[k] || {}, c = { code: k, name: nm, big: pj.L, small: pj.M, evt: ref.prodA[k] }; if (full(c)) cand.set(k, c); }
+  const C = [...cand.values()].map(c => ({ ...c, g: bigr(nmKey(c.name)) }));
+  return (it, r0) => {
+    const g = bigr(nmKey(it.name)); if (!g.size || !C.length) return null;
+    let pool = C.filter(c => c.code !== it.code);
+    const pS = blank0(r0.small) ? [] : pool.filter(c => norm(c.small) === norm(r0.small)), pB = blank0(r0.big) ? [] : pool.filter(c => norm(c.big) === norm(r0.big));
+    pool = pS.length ? pS : pB.length ? pB : pool;
+    let best = null, bs = 0; for (const c of pool) { const s = simOf(g, c.g); if (s > bs) { bs = s; best = c; } }
+    return best && bs >= 0.2 ? { ...best, sim: bs } : null;
+  };
+}
 function stageStatus() {
   const R = ST.res;
   $("#stg1s").textContent = ST.ref && ST.raw.length ? `✓ 로우 ${ST.raw.length.toLocaleString()}행` : ST.ref ? "로우 필요" : "";
