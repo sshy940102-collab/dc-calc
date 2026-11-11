@@ -101,6 +101,8 @@ tr.tot td{font-weight:700;background:#f0f3f8;position:sticky;bottom:0;cursor:def
 .ins tr.dr:hover td{background:#eef3fb}
 a.lnk{color:var(--navy2);cursor:pointer;text-decoration:underline;font-size:12px;font-weight:400}
 .crumb a{color:var(--navy2);cursor:pointer;text-decoration:underline}
+details.more{margin:2px 0 6px 18px}
+details.more summary{cursor:pointer;color:var(--navy2);font-size:12.5px}
 .chain{display:inline-block;margin-top:2px;font-size:11.5px;color:var(--sub)}
 .chain b{color:var(--txt)}
 .pz.hk{cursor:pointer}
@@ -830,7 +832,65 @@ function enLine0(r, R) {
   return `🆕 <b>${esc(name)}</b> — 신규 (매출 ${fN(r.b.S)}, 판촉율 ${fP(r.cr1)} vs 전년 전체 ${fP(R.CR0)}) → 판촉율 <b class="${r.mix > 0 ? "neg" : ""}">${fPP2(r.mix)}</b> 영향`;
 }
 const strip = s => s.replace(/<br>/g, " ").replace(/<[^>]+>/g, "");
-function leafName(d) { if (D.mode !== "p") return d[d.length - 1]; const si = subIdx(), ti = d.length - 2; return `${d[si]} @ ${d[d.length - 1]}` + (ti > si ? ` (${d[ti]})` : ""); }
+/* 없어진·새로 생긴 SKU 목록 (SKU 단위로 묶음, 많으면 펼쳐보기) */
+function skuIdx() { const i = D.dims.findIndex(d => /제품번호|SKU|Name/i.test(d)); return i >= 0 ? i : D.nd - 1; }
+function enSkuGroups(R, st) {
+  const si = skuIdx(), m = new Map();
+  for (const r of R.rows) {
+    if (r.st !== st) continue;
+    const key = r.d[si];
+    let g = m.get(key); if (!g) { g = { name: r.d[si], rows: [], mix: 0, S0: 0, C0: 0, S1: 0, C1: 0 }; m.set(key, g); }
+    g.rows.push(r); g.mix += r.mix; g.S0 += r.a.S; g.C0 += r.a.C; g.S1 += r.b.S; g.C1 += r.b.C;
+  }
+  return [...m.values()].sort((a, b) => Math.abs(b.mix) - Math.abs(a.mix));
+}
+function enChainGroup(rows, view) {
+  const ds = rows.map(r => r.d); let cp = 0;
+  while (cp < D.nd && ds.every(d => d[cp] === ds[0][cp])) cp++;
+  const parts = [];
+  for (let k = Math.min(cp, D.nd) - 1; k >= -1; k--) {
+    if (k === D.nd - 1) continue;
+    if (k >= 0 && D.mode !== "p" && /제품군/.test(D.dims[k])) continue;
+    if (D.mode === "p" && k > skuIdx()) continue;
+    const R = rdScope(k, ds[0], view); let s = 0, hit = 0;
+    if (Math.abs(R.S0) < 1e-9 || Math.abs(R.S1) < 1e-9) continue;   // 그 단계 전체가 없어진/새로 생긴 경우는 생략
+    for (const d of ds) { const r = R.map.get(d.join("\u0001")); if (r) { s += r.tot; hit++; } }
+    if (!hit) continue;
+    parts.push(`${esc(k < 0 ? "전체" : ds[0][k])} <b>${fPP3(s)}</b> <span class="muted">(${fP(R.CR0)}→${fP(R.CR1)})</span>`);
+  }
+  return parts.length ? `↳ 상위로 가면: ${parts.join(" › ")}` : "";
+}
+function enSkuHtml(R, view, n0) {
+  n0 = n0 || 5;
+  const y1 = yl(D.y1), END = enSkuGroups(R, "end"), NEW = enSkuGroups(R, "new");
+  if (!END.length && !NEW.length) return { h: "", x: "" };
+  const ci = D.dims.findIndex(d => /채널/.test(d)), si = skuIdx();
+  const multiCh = ci >= 0 && new Set(R.rows.map(r => r.d[ci])).size > 1;
+  const where = g => {
+    if (!multiCh) return "";
+    const ch = [...new Set(g.rows.map(r => r.d[ci]))];
+    const still = R.rows.some(r => r.d[si] === g.name && r.st !== "end" && r.b.S > 0);
+    return (ch.length <= 3 ? ch.join("·") : `${ch.slice(0, 3).join("·")} 외 ${ch.length - 3}곳`) + (g.rows[0].st === "end" ? (still ? " · 다른 채널은 판매 중" : " · 전 채널 종료") : "");
+  };
+  const line = (g, st) => {
+    const cr0 = g.S0 ? g.C0 / g.S0 : null, cr1 = g.S1 ? g.C1 / g.S1 : null, w = where(g);
+    const head = st === "end"
+      ? `⛔ <b>${esc(g.name)}</b>${w ? ` <span class="tag">${esc(w)}</span>` : ""} — ${y1} 판매 없음 (전년 매출 ${fN(g.S0)}, 판촉율 ${fP(cr0)} vs 전체 ${fP(R.CR0)} → 판촉율 ${cr0 < R.CR0 ? "낮던" : "높던"} 품목이 빠짐)`
+      : `🆕 <b>${esc(g.name)}</b>${w ? ` <span class="tag">${esc(w)}</span>` : ""} — 신규 (매출 ${fN(g.S1)}, 판촉율 ${fP(cr1)} vs 전년 전체 ${fP(R.CR0)})`;
+    return `${head} → 판촉율 <b class="${g.mix > 0 ? "neg" : ""}">${fPP3(g.mix)}</b> 영향<br><span class="chain">${enChainGroup(g.rows, view)}</span>`;
+  };
+  const block = (arr, st, title) => {
+    if (!arr.length) return { h: "", x: "" };
+    const tot = arr.reduce((s, g) => s + g.mix, 0);
+    const top = arr.slice(0, n0), rest = arr.slice(n0);
+    let h = `<div class="lbl">${title} <b>${arr.length}개</b> → 판촉율 <b class="${tot > 0 ? "neg" : ""}">${fPP3(tot)}</b> 영향 <span class="muted">(영향 큰 순)</span></div><ul>${top.map(g => `<li>${line(g, st)}</li>`).join("")}</ul>`;
+    if (rest.length) h += `<details class="more"><summary>나머지 ${rest.length}개 펼쳐보기</summary><ul>${rest.map(g => `<li>${line(g, st)}</li>`).join("")}</ul></details>`;
+    const x = `· ${title} ${arr.length}개 → 판촉율 ${fPP3(tot)}\n` + arr.slice(0, 15).map(g => "  " + strip(line(g, st))).join("\n") + (arr.length > 15 ? `\n  … 외 ${arr.length - 15}개` : "") + "\n";
+    return { h, x };
+  };
+  const a = block(END, "end", "⛔ 없어진 SKU"), b = block(NEW, "new", "🆕 새로 생긴 SKU");
+  return { h: a.h + b.h, x: a.x + b.x };
+}function leafName(d) { if (D.mode !== "p") return d[d.length - 1]; const si = subIdx(), ti = d.length - 2; return `${d[si]} @ ${d[d.length - 1]}` + (ti > si ? ` (${d[ti]})` : ""); }
 function subIdx() { const i = D.mode === "p" ? D.dims.findIndex(d => /제품번호|SKU|Name/i.test(d)) : D.dims.findIndex(d => /소분류|소카테고리/.test(d)); return i >= 0 ? i : Math.max(0, D.nd - 2); }
 function why(j) {
   if (j.k === "new") return `신규 (매출 ${fN(j.b.S)}, 판촉율 ${fP(j.cr1)})`;
@@ -874,8 +934,7 @@ function buildIns(lvl, f) {
   const RS = rateDecomp(scopeL, D.nd - 1, "FY");
   oh += `<p>📐 <b>판촉율 증감 분해</b> (연간, ${LEAF()} 기준): ${rdLine(RS, "기존 " + LEAF())}</p>`;
   ox += `· 판촉율 증감 분해(연간, ${LEAF()} 기준): ${strip(rdLine(RS, "기존 " + LEAF()))}\n`;
-  const en0 = enItems(RS, 5);
-  if (en0.length) { oh += `<ul>${en0.map(r => `<li>${enLine(r, RS)}</li>`).join("")}</ul>`; ox += en0.map(r => "  " + strip(enLine(r, RS))).join("\n") + "\n"; }
+  { const EN = enSkuHtml(RS, "FY"); oh += EN.h; ox += EN.x; }
   const RL = rateDecomp(scopeL, lvl, "FY");
   cards.push({ cls: "b wide", t: `📌 ${esc(scope)} <small>${esc(D.dims[lvl])} 기준 ${gs.length}개</small>`, h: oh, x: ox.trimEnd() });
   // 🧩 퍼즐
