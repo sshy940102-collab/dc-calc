@@ -123,15 +123,19 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
     <div class="help">
       피벗에서 <b>연도 행(26년·27년)부터 머리글(팀·채널…·값·상반기/하반기)과 데이터 끝까지</b> 통째로 복사(Ctrl+C) → 아래 칸에 붙여넣기(Ctrl+V) → <b>분석하기</b><br>
       · 값 열은 <b>총매출·매출차감·판관비·비용·변동원가·공헌이익(운송비제외)</b> 금액만 사용 (율·총매출2 행은 붙여넣어도 자동으로 무시, 율은 금액으로 다시 계산)<br>
-      · <b>판촉비용 = 비용</b>(매출차감+판관비) · <b>CM = 공헌이익(운송비제외)</b> · 연간 = 반기(또는 월) 합계
+      · <b>판촉비용 = 비용</b>(매출차감+판관비) · <b>CM = 공헌이익(운송비제외)</b> · 연간 = 반기(또는 월) 합계<br>
+      · 분석하면 필요한 금액만 <b>가볍게 저장</b>되고 입력칸은 비워져요 (새로고침해도 유지)<br>
+      · <b>💾 백업 텍스트 복사</b> → 메모장·엑셀 A열·메신저에 붙여넣어 보관/팀원 공유 → 받는 사람은 이 칸에 그대로 붙여넣고 분석하기 (여러 줄이면 모든 줄 복사)
     </div>
-    <textarea id="raw" spellcheck="false" placeholder="여기에 붙여넣기 (Ctrl+V)"></textarea>
+    <textarea id="raw" spellcheck="false" placeholder="여기에 피벗 또는 백업 텍스트(CCHK1~로 시작) 붙여넣기 (Ctrl+V)"></textarea>
     <div class="row">
       <label class="f">판촉비용율 상승 기준 (%p 초과)<input type="number" id="thr" step="0.1" min="0" value="0.1"></label>
       <label class="f">SKU 최소 매출 (미만은 SKU 판정 제외)<input type="number" id="minS" step="1" min="0" value="0"></label>
       <button id="go">분석하기</button>
       <button class="sec" id="sample">🧪 샘플 불러오기</button>
-      <button class="sec" id="clear">🗑 저장된 입력 지우기</button>
+      <button class="sec" id="bkCopy">💾 백업 텍스트 복사</button>
+      <button class="sec" id="bkFile">📄 백업 파일 저장</button>
+      <button class="sec" id="clear">🗑 저장된 자료 지우기</button>
     </div>
     <div id="pinfo"></div>
   </div>
@@ -380,19 +384,68 @@ const nm = g => g.d[g.d.length - 1];
 const path = g => g.d.slice(0, -1).join(" > ");
 
 /* ---------- 1. 붙여넣기 ---------- */
-async function analyze(save) {
-  const txt = $("#raw").value;
+/* ---------- 가벼운 저장 형식 + 백업 텍스트 ---------- */
+const MK6 = ["S", "D", "P", "C", "V", "M"];
+const rnd = x => Math.round(x * 1000) / 1000;
+function toCompact() {
+  return { v: 1, dims: D.dims, y: [D.y0, D.y1], subs: D.subs, mf: D.mf,
+    L: D.leaves.map(L => [L.d, [D.y0, D.y1].flatMap(y => D.subs.flatMap(s => MK6.map(k => rnd(L.v[y][s][k]))))]) };
+}
+function fromCompact(o) {
+  const [y0, y1] = o.y, subs = o.subs;
+  const leaves = o.L.map(([d, a]) => { const L = { d, v: {} }; let i = 0; for (const y of [y0, y1]) { L.v[y] = {}; for (const s of subs) { const v = {}; for (const k of MK6) v[k] = a[i++]; L.v[y][s] = v; } } return L; });
+  return { dims: o.dims, nd: o.dims.length, years: [y0, y1], y0, y1, subs, leaves, ign: {}, mf: o.mf || { S: 1, D: 1, P: 1, C: 1, V: 1, M: 1 }, nRows: 0, nSub: 0, skipped: [], W: [], stored: true };
+}
+function u8b64(buf) { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
+async function gz(str) { const cs = new CompressionStream("gzip"); const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(str)); w.close(); return u8b64(await new Response(cs.readable).arrayBuffer()); }
+async function gunz(b64) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const ds = new DecompressionStream("gzip"); const w = ds.writable.getWriter(); w.write(u); w.close(); return await new Response(ds.readable).text(); }
+const BK_CH = 30000;
+async function makeBackup() {
+  const p = await gz(JSON.stringify({ c: toCompact(), thr: ST.thr, minS: ST.minS, at: new Date().toISOString().slice(0, 16) }));
+  const parts = []; for (let i = 0; i < p.length; i += BK_CH) parts.push(p.slice(i, i + BK_CH));
+  const n = parts.length;
+  return parts.map((c, i) => (i === 0 ? "CCHK1~" : "~") + (i + 1) + "/" + n + "|" + c + (i === n - 1 ? "|END" : "")).join("\n");
+}
+async function readBackup(txt) {
+  const lines = txt.replace(/\r/g, "").split("\n").map(l => l.trim().replace(/^"+|"+$/g, "").replace(/\t.*$/, "")).filter(Boolean);
+  const got = {}; let n = 0, end = false;
+  for (const l of lines) {
+    const m = l.match(/^(?:CCHK1)?~(\d+)\/(\d+)\|(.*)$/); if (!m) continue;
+    n = +m[2]; let body = m[3]; if (body.endsWith("|END")) { body = body.slice(0, -4); end = true; }
+    got[+m[1]] = body;
+  }
+  if (!n) throw new Error("백업 텍스트 형식이 아니에요 (CCHK1~ 로 시작해야 해요)");
+  const miss = []; for (let i = 1; i <= n; i++) if (got[i] == null) miss.push(i);
+  if (miss.length) throw new Error(`백업 ${n}줄 중 ${miss.join(", ")}번째 줄이 빠졌어요. 모든 줄을 복사해 주세요.`);
+  if (!end) throw new Error("백업 마지막 줄(|END)이 잘렸어요. 끝까지 복사해 주세요.");
+  let o; try { o = JSON.parse(await gunz(Array.from({ length: n }, (_, i) => got[i + 1]).join(""))); } catch (e) { throw new Error("백업 내용이 손상됐어요 (일부 글자가 잘렸거나 바뀜)"); }
+  return o;
+}
+async function saveStore() { if (D) await idb.set("in", { c: toCompact(), thr: ST.thr, minS: ST.minS, at: new Date().toISOString().slice(0, 16) }); }
+
+async function analyze(save, keepView) {
+  const txt = $("#raw").value.trim();
   ST.thr = Math.max(0, Number($("#thr").value) || 0); ST.minS = Math.max(0, Number($("#minS").value) || 0);
   const box = $("#pinfo");
-  if (!txt.trim()) { box.innerHTML = '<div class="chips"><span class="chip no">붙여넣은 내용이 없어요</span></div>'; return; }
-  try { D = parse(txt); }
-  catch (e) { D = null; box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; renderAll(); return; }
-  if (save) idb.set("in", { raw: txt, thr: ST.thr, minS: ST.minS });
-  ST.lvl = Math.min(1, D.nd - 1); ST.ins = { filt: {}, unit: null }; ST.filt = {}; ST.sum = { filt: {}, unit: null }; ST.view = "FY"; ST.sort = null;
+  let src = "";
+  if (!txt) {
+    if (!D) { box.innerHTML = '<div class="chips"><span class="chip no">붙여넣은 내용이 없어요</span></div>'; return; }
+    keepView = true; src = "저장된 자료";
+  } else {
+    try {
+      if (/^"?CCHK1~/.test(txt)) {
+        const o = await readBackup(txt); D = fromCompact(o.c);
+        if (o.thr != null) { ST.thr = o.thr; $("#thr").value = o.thr; } if (o.minS != null) { ST.minS = o.minS; $("#minS").value = o.minS; }
+        src = "백업 텍스트" + (o.at ? ` (${o.at.replace("T", " ")} 저장)` : "");
+      } else { D = parse(txt); src = "붙여넣기"; }
+    } catch (e) { box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; return; }
+  }
+  if (save) { await saveStore(); if (txt) $("#raw").value = ""; }
+  if (!keepView) { ST.lvl = Math.min(1, D.nd - 1); ST.ins = { filt: {}, unit: null }; ST.filt = {}; ST.sum = { filt: {}, unit: null }; ST.view = "FY"; ST.sort = null; }
   const ignN = Object.entries(D.ign);
   const mName = { S: "총매출", D: "매출차감", P: "판관비", C: "비용", V: "변동원가", M: "공헌이익" };
   box.innerHTML = `<div class="chips">
-    <span class="chip ok">✅ ${D.leaves.length.toLocaleString()}개 품목 · 금액 ${D.nRows.toLocaleString()}행</span>
+    <span class="chip ok">✅ ${D.leaves.length.toLocaleString()}개 품목${D.nRows ? ` · 금액 ${D.nRows.toLocaleString()}행` : ""} · ${esc(src)}</span>
     <span class="chip ok">비교: ${yl(D.y0)} → ${yl(D.y1)} (${D.subs.join(" · ")})</span>
     <span class="chip">구분: ${D.dims.map(esc).join(" › ")}</span>
     ${Object.keys(mName).map(k => `<span class="chip ${D.mf[k] ? "ok" : "w"}">${mName[k]} ${D.mf[k] ? "✓" : (k === "C" ? "없음→차감+판관" : k === "M" ? "없음→계산" : "없음")}</span>`).join("")}
@@ -830,8 +883,10 @@ function renderAll() { renderSum(); renderTbl(); renderIns(); }
 
 $("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setStage(b.dataset.s); });
 $("#go").onclick = () => analyze(true);
-$("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true); };
-$("#clear").onclick = async () => { if (!confirm("저장된 붙여넣기 내용을 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = null; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
+$("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true, true); };
+$("#clear").onclick = async () => { if (!confirm("저장된 자료를 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = null; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
+$("#bkCopy").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); copyText(b, `백업 텍스트 복사 (${b.split("\n").length}줄, ${Math.round(b.length / 1024)}KB) → 메모장·엑셀 A열·메신저에 붙여넣어 보관/공유`); };
+$("#bkFile").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([b], { type: "text/plain" })); a.download = "판촉비용율점검_백업_" + new Date().toISOString().slice(0, 10) + ".txt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
 $("#sample").onclick = () => { $("#raw").value = makeSample(); analyze(false).then(() => { setStage(2); toast("샘플 데이터 (가상 숫자)"); }); };
 bindScope(() => ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb", "#sumOut", () => renderSum());
 $("#insOut").addEventListener("click", e => {
@@ -895,7 +950,9 @@ function makeSample() {
 (async () => {
   renderAll();
   const s = await idb.get("in");
-  if (s && s.raw) { $("#raw").value = s.raw; if (s.thr != null) $("#thr").value = s.thr; if (s.minS != null) $("#minS").value = s.minS; await analyze(false); }
+  if (s) { if (s.thr != null) $("#thr").value = s.thr; if (s.minS != null) $("#minS").value = s.minS; }
+  if (s && s.c) { try { D = fromCompact(s.c); await analyze(false); } catch (e) { D = null; } }
+  else if (s && s.raw) { $("#raw").value = s.raw; await analyze(true); }   // 예전 저장분 → 가벼운 형식으로 변환
 })();
 </script>
 </body>
