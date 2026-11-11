@@ -38,7 +38,18 @@ button:disabled{opacity:.4;cursor:default}
 .stages button.on b{background:var(--navy)}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .stg{display:none}
-body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4{display:block}
+body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4,body[data-stage="5"] #stage5{display:block}
+.mxs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+.mxs .kpi{background:#fff;border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.mxs .kpi small{color:var(--sub);font-size:11.5px}
+.mxs .kpi div{font-size:19px;font-weight:700;margin-top:2px}
+.mxs .kpi.main{border-color:var(--navy2);background:#f2f6fd}
+.verdict{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy2);border-radius:6px;padding:10px 14px;margin-bottom:12px;line-height:1.6}
+.bar2{display:flex;align-items:center;gap:4px;min-width:120px}
+.bar2 i{display:block;height:10px;border-radius:2px}
+.tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:11px;background:#eef1f6;color:var(--sub)}
+.tag.mx{background:#efe6fb;color:#6a3fb5}.tag.rt{background:var(--warnbg);color:var(--warn)}.tag.gd{background:var(--okbg);color:var(--ok)}
+a.lnk{color:var(--navy2);cursor:pointer;text-decoration:underline;font-size:12px}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
 .toolbar .sp{flex:1}
 .toolbar .grp{display:flex;gap:2px}
@@ -96,6 +107,7 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
   <button data-s="2"><b>2</b>요약표</button>
   <button data-s="3"><b>3</b>판정표 <span class="badge" id="bdg" hidden></span></button>
   <button data-s="4"><b>4</b>INSIGHT</button>
+  <button data-s="5"><b>5</b>구성비 분석</button>
 </nav>
 <main>
 
@@ -169,6 +181,23 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
   <div class="ins" id="insOut"></div>
 </section>
 
+<section id="stage5" class="stg">
+  <div class="toolbar">
+    <div class="grp" id="mxView"></div>
+    <span id="mxFilts" class="row" style="margin:0"></span>
+    <label class="f">분해 단위<select id="mxUnit"></select></label>
+    <span class="sp"></span>
+    <button class="sec" id="mxCopy">📋 표 복사</button>
+  </div>
+  <div id="mxOut"></div>
+  <p class="help">
+    판촉비용율 증감 = <b>구성비 효과</b> + <b>품목 비용율 효과</b><br>
+    · 구성비 효과 = (구성비 증감) × (그 품목의 전년 판촉율 − 전체 전년 판촉율) → 판촉율이 <b>높은 품목의 비중이 커지면 +</b>, 낮은 품목의 비중이 커지면 −<br>
+    · 품목 비용율 효과 = (올해 구성비) × (그 품목의 판촉율 증감) → 구성비가 같아도 <b>품목 자체 판촉율이 오르면 +</b><br>
+    · 신규 품목은 구성비 효과로, 두 효과 합 = 전체 판촉율 증감 (정확히 일치)
+  </p>
+</section>
+
 </main>
 <footer>판촉비용율 점검 · 입력 자료는 이 브라우저(IndexedDB)에만 저장됩니다</footer>
 <div class="toast" id="toast"></div>
@@ -180,7 +209,7 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&am
 const IC = { red: "🔴", warn: "⚠️", up: "🟢", ok: "✅", new: "🆕", end: "⛔", na: "·" };
 const LB = { red: "큰 문제", warn: "문제", up: "판촉↑·CM유지", ok: "OK", new: "신규", end: "종료", na: "-" };
 const SEV = { red: 0, warn: 1, up: 2, new: 3, end: 4, ok: 5, na: 6 };
-const ST = { thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sumDim: 0, insLvl: 1 };
+const ST = { thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sumDim: 0, insLvl: 1, mx: { view: "FY", filt: {}, unit: 3 } };
 let D = null;
 
 /* ---------- 숫자·표시 ---------- */
@@ -368,6 +397,8 @@ async function analyze(save) {
   catch (e) { D = null; box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; renderAll(); return; }
   if (save) idb.set("in", { raw: txt, thr: ST.thr, minS: ST.minS });
   ST.lvl = Math.min(1, D.nd - 1); ST.insLvl = ST.lvl; ST.filt = {}; ST.sumDim = 0; ST.view = "FY"; ST.sort = null;
+  const bi = D.dims.findIndex(d => /대분류|대카테고리/.test(d));
+  ST.mx = { view: "FY", filt: {}, unit: bi >= 0 ? bi : Math.min(3, D.nd - 1) };
   const ignN = Object.entries(D.ign);
   const mName = { S: "총매출", D: "매출차감", P: "판관비", C: "비용", V: "변동원가", M: "공헌이익" };
   box.innerHTML = `<div class="chips">
@@ -551,6 +582,18 @@ function buildIns() {
     h += "</ul>";
     const fy = g.j.FY;
     if (fy.eS != null) { h += `<p class="muted">연간 CM 분해: ${decomp(fy)}</p>`; x += `· 연간 CM 분해: ${decomp(fy)}\n`; }
+    if (!isSku(lvl)) {
+      const vk0 = V.filter(v => g.j[v].k === "red" || g.j[v].k === "warn");
+      const vm = vk0.includes("FY") ? "FY" : vk0[0];
+      const R = mixDecomp(g.L, D.nd - 1, vm);
+      const tops = R.rows.filter(r => r.tot > 0.00005).sort((a, b) => b.tot - a.tot).slice(0, 3);
+      const vt = mixVerdict(R);
+      h += `<div class="lbl">판촉비용율 증감 분해 (${esc(vl(vm))}, SKU 기준) <a class="lnk" data-mx="${esc(JSON.stringify(g.d))}" data-v="${esc(vm)}">🔍 구성비 분석 열기</a></div>
+        <p>${fPP2(R.dCR)} = 구성비 효과 <b>${fPP2(R.MX)}</b> + SKU 비용율 효과 <b>${fPP2(R.RT)}</b> → ${vt}</p>
+        ${tops.length ? `<ul>${tops.map(r => `<li>${esc(r.d[r.d.length - 1])}: 구성비 ${fP(r.w0)}→${fP(r.w1)}, 판촉율 ${fP(r.cr0)}→${fP(r.cr1)} → 기여 <b class="neg">${fPP2(r.tot)}</b> ${mixTag(r, R.CR0)}</li>`).join("")}</ul>` : ""}`;
+      x += `· 판촉율 증감 분해(${vl(vm)}): ${fPP2(R.dCR)} = 구성비효과 ${fPP2(R.MX)} + SKU비용율효과 ${fPP2(R.RT)} → ${vt.replace(/<[^>]+>/g, "")}\n`;
+      if (tops.length) x += `· 판촉율 상승 기여 TOP: ` + tops.map(r => `${r.d[r.d.length - 1]} 구성비 ${fP(r.w0)}→${fP(r.w1)}, 판촉율 ${fP(r.cr0)}→${fP(r.cr1)}, 기여 ${fPP2(r.tot)}(${mixTagTxt(r, R.CR0)})`).join(" / ") + "\n";
+    }
     // 원인 하위 항목 (SKU)
     if (!isSku(lvl)) {
       const kids = skus.filter(s => g.d.every((d, i) => s.d[i] === d));
@@ -611,9 +654,110 @@ function aiSummary() {
   return L.join("\n");
 }
 
+/* ---------- 5. 구성비 분석 (믹스 vs 비용율) ---------- */
+function mixDecomp(Ls, unit, view) {
+  const m = new Map();
+  for (const L of Ls) { const key = L.d.slice(0, unit + 1).join("\u0001"); let g = m.get(key); if (!g) { g = { d: L.d.slice(0, unit + 1), L: [] }; m.set(key, g); } g.L.push(L); }
+  const it = [...m.values()].map(g => ({ d: g.d, a: sumv(g.L, D.y0, view), b: sumv(g.L, D.y1, view), L: g.L }));
+  const S0 = it.reduce((s, x) => s + x.a.S, 0), S1 = it.reduce((s, x) => s + x.b.S, 0);
+  const C0 = it.reduce((s, x) => s + x.a.C, 0), C1 = it.reduce((s, x) => s + x.b.C, 0);
+  const CR0 = S0 ? C0 / S0 : 0, CR1 = S1 ? C1 / S1 : 0;
+  const e = 1e-9; let MX = 0, RT = 0;
+  const rows = [];
+  for (const x of it) {
+    const w0 = S0 ? x.a.S / S0 : 0, w1 = S1 ? x.b.S / S1 : 0;
+    if (Math.abs(x.a.S) < e && Math.abs(x.b.S) < e && Math.abs(x.a.C) < e && Math.abs(x.b.C) < e) continue;
+    const has0 = Math.abs(x.a.S) > e, has1 = Math.abs(x.b.S) > e;
+    const cr0 = has0 ? x.a.C / x.a.S : null, cr1 = has1 ? x.b.C / x.b.S : null;
+    let mix, rate, st;
+    if (has0 && has1) { mix = (w1 - w0) * (cr0 - CR0); rate = w1 * (cr1 - cr0); st = "both"; }
+    else if (has1) { mix = S1 ? (x.b.C / S1) - w1 * CR0 : 0; rate = 0; st = "new"; }
+    else if (has0) { mix = -(S0 ? (x.a.C / S0) - w0 * CR0 : 0); rate = 0; st = "end"; }
+    else { mix = (S1 ? x.b.C / S1 : 0) - (S0 ? x.a.C / S0 : 0); rate = 0; st = "zero"; }
+    MX += mix; RT += rate;
+    rows.push({ d: x.d, a: x.a, b: x.b, w0, w1, cr0, cr1, mix, rate, tot: mix + rate, st, j: judge(x.a, x.b) });
+  }
+  return { rows, S0, S1, CR0, CR1, MX, RT, dCR: CR1 - CR0 };
+}
+const fPP2 = x => (x == null || !isFinite(x)) ? "-" : ((x * 100) >= 0.005 ? "+" : "") + (x * 100).toFixed(2) + "%p";
+function mixTag(r, CR0) {
+  if (r.st === "new") return '<span class="tag mx">신규 품목</span>';
+  if (r.st === "end") return '<span class="tag mx">종료 품목</span>';
+  const m = Math.abs(r.mix) >= Math.abs(r.rate);
+  if (m) {
+    const up = r.w1 > r.w0, hi = r.cr0 > CR0;
+    return `<span class="tag ${r.mix > 0 ? "mx" : "gd"}">구성비${up ? "↑" : "↓"} · ${hi ? "고" : "저"}판촉율 품목</span>`;
+  }
+  return `<span class="tag ${r.rate > 0 ? "rt" : "gd"}">품목 판촉율${r.rate > 0 ? "↑" : "↓"}</span>`;
+}
+const mixTagTxt = (r, CR0) => mixTag(r, CR0).replace(/<[^>]+>/g, "");
+function mixVerdict(R) {
+  if (Math.abs(R.dCR) < 0.00005) return "판촉비용율 변화 거의 없음";
+  const sameDir = (x) => Math.sign(x) === Math.sign(R.dCR);
+  const mx = Math.abs(R.MX), rt = Math.abs(R.RT);
+  const dir = R.dCR > 0 ? "상승" : "하락";
+  if (sameDir(R.MX) && (!sameDir(R.RT) || mx >= rt)) return `판촉비용율 ${dir}의 주원인은 <b>구성비(P-MIX) 변화</b>`;
+  if (sameDir(R.RT)) return `판촉비용율 ${dir}의 주원인은 <b>품목 자체 판촉율 변화</b> (구성비는 ${mx < rt * 0.3 ? "영향 작음" : "보조 요인"})`;
+  return `판촉비용율 ${dir}`;
+}
+function renderMix() {
+  const out = $("#mxOut");
+  if (!D) { out.innerHTML = '<div class="empty card">1단계에서 자료를 붙여넣어 주세요</div>'; return; }
+  const M = ST.mx;
+  $("#mxView").innerHTML = views().map(v => `<button class="${v === M.view ? "on" : "sec"}" data-v="${esc(v)}">${esc(vl(v))}</button>`).join("");
+  let fh = "";
+  for (let k = 0; k < D.nd - 1; k++) {
+    const up = {}; for (let j = 0; j < k; j++) if (M.filt[j]) up[j] = M.filt[j];
+    const opts = [...new Set(D.leaves.filter(L => passF(L, up)).map(L => L.d[k]))];
+    if (M.filt[k] && !opts.includes(M.filt[k])) delete M.filt[k];
+    fh += `<label class="f">${esc(D.dims[k])}<select data-fk="${k}"><option value="">전체</option>${opts.map(o => `<option ${o === M.filt[k] ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`;
+  }
+  $("#mxFilts").innerHTML = fh;
+  const fmax = Math.max(-1, ...Object.keys(M.filt).filter(k => M.filt[k]).map(Number));
+  if (M.unit <= fmax) M.unit = Math.min(D.nd - 1, fmax + 1);
+  $("#mxUnit").innerHTML = D.dims.map((d, i) => i > fmax ? `<option value="${i}" ${i === M.unit ? "selected" : ""}>${esc(d)}</option>` : "").join("");
+  const Ls = D.leaves.filter(L => passF(L, M.filt));
+  const R = mixDecomp(Ls, M.unit, M.view);
+  const tgt = Object.keys(M.filt).filter(k => M.filt[k]).sort((a, b) => a - b).map(k => M.filt[k]).join(" › ") || "전체";
+  const rows = R.rows.slice().sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
+  const mxMax = Math.max(1e-9, ...rows.map(r => Math.max(Math.abs(r.mix), Math.abs(r.rate))));
+  const bar = (x, col) => `<div class="bar2"><i style="width:${Math.round(Math.abs(x) / mxMax * 70)}px;background:${x > 0 ? col : "#7fb98a"}"></i><span>${fPP2(x)}</span></div>`;
+  const top = rows.filter(r => r.tot > 0.00005).slice(0, 3);
+  let h = `<div class="verdict"><b>${esc(tgt)}</b> · ${esc(vl(M.view))} · ${esc(D.dims[M.unit])} 단위<br>
+    판촉비용율 ${fP(R.CR0)} → ${fP(R.CR1)} (<b>${fPP2(R.dCR)}</b>) = 구성비 효과 <b>${fPP2(R.MX)}</b> + 품목 비용율 효과 <b>${fPP2(R.RT)}</b><br>
+    → ${mixVerdict(R)}${top.length ? `<br>→ 상승 기여 TOP: ${top.map(r => `${esc(r.d[r.d.length - 1])} ${fPP2(r.tot)} (${mixTagTxt(r, R.CR0)})`).join(" / ")}` : ""}</div>
+    <div class="mxs">
+      <div class="kpi main"><small>판촉비용율 증감</small><div>${fPP2(R.dCR)}</div></div>
+      <div class="kpi"><small>① 구성비(P-MIX) 효과</small><div style="color:#6a3fb5">${fPP2(R.MX)}</div></div>
+      <div class="kpi"><small>② 품목 비용율 효과</small><div style="color:var(--warn)">${fPP2(R.RT)}</div></div>
+      <div class="kpi"><small>매출 ${yl(D.y0)} → ${yl(D.y1)}</small><div>${fN(R.S0)} → ${fN(R.S1)}</div></div>
+    </div>`;
+  const y0 = yl(D.y0), y1 = yl(D.y1);
+  const hd = [D.dims[M.unit], "구분", "판정", "매출 " + y0, "매출 " + y1, "구성비 " + y0, "구성비 " + y1, "구성비 Δ", "판촉율 " + y0, "판촉율 " + y1, "판촉율 Δ", "① 구성비효과", "② 비용율효과", "합계 기여"];
+  h += `<div class="tw"><table><thead><tr>${hd.map(x => `<th>${esc(x)}</th>`).join("")}</tr></thead><tbody>`;
+  const tsv = [hd.join("\t")];
+  for (const r of rows) {
+    const nmx = r.d[r.d.length - 1], par = r.d.slice(Math.max(0, fmax + 1), -1).join(" › ");
+    const dw = r.w1 - r.w0, dc = (r.cr0 != null && r.cr1 != null) ? r.cr1 - r.cr0 : null;
+    h += `<tr><td>${esc(nmx)}${par ? `<br><small class="muted">${esc(par)}</small>` : ""}</td><td>${mixTag(r, R.CR0)}</td><td>${jb(r.j.k)}</td>
+      <td class="n">${fN(r.a.S)}</td><td class="n">${fN(r.b.S)}</td><td class="n">${fP(r.w0)}</td><td class="n">${fP(r.w1)}</td><td class="n${dw < -0.0005 ? " neg" : ""}">${fPP(dw)}</td>
+      <td class="n">${fP(r.cr0)}</td><td class="n">${fP(r.cr1)}</td><td class="n${dc != null && dc * 100 > ST.thr + 1e-9 ? " pk" : ""}">${fPP(dc)}</td>
+      <td class="n">${bar(r.mix, "#9b7ad1")}</td><td class="n">${bar(r.rate, "#e0a100")}</td><td class="n${r.tot > 0.00005 ? " pk" : ""}"><b>${fPP2(r.tot)}</b></td></tr>`;
+    tsv.push([r.d.join(" > "), mixTagTxt(r, R.CR0), LB[r.j.k], Math.round(r.a.S), Math.round(r.b.S), fP(r.w0), fP(r.w1), fPP(dw), fP(r.cr0), fP(r.cr1), fPP(dc), fPP2(r.mix), fPP2(r.rate), fPP2(r.tot)].join("\t"));
+  }
+  h += `<tr class="tot"><td>합계 (${rows.length})</td><td></td><td></td><td class="n">${fN(R.S0)}</td><td class="n">${fN(R.S1)}</td><td class="n">100.0%</td><td class="n">100.0%</td><td></td><td class="n">${fP(R.CR0)}</td><td class="n">${fP(R.CR1)}</td><td class="n">${fPP(R.dCR)}</td><td class="n">${fPP2(R.MX)}</td><td class="n">${fPP2(R.RT)}</td><td class="n">${fPP2(R.MX + R.RT)}</td></tr></tbody></table></div>`;
+  out.innerHTML = h;
+  out._tsv = tsv.join("\n");
+}
+function openMix(d, unit, view) {
+  ST.mx.filt = {}; d.forEach((v, k) => ST.mx.filt[k] = v);
+  ST.mx.unit = unit == null ? D.nd - 1 : unit; ST.mx.view = view || "FY";
+  renderMix(); setStage(5);
+}
+
 /* ---------- 공통 ---------- */
 function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s)); window.scrollTo(0, 0); }
-function renderAll() { renderSum(); renderTbl(); renderIns(); }
+function renderAll() { renderSum(); renderTbl(); renderIns(); renderMix(); }
 
 $("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setStage(b.dataset.s); });
 $("#go").onclick = () => analyze(true);
@@ -643,6 +787,11 @@ $("#crumb").addEventListener("click", e => {
 });
 $("#insLvl").onchange = e => { ST.insLvl = +e.target.value; renderIns(); };
 $("#insFilt").onchange = e => { ST.insF = e.target.value; renderIns(); };
+$("#insOut").addEventListener("click", e => { const a = e.target.closest("a[data-mx]"); if (a) openMix(JSON.parse(a.dataset.mx), null, a.dataset.v); });
+$("#mxView").onclick = e => { const b = e.target.closest("button"); if (!b) return; ST.mx.view = b.dataset.v; renderMix(); };
+$("#mxFilts").onchange = e => { const s = e.target.closest("select"); if (!s) return; const k = +s.dataset.fk; ST.mx.filt[k] = s.value; Object.keys(ST.mx.filt).forEach(j => { if (+j > k) delete ST.mx.filt[j]; }); renderMix(); };
+$("#mxUnit").onchange = e => { ST.mx.unit = +e.target.value; renderMix(); };
+$("#mxCopy").onclick = () => copyText($("#mxOut")._tsv || "", "표를 복사했어요 (엑셀에 붙여넣기)");
 $("#insCopy").onclick = () => copyText($("#insOut")._txt || "", "INSIGHT를 복사했어요");
 $("#aiCopy").onclick = $("#aiCopy2").onclick = () => copyText(aiSummary(), "요약을 복사했어요 → 디스코드에 붙여넣으면 Claude가 분석해요");
 
@@ -651,6 +800,8 @@ function makeSample() {
   const P = [
     ["C.Hyper", "C1.이마트", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml", [240, 270, 260, 285], [.345, .303, .36, .348], [.66, .66, .66, .66]],
     ["C.Hyper", "C1.이마트", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml 2입", [2090, 2140, 1900, 1990], [.372, .332, .378, .361], [.65, .668, .66, .66]],
+    ["C.Hyper", "C1.이마트", "2. 발효유", "O.DY", "O01. 드링크요구르트", "샘플요구르트", [80, 90, 250, 280], [.48, .48, .48, .48], [.45, .45, .45, .45]],
+    ["C.Hyper", "C1.이마트", "2. 발효유", "O.DY", "O01. 드링크요구르트", "샘플신제품", [0, 0, 60, 80], [0, 0, .42, .42], [.45, .45, .45, .45]],
     ["C.Hyper", "C2.롯데마트", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml", [500, 520, 530, 560], [.30, .30, .29, .29], [.55, .55, .55, .55]],
     ["D.SSM", "D1.농협", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml", [3000, 3100, 3300, 3450], [.12, .12, .125, .125], [.55, .55, .55, .55]],
     ["D.SSM", "D1.농협", "5. 커피", "E.커피", "E01. 컵커피", "샘플커피250ml", [800, 820, 780, 800], [.20, .21, .20, .215], [.45, .45, .45, .45]],
