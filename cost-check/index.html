@@ -96,6 +96,7 @@ a.lnk{color:var(--navy2);cursor:pointer;text-decoration:underline;font-size:12px
 .pz.d0 td{font-weight:600;background:#fafbfd}
 .pz.d1 td{background:#fff}
 table.pzt td.pzt{background:#f3f6fb}
+.pz.hl td{background:#fff6dd!important}
 .subc{margin:8px 0 2px;padding:5px 8px;background:#f6f8fb;border-radius:4px;line-height:1.55}
 .ins li{margin-bottom:3px}
 .rep td.g.dr{cursor:pointer}
@@ -658,7 +659,7 @@ function puzzle(Ls, lvl, view) {
     for (const k of levels) {
       const key = r.d.slice(0, k + 1).join("\u0001");
       let c = node.kids.get(key);
-      if (!c) { c = { name: r.d[k], k, kids: new Map(), S0: 0, S1: 0, C0: 0, C1: 0, rate: 0, mix: 0, en: 0, tot: 0, st: null, n: 0 }; node.kids.set(key, c); }
+      if (!c) { c = { key, name: r.d[k], k, kids: new Map(), S0: 0, S1: 0, C0: 0, C1: 0, rate: 0, mix: 0, en: 0, tot: 0, st: null, n: 0 }; node.kids.set(key, c); }
       c.S0 += r.a.S; c.S1 += r.b.S; c.C0 += r.a.C; c.C1 += r.b.C;
       c.rate += r.rate; if (r.st === "end" || r.st === "new") c.en += r.mix; else c.mix += r.mix;
       c.tot += r.tot; c.n++;
@@ -668,11 +669,12 @@ function puzzle(Ls, lvl, view) {
   }
   return { R, root, levels };
 }
-function pzHtml(P, scope) {
+function pzHtml(P, scope, openSet) {
+  openSet = openSet || new Set();
   const R = P.R; let id = 0; const rows = [], txt = [];
   const sk = arr => [...arr.values()].sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
   const f3 = x => fPP3(x);
-  const walk = (node, depth, pid) => {
+  const walk = (node, depth, pid, vis) => {
     let cum = 0;
     for (const c of sk(node.kids)) {
       const my = ++id; cum += c.tot;
@@ -680,16 +682,17 @@ function pzHtml(P, scope) {
       const cr0 = c.S0 ? c.C0 / c.S0 : null, cr1 = c.S1 ? c.C1 / c.S1 : null;
       const w0 = R.S0 ? c.S0 / R.S0 : 0, w1 = R.S1 ? c.S1 / R.S1 : 0;
       const tag = c.st === "end" ? " ⛔" : c.st === "new" ? " 🆕" : "";
-      rows.push(`<tr data-pz="${my}" data-pp="${pid}" class="pz d${depth}${hasK ? " hk" : ""}" ${depth ? 'style="display:none"' : ""}>
-        <td style="padding-left:${8 + depth * 18}px">${hasK ? '<span class="tg">▸</span> ' : '<span class="tg"> </span> '}${esc(c.name)}${tag} <small class="muted">${esc(D.dims[c.k])}</small></td>
+      const isOpen = hasK && vis && openSet.has(c.key), onPath = openSet.has(c.key);
+      rows.push(`<tr data-pz="${my}" data-pp="${pid}" class="pz d${depth}${hasK ? " hk" : ""}${onPath ? " hl" : ""}" ${vis ? "" : 'style="display:none"'}>
+        <td style="padding-left:${8 + depth * 18}px">${hasK ? `<span class="tg">${isOpen ? "▾" : "▸"}</span> ` : '<span class="tg"> </span> '}${esc(c.name)}${tag} <small class="muted">${esc(D.dims[c.k])}</small></td>
         <td class="n">${fN(c.S0)}→${fN(c.S1)}</td><td class="n">${fP(w0)}→${fP(w1)}</td><td class="n">${fP(cr0)}→${fP(cr1)}</td>
         <td class="n${c.rate > 0.00005 ? " neg" : ""}">${f3(c.rate)}</td><td class="n${c.mix > 0.00005 ? " neg" : ""}">${f3(c.mix)}</td><td class="n${c.en > 0.00005 ? " neg" : ""}">${Math.abs(c.en) < 1e-9 ? "" : f3(c.en)}</td>
         <td class="n pzt${c.tot > 0.00005 ? " neg" : ""}"><b>${f3(c.tot)}</b></td>${depth === 0 ? `<td class="n muted">${f3(cum)}</td>` : "<td></td>"}</tr>`);
       if (depth < 2) txt.push(`${"  ".repeat(depth)}${depth ? "- " : ""}${c.name}${tag}: 기여 ${f3(c.tot)} (판촉율변화 ${f3(c.rate)}, 구성비 ${f3(c.mix)}${Math.abs(c.en) > 1e-9 ? ", 종료·신규 " + f3(c.en) : ""}) | 판촉율 ${fP(cr0)}→${fP(cr1)}, 매출 ${fN(c.S0)}→${fN(c.S1)}`);
-      if (hasK) walk(c, depth + 1, my);
+      if (hasK) walk(c, depth + 1, my, isOpen);
     }
   };
-  walk(P.root, 0, 0);
+  walk(P.root, 0, 0, true);
   const html = `<p>${esc(scope)} 판촉율 <b>${fP(R.CR0)} → ${fP(R.CR1)} (${fPP2(R.dCR)})</b> = ① 기존 품목 판촉율 변화 <b>${fPP2(R.RT)}</b> + ② 구성비 변화 <b>${fPP2(R.MXc)}</b> + ③ 종료·신규 <b>${fPP2(R.END + R.NEW)}</b></p>
     <div class="toolbar" style="margin:6px 0"><span class="muted">행 클릭 = 펼치기/접기 · 모든 단계에서 합계가 위 증감과 맞아요</span><span class="sp"></span><button class="sec" data-pzall="1">모두 펼치기</button><button class="sec" data-pzall="0">모두 접기</button></div>
     <div class="tw" style="max-height:560px"><table class="ov pzt"><thead><tr><th>항목</th><th>매출</th><th>구성비</th><th>판촉율</th><th>① 판촉율 변화분</th><th>② 구성비 변화분</th><th>③ 종료·신규</th><th>기여 합계</th><th>누적</th></tr></thead><tbody>${rows.join("")}
@@ -754,8 +757,21 @@ function buildIns(lvl, f) {
   // 🧩 퍼즐
   {
     const pv = ST.pzv && views().includes(ST.pzv) ? ST.pzv : "FY";
-    const PZ = pzHtml(puzzle(scopeL, lvl, pv), scope);
-    cards.push({ cls: "b wide", t: `🧩 판촉율 증감 퍼즐 <small>${esc(scope)} · ${esc(D.dims[lvl])} → … → SKU</small> <span class="grp" style="margin-left:auto;display:flex;gap:2px">${views().map(v => `<button class="${v === pv ? "on" : "sec"}" data-pzv="${esc(v)}" style="padding:3px 10px;font-size:12px">${esc(vl(v))}</button>`).join("")}</span>`, h: PZ.html, x: PZ.x });
+    const dpth = insDeep(f), path0 = fk.map(k => f[k]);
+    // 섹터: 현재 범위 → 채널 → 팀 → 전체 (각각 따로)
+    const secs = [{ k: dpth, lvl }];
+    for (const k of [1, 0, -1]) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: autoNext(k) });
+    const openSet = new Set(); const fullPath = []; for (let k = 0; k <= dpth; k++) { fullPath.push(f[k] || ""); openSet.add(fullPath.join("\u0001")); }
+    const btns = `<span class="grp" style="margin-left:auto;display:flex;gap:2px">${views().map(v => `<button class="${v === pv ? "on" : "sec"}" data-pzv="${esc(v)}" style="padding:3px 10px;font-size:12px">${esc(vl(v))}</button>`).join("")}</span>`;
+    secs.forEach((s, i) => {
+      const pre = []; for (let k = 0; k <= s.k; k++) pre.push(f[k]);
+      const Ls = D.leaves.filter(L => pre.every((x, j) => L.d[j] === x));
+      const nmS = s.k < 0 ? "전체" : pre.filter(Boolean).join(" › ");
+      const lab = s.k < 0 ? "전체 기준" : (s.k === dpth ? `${D.dims[s.k]} 내` : `${D.dims[s.k]} 기준`);
+      const PZ = pzHtml(puzzle(Ls, s.lvl, pv), nmS, i === 0 ? new Set() : openSet);
+      const note = i === 0 ? "" : `<p class="muted">노란 줄 = 지금 보고 있는 ${esc(scope)} 경로 (자동으로 펼쳐둠) — 이 조각이 ${esc(nmS)} 전체 판촉율 증감에 준 몫이에요</p>`;
+      cards.push({ cls: "b wide", t: `🧩 판촉율 증감 퍼즐 ${"①②③④⑤"[i] || ""} <b>${esc(lab)}</b> <small>${esc(nmS)} · ${esc(D.dims[s.lvl])} → … → SKU</small> ${i === 0 ? btns : ""}`, h: note + PZ.html, x: PZ.x });
+    });
   }
   // ② 한눈에 보기 (클릭 → 하위)
   const srt = gs.slice().sort((a, b) => worst(a) - worst(b) || (a.j.FY.dM || 0) - (b.j.FY.dM || 0));
@@ -892,7 +908,7 @@ bindScope(() => ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb", "#sumOut", () => r
 $("#insOut").addEventListener("click", e => {
   const b = e.target.closest("button[data-pzv]"); if (b) { ST.pzv = b.dataset.pzv; renderIns(); return; }
   const all = e.target.closest("button[data-pzall]");
-  if (all) { const on = all.dataset.pzall === "1"; $("#insOut").querySelectorAll("tr.pz").forEach(r => { if (!r.classList.contains("d0")) r.style.display = on ? "" : "none"; const t = r.querySelector(".tg"); if (r.classList.contains("hk") && t) t.textContent = on ? "▾" : "▸"; }); return; }
+  if (all) { const on = all.dataset.pzall === "1"; all.closest(".card").querySelectorAll("tr.pz").forEach(r => { if (!r.classList.contains("d0")) r.style.display = on ? "" : "none"; const t = r.querySelector(".tg"); if (r.classList.contains("hk") && t) t.textContent = on ? "▾" : "▸"; }); return; }
   const tr = e.target.closest("tr.pz.hk"); if (!tr) return;
   const tb = tr.parentNode, id = tr.dataset.pz;
   const kids = [...tb.querySelectorAll(`tr[data-pp="${id}"]`)];
