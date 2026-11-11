@@ -38,7 +38,16 @@ button:disabled{opacity:.4;cursor:default}
 .stages button.on b{background:var(--navy)}
 .bkg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:18px}
 .bkg>div{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:#fafbfd}
-.stages .ngrp{align-self:center;margin-left:14px;padding:3px 10px;border-left:2px solid var(--line);font-size:12px;color:var(--sub);white-space:nowrap;font-weight:600}
+.ms{position:relative;display:inline-block}
+.msb{background:#fff;color:var(--txt);border:1px solid var(--line);padding:5px 8px;min-width:110px;max-width:220px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msb.msx{border-color:var(--navy2);background:#eef3fb;color:var(--navy);font-weight:600}
+.msp{position:absolute;top:100%;left:0;z-index:20;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);padding:8px;min-width:220px;margin-top:2px}
+.msp[hidden]{display:none}
+.msl{display:flex;flex-direction:column;max-height:280px;overflow:auto;gap:2px}
+.msl label{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--txt);padding:3px 4px;border-radius:3px;cursor:pointer;white-space:nowrap}
+.msl label:hover{background:#f2f6fd}
+.msa{display:flex;gap:6px;justify-content:flex-end;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+.msa button{padding:4px 12px}.stages .ngrp{align-self:center;margin-left:14px;padding:3px 10px;border-left:2px solid var(--line);font-size:12px;color:var(--sub);white-space:nowrap;font-weight:600}
 .modebar{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .stg{display:none}
@@ -414,11 +423,41 @@ function judge(a, b) {
   r.k = !up ? "ok" : (b.S <= a.S + e ? "red" : (b.M < a.M - e ? "warn" : "up"));
   return r;
 }
-const passF = (L, f) => { for (const k in f) if (f[k] && L.d[k] !== f[k]) return false; return true; };
+const lab = v => Array.isArray(v) ? v.join("+") : v;
+const passF = (L, f) => { for (const k in f) { const v = f[k]; if (!v || (Array.isArray(v) && !v.length)) continue; if (Array.isArray(v) ? !v.includes(L.d[k]) : L.d[k] !== v) return false; } return true; };
+/* 여러 개 선택한 단계는 하나로 합쳐서 봄 (예: 이마트+롯데마트) */
+function vleaves(f, filt, mergeF) {
+  f = f || {}; const M = mergeF || f, mm = [];
+  for (const k in M) if (Array.isArray(M[k]) && M[k].length > 1) mm.push([+k, new Set(M[k]), lab(M[k])]);
+  const src = filt === false ? D.leaves : D.leaves.filter(L => passF(L, f));
+  if (!mm.length) return src;
+  return src.map(L => { let d = L.d; for (const [k, s, lb] of mm) if (s.has(L.d[k])) { if (d === L.d) d = d.slice(); d[k] = lb; } return d === L.d ? L : { d, v: L.v }; });
+}
+function drillF(oldF, d) { const F = {}; d.forEach((v, k) => { F[k] = (Array.isArray(oldF[k]) && v === lab(oldF[k])) ? oldF[k] : v; }); return F; }
+function msHtml(k, opts, cur) {
+  const sel = cur == null || cur === "" ? [] : (Array.isArray(cur) ? cur : [cur]);
+  const txt = !sel.length ? "전체" : sel.length === 1 ? sel[0] : `${sel[0]} 외 ${sel.length - 1}개`;
+  return `<label class="f">${esc(D.dims[k])}<span class="ms" data-fk="${k}"><button type="button" class="msb${sel.length ? " msx" : ""}">${esc(txt)} ▾</button><span class="msp" hidden><span class="msl">${opts.map(o => `<label><input type="checkbox" value="${esc(o)}" ${sel.includes(o) ? "checked" : ""}> ${esc(o)}</label>`).join("")}</span><span class="msa"><button type="button" class="sec" data-msall>전체 해제</button><button type="button" data-msok>적용</button></span></span></span></label>`;
+}
+function msClean(F, k, opts) { const v = F[k]; if (!v) return; if (Array.isArray(v)) { const w = v.filter(x => opts.includes(x)); if (!w.length) delete F[k]; else F[k] = w.length === 1 ? w[0] : w; } else if (!opts.includes(v)) delete F[k]; }
+function msBind(el, getF, after) {
+  el.addEventListener("click", e => {
+    const ms = e.target.closest(".ms"); if (!ms) return;
+    const pop = ms.querySelector(".msp");
+    if (e.target.closest(".msb")) { document.querySelectorAll(".msp").forEach(p => { if (p !== pop) p.hidden = true; }); pop.hidden = !pop.hidden; return; }
+    if (e.target.closest("[data-msall]")) { pop.querySelectorAll("input").forEach(i => i.checked = false); return; }
+    if (e.target.closest("[data-msok]")) {
+      const k = +ms.dataset.fk, vals = [...pop.querySelectorAll("input:checked")].map(i => i.value), F = getF();
+      if (!vals.length) delete F[k]; else F[k] = vals.length === 1 ? vals[0] : vals;
+      Object.keys(F).forEach(j => { if (+j > k) delete F[j]; }); pop.hidden = true; after();
+    }
+  });
+}
+document.addEventListener("click", e => { if (!e.target.closest(".ms")) document.querySelectorAll(".msp").forEach(p => p.hidden = true); });
 function groups(lvl, f) {
   const m = new Map();
-  for (const L of D.leaves) {
-    if (!passF(L, f || {})) continue;
+  for (const L of vleaves(f)) {
+    
     const key = L.d.slice(0, lvl + 1).join("\u0001");
     let g = m.get(key); if (!g) { g = { d: L.d.slice(0, lvl + 1), L: [] }; m.set(key, g); }
     g.L.push(L);
@@ -531,7 +570,7 @@ function renderSum() {
   const u = scopeUI(ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb");
   const dp = insDeep(F);
   const fk = Object.keys(F).filter(k => F[k]).map(Number).sort((a, b) => a - b);
-  const scope = fk.length ? fk.map(k => F[k]).join(" › ") : "전체";
+  const scope = fk.length ? fk.map(k => lab(F[k])).join(" › ") : "전체";
   const gs = groups(u, F).map(evalG);
   const tot = evalG({ d: [scope + " 합계"], L: D.leaves.filter(L => passF(L, F)), tot: 1 });
   const canDrill = u < D.nd - 1;
@@ -611,13 +650,13 @@ function renderTbl() {
   for (let k = 0; k < Math.min(ST.lvl, D.nd - 1); k++) {
     const up = {}; for (let j = 0; j < k; j++) if (ST.filt[j]) up[j] = ST.filt[j];
     const opts = [...new Set(D.leaves.filter(L => passF(L, up)).map(L => L.d[k]))];
-    if (ST.filt[k] && !opts.includes(ST.filt[k])) delete ST.filt[k];
-    fh += `<label class="f">${esc(D.dims[k])}<select data-fk="${k}"><option value="">전체</option>${opts.map(o => `<option ${o === ST.filt[k] ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`;
+    msClean(ST.filt, k, opts);
+    fh += msHtml(k, opts, ST.filt[k]);
   }
   $("#filts").innerHTML = fh;
   Object.keys(ST.filt).forEach(k => { if (+k >= ST.lvl) delete ST.filt[k]; });
   const fk = Object.keys(ST.filt).filter(k => ST.filt[k]).sort((a, b) => a - b);
-  $("#crumb").innerHTML = fk.length ? `<span class="muted">필터:</span> ${fk.map(k => `<b>${esc(ST.filt[k])}</b>`).join(" › ")} <a id="crumbUp">↑ 한 단계 위로</a> <a id="crumbReset">전체 보기</a>` : "";
+  $("#crumb").innerHTML = fk.length ? `<span class="muted">필터:</span> ${fk.map(k => `<b>${esc(lab(ST.filt[k]))}</b>`).join(" › ")} <a id="crumbUp">↑ 한 단계 위로</a> <a id="crumbReset">전체 보기</a>` : "";
 
   const C = colDefs();
   let gs = groups(ST.lvl, ST.filt).map(evalG);
@@ -684,8 +723,8 @@ function rdLine(R, lab) {
 let RDC = new Map(), RDD = null;
 function rdScope(k, d, view) { // k = 상위 단계 index (-1 = 전체), d = 기준 경로
   if (RDD !== D) { RDC = new Map(); RDD = D; }
-  const pre = d.slice(0, k + 1), key = k + "|" + pre.join("\u0001") + "|" + view;
-  if (!RDC.has(key)) RDC.set(key, rateDecomp(D.leaves.filter(L => pre.every((x, i) => L.d[i] === x)), D.nd - 1, view));
+  const pre = d.slice(0, k + 1), key = k + "|" + pre.join("\u0001") + "|" + view + "|" + JSON.stringify(ST.curF || {});
+  if (!RDC.has(key)) RDC.set(key, rateDecomp(vleaves({}, false, ST.curF || {}).filter(L => pre.every((x, i) => L.d[i] === x)), D.nd - 1, view));
   return RDC.get(key);
 }
 const fPP3 = x => (x == null || !isFinite(x)) ? "-" : Math.abs(x * 100) < 0.1 && Math.abs(x * 100) >= 0.0005 ? ((x > 0 ? "+" : "") + (x * 100).toFixed(3) + "%p") : fPP2(x);
@@ -814,12 +853,13 @@ function insUnit() {
   return u;
 }
 function buildIns(lvl, f) {
+  ST.curF = f;
   const V = views();
   const gs = groups(lvl, f).map(evalG).filter(g => !isSku(lvl) || bigEnough(g));
   const skus = groups(D.nd - 1, f).map(evalG).filter(bigEnough);
   const subsG = lvl < subIdx() ? groups(subIdx(), f).map(evalG) : [];
   const fk = Object.keys(f).filter(k => f[k]).sort((a, b) => a - b);
-  const scope = fk.length ? fk.map(k => f[k]).join(" › ") : "전체";
+  const scope = fk.length ? fk.map(k => lab(f[k])).join(" › ") : "전체";
   const cards = [];
   // ① 범위 개요
   const tot = evalG({ d: [scope], L: gs.flatMap(g => g.L) });
@@ -839,23 +879,23 @@ function buildIns(lvl, f) {
   // 🧩 퍼즐
   {
     const pv = ST.pzv && views().includes(ST.pzv) ? ST.pzv : "FY";
-    const dpth = insDeep(f), path0 = fk.map(k => f[k]);
+    const dpth = insDeep(f), path0 = fk.map(k => lab(f[k]));
     // 섹터: 현재 범위 → 채널 → 팀 → 전체 (각각 따로)
     const secs = [{ k: dpth, lvl: Math.min(D.nd - 1, dpth + 1) }];
     for (const k of (D.mode === "p" ? [subIdx() - 1, 1, -1] : [1, 0, -1])) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: k + 1 });
-    const openSet = new Set(); const fullPath = []; for (let k = 0; k <= dpth; k++) { fullPath.push(f[k] || ""); openSet.add(fullPath.join("\u0001")); }
+    const openSet = new Set(); const fullPath = []; for (let k = 0; k <= dpth; k++) { fullPath.push(lab(f[k]) || ""); openSet.add(fullPath.join("\u0001")); }
     const pm = ST.pzm || "both", mks = pm === "both" ? ["C", "V"] : [pm];
     const bs = "padding:3px 10px;font-size:12px";
     const btns = `<span class="grp" style="margin-left:auto;display:flex;gap:2px">${[["C", "판촉율"], ["V", "원가율"], ["both", "둘 다"]].map(([k, n]) => `<button class="${k === pm ? "on" : "sec"}" data-pzm="${k}" style="${bs}">${n}</button>`).join("")}</span><span class="grp" style="display:flex;gap:2px;margin-left:8px">${views().map(v => `<button class="${v === pv ? "on" : "sec"}" data-pzv="${esc(v)}" style="${bs}">${esc(vl(v))}</button>`).join("")}</span>`;
     let first = true;
     for (const mk of mks) { const RN = mk === "V" ? "원가율" : "판촉율"; secs.forEach((s, i) => {
-      const pre = []; for (let k = 0; k <= s.k; k++) pre.push(f[k]);
-      const Ls = D.leaves.filter(L => pre.every((x, j) => L.d[j] === x));
+      const pre = [], subF = {}; for (let k = 0; k <= s.k; k++) { pre.push(lab(f[k])); if (f[k]) subF[k] = f[k]; }
+      const Ls = vleaves(subF, true, f);
       const nmS = s.k < 0 ? "전체" : pre.filter(Boolean).join(" › ");
-      const lab = s.k < 0 ? "전체 기준" : (s.k === dpth ? `${D.dims[s.k]} 내` : `${D.dims[s.k]} 기준`);
+      const secLab = s.k < 0 ? "전체 기준" : (s.k === dpth ? `${D.dims[s.k]} 내` : `${D.dims[s.k]} 기준`);
       const PZ = pzHtml(puzzle(Ls, s.lvl, pv, mk), nmS, i === 0 ? new Set() : openSet, mk);
       const note = i === 0 ? "" : `<p class="muted">노란 줄 = 지금 보고 있는 ${esc(scope)} 경로 (자동으로 펼쳐둠) — 이 조각이 ${esc(nmS)} 전체 ${RN} 증감에 준 몫이에요</p>`;
-      cards.push({ cls: mk === "V" ? "ok wide" : "b wide", t: `🧩 ${RN} 증감 퍼즐 ${"①②③④⑤"[i] || ""} <b>${esc(lab)}</b> <small>${esc(nmS)} · ${esc(D.dims[s.lvl])} → … → ${esc(LEAF_END())}</small> ${first ? btns : ""}`, h: note + PZ.html, x: PZ.x });
+      cards.push({ cls: mk === "V" ? "ok wide" : "b wide", t: `🧩 ${RN} 증감 퍼즐 ${"①②③④⑤"[i] || ""} <b>${esc(secLab)}</b> <small>${esc(nmS)} · ${esc(D.dims[s.lvl])} → … → ${esc(LEAF_END())}</small> ${first ? btns : ""}`, h: note + PZ.html, x: PZ.x });
       first = false;
     }); }
   }
@@ -943,24 +983,24 @@ function scopeUI(S, filtSel, unitSel, crumbSel) {
   for (let k = 0; k < D.nd - 1; k++) {
     const up = {}; for (let j = 0; j < k; j++) if (F[j]) up[j] = F[j];
     const opts = [...new Set(D.leaves.filter(L => passF(L, up)).map(L => L.d[k]))];
-    if (F[k] && !opts.includes(F[k])) delete F[k];
-    fh += `<label class="f">${esc(D.dims[k])}<select data-fk="${k}"><option value="">전체</option>${opts.map(o => `<option ${o === F[k] ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`;
+    msClean(F, k, opts);
+    fh += msHtml(k, opts, F[k]);
   }
   $(filtSel).innerHTML = fh;
   const dp = insDeep(F);
   let u = S.unit; if (u == null || u <= dp) u = autoNext(dp);
   $(unitSel).innerHTML = D.dims.map((d, i) => i > dp ? `<option value="${i}" ${i === u ? "selected" : ""}>${esc(d)}</option>` : "").join("");
   const fk = Object.keys(F).filter(k => F[k]).map(Number).sort((a, b) => a - b);
-  $(crumbSel).innerHTML = `<span class="muted">보는 범위:</span> <a data-up="-1">전체</a>${fk.map(k => ` › <a data-up="${k}">${esc(F[k])}</a>`).join("")} <span class="muted">· ${esc(D.dims[u])}별로 보는 중</span>${fk.length ? ` <a data-up="${fk.length > 1 ? fk[fk.length - 2] : -1}">↑ 위로</a>` : ""}`;
+  $(crumbSel).innerHTML = `<span class="muted">보는 범위:</span> <a data-up="-1">전체</a>${fk.map(k => ` › <a data-up="${k}">${esc(lab(F[k]))}</a>`).join("")} <span class="muted">· ${esc(D.dims[u])}별로 보는 중</span>${fk.length ? ` <a data-up="${fk.length > 1 ? fk[fk.length - 2] : -1}">↑ 위로</a>` : ""}`;
   return u;
 }
 function bindScope(get, filtSel, unitSel, crumbSel, outSel, render) {
   $(unitSel).onchange = e => { get().unit = +e.target.value; render(); };
-  $(filtSel).onchange = e => { const S = get(), s = e.target.closest("select"); if (!s) return; const k = +s.dataset.fk; S.filt[k] = s.value; Object.keys(S.filt).forEach(j => { if (+j > k) delete S.filt[j]; }); S.unit = null; render(); };
+  msBind($(filtSel), () => get().filt, () => { get().unit = null; render(); });
   $(crumbSel).addEventListener("click", e => { const S = get(), a = e.target.closest("a[data-up]"); if (!a) return; const k = +a.dataset.up; Object.keys(S.filt).forEach(j => { if (+j > k) delete S.filt[j]; }); S.unit = null; render(); });
-  $(outSel).addEventListener("click", e => { const t = e.target.closest("[data-drill]"); if (!t) return; const S = get(); S.filt = {}; JSON.parse(t.dataset.drill).forEach((v, k) => S.filt[k] = v); S.unit = null; render(); window.scrollTo(0, 0); });
+  $(outSel).addEventListener("click", e => { const t = e.target.closest("[data-drill]"); if (!t) return; const S = get(); S.filt = drillF(S.filt, JSON.parse(t.dataset.drill)); S.unit = null; render(); window.scrollTo(0, 0); });
 }
-function insDrill(d) { ST.ins.filt = {}; d.forEach((v, k) => ST.ins.filt[k] = v); ST.ins.unit = null; renderIns(); window.scrollTo(0, 0); }
+function insDrill(d) { ST.ins.filt = drillF(ST.ins.filt, d); ST.ins.unit = null; renderIns(); window.scrollTo(0, 0); }
 function aiSummary() {
   if (!D) return "";
   const L = [];
@@ -1020,7 +1060,7 @@ $("#insOut").addEventListener("click", e => {
 $("#sumCopy").onclick = () => copyText($("#sumOut")._tsv || "", "표를 복사했어요 (엑셀에 붙여넣기)");
 $("#viewBtns").onclick = e => { const b = e.target.closest("button"); if (!b) return; ST.view = b.dataset.v; renderTbl(); };
 $("#lvl").onchange = e => { ST.lvl = +e.target.value; ST.sort = null; renderTbl(); };
-$("#filts").onchange = e => { const s = e.target.closest("select"); if (!s) return; const k = +s.dataset.fk; ST.filt[k] = s.value; Object.keys(ST.filt).forEach(j => { if (+j > k) delete ST.filt[j]; }); renderTbl(); };
+msBind($("#filts"), () => ST.filt, () => renderTbl());
 $("#jf").onchange = e => { ST.jf = e.target.value; renderTbl(); };
 $("#q").oninput = e => { ST.q = e.target.value.trim(); renderTbl(); };
 $("#tblCopy").onclick = () => copyText($("#tblOut")._tsv || "", "표를 복사했어요 (엑셀에 붙여넣기)");
@@ -1029,7 +1069,7 @@ $("#tblOut").addEventListener("click", e => {
   if (th) { const i = +th.dataset.i; ST.sort = ST.sort && ST.sort.i === i ? (ST.sort.d > 0 ? { i, d: -1 } : null) : { i, d: 1 }; renderTbl(); return; }
   const tr = e.target.closest("tr[data-r]"); if (!tr || isSku(ST.lvl)) return;
   const g = $("#tblOut")._rows[+tr.dataset.r];
-  g.d.forEach((v, k) => ST.filt[k] = v); ST.lvl++; ST.sort = null; renderTbl();
+  ST.filt = drillF(ST.filt, g.d); ST.lvl++; ST.sort = null; renderTbl();
 });
 $("#crumb").addEventListener("click", e => {
   if (e.target.id === "crumbReset") { ST.filt = {}; ST.lvl = Math.min(1, D.nd - 1); }
