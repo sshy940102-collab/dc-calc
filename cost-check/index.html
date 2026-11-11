@@ -36,6 +36,8 @@ button:disabled{opacity:.4;cursor:default}
 .stages button b{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#c9d0dc;color:#fff;font-size:12px;align-items:center;justify-content:center}
 .stages button.on{color:var(--navy);border-bottom-color:var(--navy);font-weight:700}
 .stages button.on b{background:var(--navy)}
+.stages .ngrp{align-self:center;margin-left:14px;padding:3px 10px;border-left:2px solid var(--line);font-size:12px;color:var(--sub);white-space:nowrap;font-weight:600}
+.modebar{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .stg{display:none}
 body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4{display:block}
@@ -118,11 +120,17 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 <header><h1>판촉비용율 점검</h1><span>전년 실적 vs 계획 · 매출 / 판촉비용율 / CM 판정 | 모든 계산은 이 PC 브라우저 안에서만 처리 (외부 전송 없음)</span></header>
 <nav class="stages" id="stages">
   <button data-s="1" class="on"><b>1</b>붙여넣기</button>
-  <button data-s="2"><b>2</b>요약표</button>
-  <button data-s="3"><b>3</b>판정표 <span class="badge" id="bdg" hidden></span></button>
-  <button data-s="4"><b>4</b>INSIGHT</button>
+  <span class="ngrp">📍 채널 분석</span>
+  <button data-s="2" data-m="c"><b>2</b>요약표</button>
+  <button data-s="3" data-m="c"><b>3</b>판정표 <span class="badge" id="bdg" hidden></span></button>
+  <button data-s="4" data-m="c"><b>4</b>INSIGHT</button>
+  <span class="ngrp">📦 제품 분석</span>
+  <button data-s="2" data-m="p"><b>2</b>요약표</button>
+  <button data-s="3" data-m="p"><b>3</b>판정표 <span class="badge" id="bdgP" hidden></span></button>
+  <button data-s="4" data-m="p"><b>4</b>INSIGHT</button>
 </nav>
 <main>
+<div id="modeBar" class="modebar" hidden></div>
 
 <section id="stage1" class="stg">
   <div class="card">
@@ -185,7 +193,7 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
   </div>
   <div class="crumb" id="crumb"></div>
   <div class="tw" id="tblOut"></div>
-  <p class="help">행을 클릭하면 한 단계 아래로 내려가요 (팀 → 채널 → … → SKU). 머리글 클릭 = 정렬.</p>
+  <p class="help">행을 클릭하면 한 단계 아래로 내려가요 (한 단계씩 아래로). 머리글 클릭 = 정렬.</p>
 </section>
 
 <section id="stage4" class="stg">
@@ -211,8 +219,27 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&am
 const IC = { red: "🔴", warn: "⚠️", up: "🟢", ok: "✅", new: "🆕", end: "⛔", na: "·" };
 const LB = { red: "큰 문제", warn: "문제", up: "판촉↑·CM유지", ok: "OK", new: "신규", end: "종료", na: "-" };
 const SEV = { red: 0, warn: 1, up: 2, new: 3, end: 4, ok: 5, na: 6 };
-const ST = { thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null } };
-let D = null;
+const ST = { mode: "c", saved: {}, thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null } };
+let D = null, DC = null, DP = null;
+const LEAF = () => D && D.mode === "p" ? "SKU·채널" : "SKU";
+const LEAF_END = () => D && D.mode === "p" ? D.dims[D.nd - 1] : "SKU";
+function permuteD(X) {
+  const ti = X.dims.findIndex(d => /팀/.test(d)), ci = X.dims.findIndex(d => /채널/.test(d));
+  const head = [ti, ci].filter(i => i >= 0);
+  const order = [...X.dims.map((_, i) => i).filter(i => !head.includes(i)), ...head];
+  return Object.assign({}, X, { mode: "p", dims: order.map(i => X.dims[i]), leaves: X.leaves.map(L => ({ d: order.map(i => L.d[i]), v: L.v })) });
+}
+function setModes(X) { X.mode = "c"; DC = X; DP = permuteD(X); D = ST.mode === "p" ? DP : DC; }
+const VIEWF = ["lvl", "filt", "sort", "view", "jf", "q", "sum", "ins", "pzv", "pzm"];
+function viewDefaults() { return { lvl: Math.min(1, D.nd - 1), filt: {}, sort: null, view: "FY", jf: "all", q: "", sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null }, pzv: ST.pzv, pzm: ST.pzm }; }
+function switchMode(m) {
+  if (m === ST.mode || !DC) { ST.mode = m; return; }
+  ST.saved = ST.saved || {}; ST.saved[ST.mode] = {}; VIEWF.forEach(k => ST.saved[ST.mode][k] = ST[k]);
+  ST.mode = m; D = m === "p" ? DP : DC;
+  Object.assign(ST, ST.saved[m] || viewDefaults());
+  $("#jf").value = ST.jf; $("#q").value = ST.q;
+  renderAll();
+}
 
 /* ---------- 숫자·표시 ---------- */
 const fN = x => (x == null || !isFinite(x)) ? "-" : Math.round(x).toLocaleString("ko-KR");
@@ -395,8 +422,8 @@ const path = g => g.d.slice(0, -1).join(" > ");
 const MK6 = ["S", "D", "P", "C", "V", "M"];
 const rnd = x => Math.round(x * 1000) / 1000;
 function toCompact() {
-  return { v: 1, dims: D.dims, y: [D.y0, D.y1], subs: D.subs, mf: D.mf,
-    L: D.leaves.map(L => [L.d, [D.y0, D.y1].flatMap(y => D.subs.flatMap(s => MK6.map(k => rnd(L.v[y][s][k]))))]) };
+  const X = DC || D; return { v: 1, dims: X.dims, y: [X.y0, X.y1], subs: X.subs, mf: X.mf,
+    L: X.leaves.map(L => [L.d, [X.y0, X.y1].flatMap(y => X.subs.flatMap(s => MK6.map(k => rnd(L.v[y][s][k]))))]) };
 }
 function fromCompact(o) {
   const [y0, y1] = o.y, subs = o.subs;
@@ -436,15 +463,16 @@ async function analyze(save, keepView) {
   const box = $("#pinfo");
   let src = "";
   if (!txt) {
+    if (D && !DC) setModes(D);
     if (!D) { box.innerHTML = '<div class="chips"><span class="chip no">붙여넣은 내용이 없어요</span></div>'; return; }
     keepView = true; src = "저장된 자료";
   } else {
     try {
       if (/^"?CCHK1~/.test(txt)) {
-        const o = await readBackup(txt); D = fromCompact(o.c);
+        const o = await readBackup(txt); setModes(fromCompact(o.c)); ST.saved = {};
         if (o.thr != null) { ST.thr = o.thr; $("#thr").value = o.thr; } if (o.minS != null) { ST.minS = o.minS; $("#minS").value = o.minS; }
         src = "백업 텍스트" + (o.at ? ` (${o.at.replace("T", " ")} 저장)` : "");
-      } else { D = parse(rawAll); src = "붙여넣기"; }
+      } else { setModes(parse(rawAll)); ST.saved = {}; src = "붙여넣기"; }
     } catch (e) { box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; return; }
   }
   if (save) { await saveStore(); if (txt) $("#raw").value = ""; }
@@ -597,7 +625,7 @@ function renderTbl() {
   out.innerHTML = h;
   out._rows = gs; out._C = C;
   out._tsv = [C.map(c => c.h).join("\t"), ...gs.map(g => C.map(c => c.txt ? c.txt(g) : c.n ? (c.f === fN || c.f === fD ? Math.round(c.v(g)) : c.f(c.v(g))) : c.v(g)).join("\t"))].join("\n");
-  const b = $("#bdg"); const t = cnt.red + cnt.warn; b.hidden = !t; b.textContent = t;
+  const b = $(D.mode === "p" ? "#bdgP" : "#bdg"); const t = cnt.red + cnt.warn; b.hidden = !t; b.textContent = t;
 }
 function filtOk2(g) { return !(isSku(ST.lvl) && !bigEnough(g)); }
 
@@ -648,7 +676,7 @@ const fPP3 = x => (x == null || !isFinite(x)) ? "-" : Math.abs(x * 100) < 0.1 &&
 function chainHtml(d, view) {
   const parts = [];
   for (let k = D.nd - 2; k >= -1; k--) {
-    if (k >= 0 && /제품군/.test(D.dims[k])) continue;
+    if (k >= 0 && D.mode !== "p" && /제품군/.test(D.dims[k])) continue;
     const R = rdScope(k, d, view), r = R.map.get(d.join("\u0001"));
     if (!r) continue;
     parts.push(`${esc(k < 0 ? "전체" : d[k])} <b>${fPP3(r.tot)}</b> <span class="muted">(${fP(R.CR0)}→${fP(R.CR1)})</span>`);
@@ -696,13 +724,13 @@ function pzFormula(R, RN, mk) {
   }
   return `<details class="fx"><summary>📐 산식 보기 (① ${RN} 변화분 · ② 구성비 변화분 · ③ 종료·신규)</summary>
     <div class="fxb">
-      <p><b>기호</b> · ${RN} = ${CN} ÷ 매출 · 구성비(w) = 품목 매출 ÷ 이 카드 범위 전체 매출 · R<sub>${y0}</sub> = 범위 전체 ${y0} ${RN} (${p(R.CR0)}) · 기준 = SKU</p>
+      <p><b>기호</b> · ${RN} = ${CN} ÷ 매출 · 구성비(w) = 품목 매출 ÷ 이 카드 범위 전체 매출 · R<sub>${y0}</sub> = 범위 전체 ${y0} ${RN} (${p(R.CR0)}) · 기준 = ${LEAF()}</p>
       <table class="fxt"><tbody>
-        <tr><td>① ${RN} 변화분</td><td>w<sub>${y1}</sub> × (${RN}<sub>${y1}</sub> − ${RN}<sub>${y0}</sub>)</td><td class="muted">구성비가 그대로여도 그 품목 ${RN}이 바뀐 만큼 (두 해 모두 판매한 SKU)</td></tr>
-        <tr><td>② 구성비 변화분</td><td>(w<sub>${y1}</sub> − w<sub>${y0}</sub>) × (${RN}<sub>${y0}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 높은 품목 비중↑ → +, 낮은 품목 비중↑ → − (두 해 모두 판매한 SKU)</td></tr>
+        <tr><td>① ${RN} 변화분</td><td>w<sub>${y1}</sub> × (${RN}<sub>${y1}</sub> − ${RN}<sub>${y0}</sub>)</td><td class="muted">구성비가 그대로여도 그 품목 ${RN}이 바뀐 만큼 (두 해 모두 판매한 ${LEAF()})</td></tr>
+        <tr><td>② 구성비 변화분</td><td>(w<sub>${y1}</sub> − w<sub>${y0}</sub>) × (${RN}<sub>${y0}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 높은 품목 비중↑ → +, 낮은 품목 비중↑ → − (두 해 모두 판매한 ${LEAF()})</td></tr>
         <tr><td>③ 종료 품목</td><td>− w<sub>${y0}</sub> × (${RN}<sub>${y0}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 낮던 품목이 빠지면 + (전체 ${RN} 올라감)</td></tr>
         <tr><td>③ 신규 품목</td><td>w<sub>${y1}</sub> × (${RN}<sub>${y1}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 높은 신규 품목이 들어오면 +</td></tr>
-        <tr><td>기여 합계</td><td>① + ② + ③</td><td class="muted">제품군·대분류·소분류 줄 = 그 안 SKU 값의 합</td></tr>
+        <tr><td>기여 합계</td><td>① + ② + ③</td><td class="muted">제품군·대분류·소분류 줄 = 그 안 ${LEAF()} 값의 합</td></tr>
         <tr><td>검산</td><td>Σ 기여 합계 = R<sub>${y1}</sub> − R<sub>${y0}</sub></td><td class="muted">${p(R.CR1)} − ${p(R.CR0)} = ${fPP2(R.dCR)} (반올림 차이 외 정확히 일치)</td></tr>
       </tbody></table>${exH}
     </div></details>`;
@@ -746,7 +774,7 @@ function enLine0(r, R) {
   return `🆕 <b>${esc(name)}</b> — 신규 (매출 ${fN(r.b.S)}, 판촉율 ${fP(r.cr1)} vs 전년 전체 ${fP(R.CR0)}) → 판촉율 <b class="${r.mix > 0 ? "neg" : ""}">${fPP2(r.mix)}</b> 영향`;
 }
 const strip = s => s.replace(/<br>/g, " ").replace(/<[^>]+>/g, "");
-function subIdx() { const i = D.dims.findIndex(d => /소분류|소카테고리/.test(d)); return i >= 0 ? i : Math.max(0, D.nd - 2); }
+function subIdx() { const i = D.mode === "p" ? D.dims.findIndex(d => /제품번호|SKU|Name/i.test(d)) : D.dims.findIndex(d => /소분류|소카테고리/.test(d)); return i >= 0 ? i : Math.max(0, D.nd - 2); }
 function why(j) {
   if (j.k === "new") return `신규 (매출 ${fN(j.b.S)}, 판촉율 ${fP(j.cr1)})`;
   if (j.k === "end") return `계획 매출 없음 (전년 ${fN(j.a.S)})`;
@@ -763,7 +791,7 @@ function why(j) {
   return s;
 }
 function insDeep(f) { return Math.max(-1, ...Object.keys(f).filter(k => f[k]).map(Number)); }
-function autoNext(l) { let u = Math.min(D.nd - 1, l + 1); while (u < D.nd - 1 && /제품군/.test(D.dims[u])) u++; return u; }
+function autoNext(l) { let u = Math.min(D.nd - 1, l + 1); while (u < D.nd - 1 && D.mode !== "p" && /제품군/.test(D.dims[u])) u++; return u; }
 function insUnit() {
   const dp = insDeep(ST.ins.filt); let u = ST.ins.unit;
   if (u == null || u <= dp) u = autoNext(dp);
@@ -786,8 +814,8 @@ function buildIns(lvl, f) {
   if (tot.j.FY.eS != null) { oh += `<p class="muted">연간 CM 분해: ${decomp(tot.j.FY)}</p>`; ox += `· 연간 CM 분해: ${decomp(tot.j.FY)}\n`; }
   const scopeL = gs.flatMap(g => g.L);
   const RS = rateDecomp(scopeL, D.nd - 1, "FY");
-  oh += `<p>📐 <b>판촉율 증감 분해</b> (연간, SKU 기준): ${rdLine(RS, "기존 SKU")}</p>`;
-  ox += `· 판촉율 증감 분해(연간, SKU 기준): ${strip(rdLine(RS, "기존 SKU"))}\n`;
+  oh += `<p>📐 <b>판촉율 증감 분해</b> (연간, ${LEAF()} 기준): ${rdLine(RS, "기존 " + LEAF())}</p>`;
+  ox += `· 판촉율 증감 분해(연간, ${LEAF()} 기준): ${strip(rdLine(RS, "기존 " + LEAF()))}\n`;
   const en0 = enItems(RS, 5);
   if (en0.length) { oh += `<ul>${en0.map(r => `<li>${enLine(r, RS)}</li>`).join("")}</ul>`; ox += en0.map(r => "  " + strip(enLine(r, RS))).join("\n") + "\n"; }
   const RL = rateDecomp(scopeL, lvl, "FY");
@@ -798,7 +826,7 @@ function buildIns(lvl, f) {
     const dpth = insDeep(f), path0 = fk.map(k => f[k]);
     // 섹터: 현재 범위 → 채널 → 팀 → 전체 (각각 따로)
     const secs = [{ k: dpth, lvl: Math.min(D.nd - 1, dpth + 1) }];
-    for (const k of [1, 0, -1]) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: k + 1 });
+    for (const k of (D.mode === "p" ? [subIdx() - 1, 1, -1] : [1, 0, -1])) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: k + 1 });
     const openSet = new Set(); const fullPath = []; for (let k = 0; k <= dpth; k++) { fullPath.push(f[k] || ""); openSet.add(fullPath.join("\u0001")); }
     const pm = ST.pzm || "both", mks = pm === "both" ? ["C", "V"] : [pm];
     const bs = "padding:3px 10px;font-size:12px";
@@ -811,7 +839,7 @@ function buildIns(lvl, f) {
       const lab = s.k < 0 ? "전체 기준" : (s.k === dpth ? `${D.dims[s.k]} 내` : `${D.dims[s.k]} 기준`);
       const PZ = pzHtml(puzzle(Ls, s.lvl, pv, mk), nmS, i === 0 ? new Set() : openSet, mk);
       const note = i === 0 ? "" : `<p class="muted">노란 줄 = 지금 보고 있는 ${esc(scope)} 경로 (자동으로 펼쳐둠) — 이 조각이 ${esc(nmS)} 전체 ${RN} 증감에 준 몫이에요</p>`;
-      cards.push({ cls: mk === "V" ? "ok wide" : "b wide", t: `🧩 ${RN} 증감 퍼즐 ${"①②③④⑤"[i] || ""} <b>${esc(lab)}</b> <small>${esc(nmS)} · ${esc(D.dims[s.lvl])} → … → SKU</small> ${first ? btns : ""}`, h: note + PZ.html, x: PZ.x });
+      cards.push({ cls: mk === "V" ? "ok wide" : "b wide", t: `🧩 ${RN} 증감 퍼즐 ${"①②③④⑤"[i] || ""} <b>${esc(lab)}</b> <small>${esc(nmS)} · ${esc(D.dims[s.lvl])} → … → ${esc(LEAF_END())}</small> ${first ? btns : ""}`, h: note + PZ.html, x: PZ.x });
       first = false;
     }); }
   }
@@ -846,23 +874,23 @@ function buildIns(lvl, f) {
         const subsIn = subsG.filter(s => inScope(s, g.d));
         const ps = pick(subsIn, 3);
         if (ps.length) {
-          h += `<div class="lbl">문제 ${esc(D.dims[si])} → SKU (${esc(vl(v0))})</div>`;
-          x += `· 문제 ${D.dims[si]} → SKU (${vl(v0)})\n`;
+          h += `<div class="lbl">문제 ${esc(D.dims[si])} → ${esc(LEAF_END())} (${esc(vl(v0))})</div>`;
+          x += `· 문제 ${D.dims[si]} → ${LEAF_END()} (${vl(v0)})\n`;
           for (const p of ps) {
             const ks = pick(skus.filter(s => inScope(s, p.s.d)), 3);
             const RP = rateDecomp(p.s.L, D.nd - 1, v0), en = enItems(RP, 3);
             const enPart = Math.abs(RP.END) + Math.abs(RP.NEW) >= 0.0005;
-            h += `<div class="subc"><b>▸ ${esc(nm(p.s))}</b> ${jb(p.j.k)} — ${why(p.j)}${enPart ? `<br><span class="muted">📐 ${rdLine(RP, "기존 SKU")}</span>` : ""}</div>${ks.length || en.length ? `<ul>${ks.map(skuHtml).join("")}${en.map(r => `<li>${enLine(r, RP, v0)}</li>`).join("")}</ul>` : ""}`;
-            x += `  ▸ ${nm(p.s)} [${LB[p.j.k]}] ${strip(why(p.j))}\n` + (enPart ? `    📐 ${strip(rdLine(RP, "기존 SKU"))}\n` : "") + ks.map(skuTxt).join("\n") + (ks.length ? "\n" : "") + en.map(r => "   - " + strip(enLine(r, RP, v0))).join("\n") + (en.length ? "\n" : "");
+            h += `<div class="subc"><b>▸ ${esc(nm(p.s))}</b> ${jb(p.j.k)} — ${why(p.j)}${enPart ? `<br><span class="muted">📐 ${rdLine(RP, "기존 " + LEAF())}</span>` : ""}</div>${ks.length || en.length ? `<ul>${ks.map(skuHtml).join("")}${en.map(r => `<li>${enLine(r, RP, v0)}</li>`).join("")}</ul>` : ""}`;
+            x += `  ▸ ${nm(p.s)} [${LB[p.j.k]}] ${strip(why(p.j))}\n` + (enPart ? `    📐 ${strip(rdLine(RP, "기존 " + LEAF()))}\n` : "") + ks.map(skuTxt).join("\n") + (ks.length ? "\n" : "") + en.map(r => "   - " + strip(enLine(r, RP, v0))).join("\n") + (en.length ? "\n" : "");
           }
         }
       } else {
         const ks = pick(skus.filter(s => inScope(s, g.d)), 5);
         const RP = rateDecomp(g.L, D.nd - 1, v0), en = enItems(RP, 3);
-        if (Math.abs(RP.END) + Math.abs(RP.NEW) >= 0.0005) { h += `<p>📐 ${rdLine(RP, "기존 SKU")}</p>`; x += `· 📐 ${strip(rdLine(RP, "기존 SKU"))}\n`; }
+        if (Math.abs(RP.END) + Math.abs(RP.NEW) >= 0.0005) { h += `<p>📐 ${rdLine(RP, "기존 " + LEAF())}</p>`; x += `· 📐 ${strip(rdLine(RP, "기존 " + LEAF()))}\n`; }
         if (ks.length || en.length) {
-          h += `<div class="lbl">문제 SKU (${esc(vl(v0))})</div><ul>${ks.map(skuHtml).join("")}${en.map(r => `<li>${enLine(r, RP, v0)}</li>`).join("")}</ul>`;
-          x += `· 문제 SKU (${vl(v0)})\n` + ks.map(skuTxt).join("\n") + (ks.length ? "\n" : "") + en.map(r => "   - " + strip(enLine(r, RP, v0))).join("\n") + (en.length ? "\n" : "");
+          h += `<div class="lbl">문제 ${esc(LEAF())} (${esc(vl(v0))})</div><ul>${ks.map(skuHtml).join("")}${en.map(r => `<li>${enLine(r, RP, v0)}</li>`).join("")}</ul>`;
+          x += `· 문제 ${LEAF()} (${vl(v0)})\n` + ks.map(skuTxt).join("\n") + (ks.length ? "\n" : "") + en.map(r => "   - " + strip(enLine(r, RP, v0))).join("\n") + (en.length ? "\n" : "");
         }
       }
     }
@@ -876,9 +904,9 @@ function buildIns(lvl, f) {
     if (top.length) {
       const sd = D.dims.slice(0, -1).map((d, i) => i).filter(i => i > insDeep(f));
       cards.push({
-        cls: "b wide", t: `🔎 ${esc(scope)} 문제 SKU TOP ${top.length} <small>연간, CM 감소 큰 순</small>`,
-        h: `<div class="tw" style="max-height:none"><table><thead><tr><th>판정</th>${sd.map(i => `<th>${esc(D.dims[i])}</th>`).join("")}<th>SKU</th><th>매출</th><th>판촉율</th><th>CM</th><th>판촉율효과</th></tr></thead><tbody>${top.map(s => { const j = s.j.FY; return `<tr><td>${jb(j.k)}</td>${sd.map(i => `<td>${esc(s.d[i])}</td>`).join("")}<td>${esc(nm(s))}</td><td class="n">${fN(j.a.S)}→${fN(j.b.S)}</td><td class="n">${fP(j.cr0)}→${fP(j.cr1)}</td><td class="n">${fN(j.a.M)}→${fN(j.b.M)} <span class="neg">(${fD(j.dM)})</span></td><td class="n neg">${fD(j.eC)}</td></tr>`; }).join("")}</tbody></table></div>`,
-        x: `[${scope} 문제 SKU TOP ${top.length} (연간)]\n` + top.map(s => { const j = s.j.FY; return `${IC[j.k]} ${s.d.join(" > ")}: 매출 ${fN(j.a.S)}→${fN(j.b.S)}, 판촉율 ${fP(j.cr0)}→${fP(j.cr1)}, CM ${fN(j.a.M)}→${fN(j.b.M)}(${fD(j.dM)}), 판촉율효과 ${fD(j.eC)}`; }).join("\n")
+        cls: "b wide", t: `🔎 ${esc(scope)} 문제 ${esc(LEAF())} TOP ${top.length} <small>연간, CM 감소 큰 순</small>`,
+        h: `<div class="tw" style="max-height:none"><table><thead><tr><th>판정</th>${sd.map(i => `<th>${esc(D.dims[i])}</th>`).join("")}<th>${esc(LEAF_END())}</th><th>매출</th><th>판촉율</th><th>CM</th><th>판촉율효과</th></tr></thead><tbody>${top.map(s => { const j = s.j.FY; return `<tr><td>${jb(j.k)}</td>${sd.map(i => `<td>${esc(s.d[i])}</td>`).join("")}<td>${esc(nm(s))}</td><td class="n">${fN(j.a.S)}→${fN(j.b.S)}</td><td class="n">${fP(j.cr0)}→${fP(j.cr1)}</td><td class="n">${fN(j.a.M)}→${fN(j.b.M)} <span class="neg">(${fD(j.dM)})</span></td><td class="n neg">${fD(j.eC)}</td></tr>`; }).join("")}</tbody></table></div>`,
+        x: `[${scope} 문제 ${LEAF()} TOP ${top.length} (연간)]\n` + top.map(s => { const j = s.j.FY; return `${IC[j.k]} ${s.d.join(" > ")}: 매출 ${fN(j.a.S)}→${fN(j.b.S)}, 판촉율 ${fP(j.cr0)}→${fP(j.cr1)}, CM ${fN(j.a.M)}→${fN(j.b.M)}(${fD(j.dM)}), 판촉율효과 ${fD(j.eC)}`; }).join("\n")
       });
     }
   }
@@ -936,13 +964,13 @@ function aiSummary() {
 }
 
 /* ---------- 공통 ---------- */
-function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s)); window.scrollTo(0, 0); }
+function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || !D; if (D) mb.innerHTML = ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`; } window.scrollTo(0, 0); }
 function renderAll() { renderSum(); renderTbl(); renderIns(); }
 
-$("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setStage(b.dataset.s); });
+$("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.m) switchMode(b.dataset.m); setStage(b.dataset.s); });
 $("#go").onclick = () => analyze(true);
 $("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true, true); };
-$("#clear").onclick = async () => { if (!confirm("저장된 자료를 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = null; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
+$("#clear").onclick = async () => { if (!confirm("저장된 자료를 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = DC = DP = null; ST.saved = {}; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
 $("#bkCopy").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); copyText(b, `백업 텍스트 복사 (${b.split("\n").length}줄, ${Math.round(b.length / 1024)}KB) → 메모장·엑셀 A열·메신저에 붙여넣어 보관/공유`); };
 $("#bkFile").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([b], { type: "text/plain" })); a.download = "판촉비용율점검_백업_" + new Date().toISOString().slice(0, 10) + ".txt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
 $("#sample").onclick = () => { $("#raw").value = makeSample(); analyze(false).then(() => { setStage(2); toast("샘플 데이터 (가상 숫자)"); }); };
@@ -1010,7 +1038,7 @@ function makeSample() {
   renderAll();
   const s = await idb.get("in");
   if (s) { if (s.thr != null) $("#thr").value = s.thr; if (s.minS != null) $("#minS").value = s.minS; }
-  if (s && s.c) { try { D = fromCompact(s.c); await analyze(false); } catch (e) { D = null; } }
+  if (s && s.c) { try { setModes(fromCompact(s.c)); await analyze(false); } catch (e) { D = null; } }
   else if (s && s.raw) { $("#raw").value = s.raw; await analyze(true); }   // 예전 저장분 → 가벼운 형식으로 변환
 })();
 </script>
