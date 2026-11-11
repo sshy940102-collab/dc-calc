@@ -732,6 +732,7 @@ function chainHtml(d, view) {
   const parts = [];
   for (let k = D.nd - 2; k >= -1; k--) {
     if (k >= 0 && D.mode !== "p" && /제품군/.test(D.dims[k])) continue;
+    if (D.mode === "p" && k > subIdx()) continue;   // 제품 분석: 팀 단계는 건너뛰고 SKU부터
     const R = rdScope(k, d, view), r = R.map.get(d.join("\u0001"));
     if (!r) continue;
     parts.push(`${esc(k < 0 ? "전체" : d[k])} <b>${fPP3(r.tot)}</b> <span class="muted">(${fP(R.CR0)}→${fP(R.CR1)})</span>`);
@@ -824,11 +825,12 @@ function pzFormula(R, RN, mk) {
 function enItems(R, n) { return R.rows.filter(r => (r.st === "end" || r.st === "new") && Math.abs(r.mix) >= 0.0005).sort((a, b) => Math.abs(b.mix) - Math.abs(a.mix)).slice(0, n); }
 function enLine(r, R, view) { return enLine0(r, R) + `<br><span class="chain">${chainHtml(r.d, view || "FY")}</span>`; }
 function enLine0(r, R) {
-  const name = r.d[r.d.length - 1];
+  const name = leafName(r.d);
   if (r.st === "end") return `⛔ <b>${esc(name)}</b> — ${yl(D.y1)} 판매 없음 (전년 매출 ${fN(r.a.S)}, 판촉율 ${fP(r.cr0)} vs 전체 ${fP(R.CR0)} → 판촉율 ${r.cr0 < R.CR0 ? "낮던" : "높던"} 품목이 빠짐) → 판촉율 <b class="${r.mix > 0 ? "neg" : ""}">${fPP2(r.mix)}</b> 영향`;
   return `🆕 <b>${esc(name)}</b> — 신규 (매출 ${fN(r.b.S)}, 판촉율 ${fP(r.cr1)} vs 전년 전체 ${fP(R.CR0)}) → 판촉율 <b class="${r.mix > 0 ? "neg" : ""}">${fPP2(r.mix)}</b> 영향`;
 }
 const strip = s => s.replace(/<br>/g, " ").replace(/<[^>]+>/g, "");
+function leafName(d) { if (D.mode !== "p") return d[d.length - 1]; const si = subIdx(), ti = d.length - 2; return `${d[si]} @ ${d[d.length - 1]}` + (ti > si ? ` (${d[ti]})` : ""); }
 function subIdx() { const i = D.mode === "p" ? D.dims.findIndex(d => /제품번호|SKU|Name/i.test(d)) : D.dims.findIndex(d => /소분류|소카테고리/.test(d)); return i >= 0 ? i : Math.max(0, D.nd - 2); }
 function why(j) {
   if (j.k === "new") return `신규 (매출 ${fN(j.b.S)}, 판촉율 ${fP(j.cr1)})`;
