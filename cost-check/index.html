@@ -222,7 +222,8 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
   </div>
   <div class="crumb" id="crumb"></div>
   <div class="tw" id="tblOut"></div>
-  <p class="help">행을 클릭하면 한 단계 아래로 내려가요 (한 단계씩 아래로). 머리글 클릭 = 정렬.</p>
+  <p class="help">행을 클릭하면 한 단계 아래로 내려가요. 머리글 클릭 = 정렬.</p>
+  <div id="tblFx"></div>
 </section>
 
 <section id="stage4" class="stg">
@@ -386,7 +387,7 @@ function parse(text) {
   if (onlyOne.length) W.push("한쪽 연도에만 있는 기간은 비교에서 제외: " + [...new Set(onlyOne)].join(", "));
   if (years.length > 2) W.push(`연도가 ${years.length}개라 처음(${yl(y0)})과 마지막(${yl(y1)})을 비교해요.`);
 
-  const nd = dims.length, leaves = new Map(), ign = {}, mf = {};
+  const nd = dims.length, leaves = new Map(), ign = {}, mf = {}, mname = {}, dupM = {};
   let prev = dims.map(() => ""), nRows = 0, nSub = 0;
   for (let i = hi + 1; i < rows.length; i++) {
     const r = rows[i]; if (!r.some(c => cl(c))) continue;
@@ -396,12 +397,15 @@ function parse(text) {
     for (let k = 0; k < nd; k++) if (!dv[k]) dv[k] = prev[k];
     prev = dv.slice();
     const mk = mkey(r[vi]);
+    if (mk.k && mname[mk.k] && mname[mk.k] !== mk.n) { ign[mk.n + " (같은 항목 중복→제외)"] = (ign[mk.n + " (같은 항목 중복→제외)"] || 0) + 1; dupM[mk.n] = mname[mk.k]; continue; }
+    if (mk.k && !mname[mk.k]) mname[mk.k] = mk.n;
     if (!mk.k) { ign[mk.n] = (ign[mk.n] || 0) + 1; continue; }
     mf[mk.k] = (mf[mk.k] || 0) + 1; nRows++;
     const key = dv.join("\u0001");
     let Lf = leaves.get(key); if (!Lf) { Lf = { d: dv, raw: {} }; leaves.set(key, Lf); }
     for (const p of per) { const v = num(r[p.c]); if (v == null) continue; const kk = mk.k + "|" + p.y + "|" + p.sub; Lf.raw[kk] = (Lf.raw[kk] || 0) + v; }
   }
+  for (const [n, o] of Object.entries(dupM)) W.push(`값 항목 "${n}"은 "${o}"와 같은 항목으로 인식돼 제외했어요 (이중 합산 방지)`);
   if (!mf.S) throw new Error("'총매출' 행을 찾지 못했어요.");
   if (!mf.C && !(mf.D || mf.P)) throw new Error("'비용'(또는 매출차감·판관비) 행을 찾지 못했어요.");
   if (!mf.M && !mf.V) W.push("공헌이익·변동원가 행이 없어 CM을 계산할 수 없어요 (CM = 매출 − 비용).");
@@ -441,7 +445,7 @@ function judge(a, b) {
   if (Math.abs(a.S) < e && Math.abs(b.S) < e) { r.k = "na"; return r; }
   if (a.S <= e) { r.k = "new"; return r; }
   if (b.S <= e) { r.k = "end"; return r; }
-  r.eS = r.dS * r.mr0; r.eC = -r.dcr * b.S; r.eV = -(r.vr1 - r.vr0) * b.S;
+  r.eS = r.dS * r.mr0; r.eC = -r.dcr * b.S; r.eV = -(r.vr1 - r.vr0) * b.S; r.eX = r.dM - r.eS - r.eC - r.eV;
   const up = r.dcr * 100 > ST.thr + 1e-9;
   r.k = !up ? "ok" : (b.S <= a.S + e ? "red" : (b.M < a.M - e ? "warn" : "up"));
   return r;
@@ -702,6 +706,7 @@ function renderTbl() {
   C.forEach((c, i) => { if (i === 0) h += `<td>합계 (${gs.length})</td>`; else if (!c.n) h += c.h === "판정" ? `<td>${jb(tg.jj.k)}</td>` : "<td></td>"; else { const x = c.v(tg); h += `<td class="${cellCls(c, x)}">${c.f(x)}</td>`; } });
   h += "</tr></tbody></table>";
   out.innerHTML = h;
+  $("#tblFx").innerHTML = cmFormula(gs[0] && gs[0].jj, gs[0] && nm(gs[0]));
   out._rows = gs; out._C = C;
   out._tsv = [C.map(c => c.h).join("\t"), ...gs.map(g => C.map(c => c.txt ? c.txt(g) : c.n ? (c.f === fN || c.f === fD ? Math.round(c.v(g)) : c.f(c.v(g))) : c.v(g)).join("\t"))].join("\n");
   const b = $(D.mode === "p" ? "#bdgP" : "#bdg"); const t = cnt.red + cnt.warn; b.hidden = !t; b.textContent = t;
@@ -712,7 +717,26 @@ function filtOk2(g) { return !(isSku(ST.lvl) && !bigEnough(g)); }
 function line(j) {
   return `매출 ${fN(j.a.S)}→${fN(j.b.S)} (${fGr(j.dSp)}), 판촉율 ${fP(j.cr0)}→${fP(j.cr1)} (${fPP(j.dcr)}), CM ${fN(j.a.M)}→${fN(j.b.M)} (${fD(j.dM)})`;
 }
-function decomp(j) { return j.eS == null ? "" : `매출효과 ${fD(j.eS)} / 판촉율효과 ${fD(j.eC)} / 원가율효과 ${fD(j.eV)}`; }
+function cmFormula(j, name) {
+  const y0 = yl(D.y0), y1 = yl(D.y1);
+  const p = x => { const s = (x * 100).toFixed(1) + "%"; return x < 0 ? "(" + s + ")" : s; };
+  let ex = "";
+  if (j && j.eS != null) {
+    ex = `<p class="muted" style="margin-top:6px"><b>예시 — ${esc(name || "")}</b> (매출 ${fN(j.a.S)}→${fN(j.b.S)}, 판촉율 ${p(j.cr0)}→${p(j.cr1)}, 원가율 ${p(j.vr0)}→${p(j.vr1)}, CM율 ${y0} ${p(j.mr0)})<br>
+      ① (${fN(j.b.S)} − ${fN(j.a.S)}) × ${p(j.mr0)} = <b>${fD(j.eS)}</b><br>
+      ② −(${p(j.cr1)} − ${p(j.cr0)}) × ${fN(j.b.S)} = <b>${fD(j.eC)}</b><br>
+      ③ −(${p(j.vr1)} − ${p(j.vr0)}) × ${fN(j.b.S)} = <b>${fD(j.eV)}</b><br>
+      합계 ${fD(j.eS + j.eC + j.eV)}${Math.abs(j.eX) >= 0.5 ? ` + 기타 ${fD(j.eX)}` : ""} = CM ${fN(j.a.M)}→${fN(j.b.M)} (<b>${fD(j.dM)}</b>) ※ 화면 숫자는 반올림이라 ±1 차이 날 수 있어요</p>`;
+  }
+  return `<details class="fx"><summary>📐 산식 보기 (CM 분해: 매출효과 · 판촉율효과 · 원가율효과)</summary><div class="fxb">
+    <p><b>기호</b> · 판촉율 = 판촉비용(매출차감+판관비) ÷ 매출 · 원가율 = 변동원가 ÷ 매출 · CM율 = CM(공헌이익) ÷ 매출 · ₁ = ${y0}, ₂ = ${y1}</p>
+    <table class="fxt"><tbody>
+      <tr><td>① 매출효과</td><td>(매출₂ − 매출₁) × CM율₁</td><td class="muted">이익률이 그대로일 때, 매출이 늘거나 줄어서 생긴 CM 변화</td></tr>
+      <tr><td>② 판촉율효과</td><td>−(판촉율₂ − 판촉율₁) × 매출₂</td><td class="muted">판촉비용율이 오른 만큼 ${y1} 매출에서 빠지는 CM (판촉율↑ → −)</td></tr>
+      <tr><td>③ 원가율효과</td><td>−(원가율₂ − 원가율₁) × 매출₂</td><td class="muted">변동원가율 변화로 생긴 CM 변화 (원가율↓ → +)</td></tr>
+      <tr><td>검산</td><td>① + ② + ③ = CM₂ − CM₁</td><td class="muted">CM = 매출 − 판촉비용 − 변동원가라서 정확히 일치. 자료의 CM이 이 식과 다르면 차이를 '기타'로 따로 표시</td></tr>
+    </tbody></table>${ex}</div></details>`;
+}function decomp(j) { return j.eS == null ? "" : `매출효과 ${fD(j.eS)} / 판촉율효과 ${fD(j.eC)} / 원가율효과 ${fD(j.eV)}` + (Math.abs(j.eX) >= 0.5 ? ` / 기타 ${fD(j.eX)}` : ""); }
 const inScope = (g, d) => d.every((x, i) => g.d[i] === x);
 const fPP2 = x => (x == null || !isFinite(x)) ? "-" : (Math.abs(x * 100) < 0.005 ? "0.00" : ((x > 0 ? "+" : "") + (x * 100).toFixed(2))) + "%p";
 /* 판촉율 증감 기여 분해: Δ판촉율 = Σ 품목 기여 (기존 품목 = 구성비 변화 + 품목 판촉율 변화, 종료·신규 품목 = 빠지거나 들어온 영향) */
@@ -730,8 +754,8 @@ function rateDecomp(Ls, unit, view, mk) { mk = mk || "C";
     const cr0 = has0 ? x.a[mk] / x.a.S : null, cr1 = has1 ? x.b[mk] / x.b.S : null;
     let mix = 0, rate = 0, st;
     if (has0 && has1) { mix = (w1 - w0) * (cr0 - CR0); rate = w1 * (cr1 - cr0); st = "both"; R.MXc += mix; R.RT += rate; }
-    else if (has1) { mix = (S1 ? x.b[mk] / S1 : 0) - w1 * CR0; st = "new"; R.NEW += mix; }
-    else if (has0) { mix = -((S0 ? x.a[mk] / S0 : 0) - w0 * CR0); st = "end"; R.END += mix; }
+    else if (has1) { mix = (S1 ? x.b[mk] / S1 : 0) - (S0 ? x.a[mk] / S0 : 0) - (w1 - w0) * CR0; st = "new"; R.NEW += mix; }
+    else if (has0) { mix = (S1 ? x.b[mk] / S1 : 0) - (S0 ? x.a[mk] / S0 : 0) - (w1 - w0) * CR0; st = "end"; R.END += mix; }
     else { mix = (S1 ? x.b[mk] / S1 : 0) - (S0 ? x.a[mk] / S0 : 0); st = "zero"; R.MXc += mix; if (Math.abs(mix) < e) continue; }
     const r = { d: x.d, a: x.a, b: x.b, w0, w1, cr0, cr1, mix, rate, tot: mix + rate, st };
     R.rows.push(r); R.map.set(x.d.join("\u0001"), r);
@@ -951,7 +975,7 @@ function buildIns(lvl, f) {
   let oh = "<ul>", ox = `[개요] ${scope} / ${D.dims[lvl]} 기준 ${gs.length}개 / 비교 ${yl(D.y0)}→${yl(D.y1)}\n`;
   for (const v of V) { const j = tot.j[v], c = cntBy(v); oh += `<li><b>${esc(vl(v))}</b> ${jb(j.k)} ${line(j)} <span class="muted">— 🔴${c.red || 0} ⚠️${c.warn || 0} 🟢${c.up || 0} ✅${c.ok || 0}</span></li>`; ox += `· ${vl(v)} ${IC[j.k]}${LB[j.k]}: ${line(j)} (🔴${c.red || 0} ⚠️${c.warn || 0} 🟢${c.up || 0} ✅${c.ok || 0})\n`; }
   oh += "</ul>";
-  if (tot.j.FY.eS != null) { oh += `<p class="muted">${vl("FY")} CM 분해: ${decomp(tot.j.FY)}</p>`; ox += `· ${vl("FY")} CM 분해: ${decomp(tot.j.FY)}\n`; }
+  if (tot.j.FY.eS != null) { oh += `<p class="muted">${vl("FY")} CM 분해: ${decomp(tot.j.FY)}</p>${cmFormula(tot.j.FY, scope)}`; ox += `· ${vl("FY")} CM 분해: ${decomp(tot.j.FY)}\n`; }
   const scopeL = gs.flatMap(g => g.L);
   const RS = rateDecomp(scopeL, D.nd - 1, "FY");
   oh += `<p>📐 <b>판촉율 증감 분해</b> (${vl("FY")}, ${LEAF()} 기준): ${rdLine(RS, "기존 " + LEAF())}</p>`;
@@ -1044,6 +1068,7 @@ function buildIns(lvl, f) {
       const sd = D.dims.slice(0, -1).map((d, i) => i).filter(i => i > insDeep(f));
       cards.push({
         cls: "b wide", t: `🔎 ${esc(scope)} 문제 ${esc(LEAF())} TOP ${top.length} <small>${vl("FY")}, CM 감소 큰 순</small>`,
+        pre: cmFormula(top[0].j.FY, nm(top[0])),
         h: `<div class="tw" style="max-height:none"><table><thead><tr><th>판정</th>${sd.map(i => `<th>${esc(D.dims[i])}</th>`).join("")}<th>${esc(LEAF_END())}</th><th>매출</th><th>판촉율</th><th>CM</th><th>판촉율효과</th></tr></thead><tbody>${top.map(s => { const j = s.j.FY; return `<tr><td>${jb(j.k)}</td>${sd.map(i => `<td>${esc(s.d[i])}</td>`).join("")}<td>${esc(nm(s))}</td><td class="n">${fN(j.a.S)}→${fN(j.b.S)}</td><td class="n">${fP(j.cr0)}→${fP(j.cr1)}</td><td class="n">${fN(j.a.M)}→${fN(j.b.M)} <span class="neg">(${fD(j.dM)})</span></td><td class="n neg">${fD(j.eC)}</td></tr>`; }).join("")}</tbody></table></div>`,
         x: `[${scope} 문제 ${LEAF()} TOP ${top.length} (${vl("FY")})]\n` + top.map(s => { const j = s.j.FY; return `${IC[j.k]} ${s.d.join(" > ")}: 매출 ${fN(j.a.S)}→${fN(j.b.S)}, 판촉율 ${fP(j.cr0)}→${fP(j.cr1)}, CM ${fN(j.a.M)}→${fN(j.b.M)}(${fD(j.dM)}), 판촉율효과 ${fD(j.eC)}`; }).join("\n")
       });
@@ -1057,7 +1082,7 @@ function renderIns() {
   const F = ST.ins.filt;
   const u = scopeUI(ST.ins, "#insFilts", "#insLvl", "#insCrumb");
   const cards = buildIns(u, F);
-  out.innerHTML = cards.map(c => `<div class="card ${c.cls}"><h3>${c.t}</h3>${c.h}</div>`).join("");
+  out.innerHTML = cards.map(c => `<div class="card ${c.cls}"><h3>${c.t}</h3>${c.pre || ""}${c.h}</div>`).join("");
   out._txt = cards.map(c => c.x).join("\n\n");
 }
 function scopeUI(S, filtSel, unitSel, crumbSel) {
