@@ -88,7 +88,11 @@ tr.tot td{font-weight:700;background:#f0f3f8;position:sticky;bottom:0;cursor:def
 .ins tr.dr:hover td{background:#eef3fb}
 a.lnk{color:var(--navy2);cursor:pointer;text-decoration:underline;font-size:12px;font-weight:400}
 .crumb a{color:var(--navy2);cursor:pointer;text-decoration:underline}
-#insCrumb{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px 12px}
+.subc{margin:8px 0 2px;padding:5px 8px;background:#f6f8fb;border-radius:4px;line-height:1.55}
+.ins li{margin-bottom:3px}
+.rep td.g.dr{cursor:pointer}
+.rep td.g.dr:hover{background:#dde6f3}
+#insCrumb,#sumCrumb{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px 12px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2433;color:#fff;padding:8px 16px;border-radius:6px;font-size:12.5px;opacity:0;transition:.2s;pointer-events:none;z-index:9}
 .toast.show{opacity:1}
 footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
@@ -137,11 +141,12 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 
 <section id="stage2" class="stg">
   <div class="toolbar">
-    <label class="f">구분<select id="sumDim"></select></label>
-    <span id="sumFilt"></span>
+    <span id="sumFilts" class="row" style="margin:0"></span>
+    <label class="f">보는 단위<select id="sumUnit"></select></label>
     <span class="sp"></span>
     <button class="sec" id="sumCopy">📋 표 복사</button>
   </div>
+  <div class="crumb" id="sumCrumb"></div>
   <div class="tw" id="sumOut"></div>
   <p class="help">분홍 칸 = 판촉비용율 상승(기준 초과) · 마진율 하락. 맨 아래 줄 = 기간별 판정.</p>
 </section>
@@ -187,7 +192,7 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&am
 const IC = { red: "🔴", warn: "⚠️", up: "🟢", ok: "✅", new: "🆕", end: "⛔", na: "·" };
 const LB = { red: "큰 문제", warn: "문제", up: "판촉↑·CM유지", ok: "OK", new: "신규", end: "종료", na: "-" };
 const SEV = { red: 0, warn: 1, up: 2, new: 3, end: 4, ok: 5, na: 6 };
-const ST = { thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sumDim: 0, ins: { filt: {}, unit: null } };
+const ST = { thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null } };
 let D = null;
 
 /* ---------- 숫자·표시 ---------- */
@@ -375,7 +380,7 @@ async function analyze(save) {
   try { D = parse(txt); }
   catch (e) { D = null; box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; renderAll(); return; }
   if (save) idb.set("in", { raw: txt, thr: ST.thr, minS: ST.minS });
-  ST.lvl = Math.min(1, D.nd - 1); ST.ins = { filt: {}, unit: null }; ST.filt = {}; ST.sumDim = 0; ST.view = "FY"; ST.sort = null;
+  ST.lvl = Math.min(1, D.nd - 1); ST.ins = { filt: {}, unit: null }; ST.filt = {}; ST.sum = { filt: {}, unit: null }; ST.view = "FY"; ST.sort = null;
   const ignN = Object.entries(D.ign);
   const mName = { S: "총매출", D: "매출차감", P: "판관비", C: "비용", V: "변동원가", M: "공헌이익" };
   box.innerHTML = `<div class="chips">
@@ -410,19 +415,25 @@ function sumBlock(g) {
 function renderSum() {
   const out = $("#sumOut");
   if (!D) { out.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; return; }
-  const sel = $("#sumDim");
-  sel.innerHTML = D.dims.map((d, i) => `<option value="${i}" ${i === ST.sumDim ? "selected" : ""}>${esc(d)}별</option>`).join("");
-  const gs = groups(ST.sumDim, {}).map(evalG);
-  const tot = evalG({ d: ["전체"], L: D.leaves });
+  const F = ST.sum.filt;
+  const u = scopeUI(ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb");
+  const dp = insDeep(F);
+  const fk = Object.keys(F).filter(k => F[k]).map(Number).sort((a, b) => a - b);
+  const scope = fk.length ? fk.map(k => F[k]).join(" › ") : "전체";
+  const gs = groups(u, F).map(evalG);
+  const tot = evalG({ d: [scope + " 합계"], L: D.leaves.filter(L => passF(L, F)), tot: 1 });
+  const canDrill = u < D.nd - 1;
   const V = views(), n = V.length;
   const vh = V.map(vl);
-  let h = `<table class="rep"><thead><tr><th class="l" rowspan="2">${esc(D.dims[ST.sumDim])} / 항목</th>
+  let h = `<table class="rep"><thead><tr><th class="l" rowspan="2">${esc(D.dims[u])} / 항목${canDrill ? ' <small style="font-weight:400;opacity:.8">(이름 클릭 → 하위)</small>' : ""}</th>
     <th colspan="${n}" class="sep">${esc(yl(D.y0))}</th><th colspan="${n}" class="sep">${esc(yl(D.y1))}</th><th colspan="${n}" class="sep">Δ (${esc(yl(D.y1))} − ${esc(yl(D.y0))})</th><th colspan="${n}" class="sep">%</th></tr><tr>`;
   for (let b = 0; b < 4; b++) vh.forEach((x, i) => h += `<th class="${i === 0 ? "sep" : ""}">${esc(x)}</th>`);
   h += "</tr></thead><tbody>";
-  const tsv = [[D.dims[ST.sumDim], "항목", ...vh.map(x => yl(D.y0) + " " + x), ...vh.map(x => yl(D.y1) + " " + x), ...vh.map(x => "Δ " + x), ...vh.map(x => "% " + x)].join("\t")];
+  const tsv = [[D.dims[u], "항목", ...vh.map(x => yl(D.y0) + " " + x), ...vh.map(x => yl(D.y1) + " " + x), ...vh.map(x => "Δ " + x), ...vh.map(x => "% " + x)].join("\t")];
   for (const g of [...gs, tot]) {
-    h += `<tr><td class="g" colspan="${1 + n * 4}">${esc(g.d.length > 1 ? g.d.join(" > ") : g.d[0])}</td></tr>`;
+    const gname = g.tot ? g.d[0] : g.d.slice(dp + 1).join(" › ");
+    h += g.tot || !canDrill ? `<tr><td class="g" colspan="${1 + n * 4}">${esc(gname)}</td></tr>`
+      : `<tr><td class="g dr" colspan="${1 + n * 4}" data-drill="${esc(JSON.stringify(g.d))}">${esc(gname)} <span class="muted" style="font-weight:400">▸ ${esc(D.dims[autoNext(u)])} 보기</span></td></tr>`;
     for (const r of sumBlock(g)) {
       const f = r.rt ? fP : fN;
       h += `<tr><td class="it${r.rt ? " rt" : ""}">${r.label}</td>`;
@@ -528,6 +539,22 @@ function line(j) {
 }
 function decomp(j) { return j.eS == null ? "" : `매출효과 ${fD(j.eS)} / 판촉율효과 ${fD(j.eC)} / 원가율효과 ${fD(j.eV)}`; }
 const inScope = (g, d) => d.every((x, i) => g.d[i] === x);
+function subIdx() { const i = D.dims.findIndex(d => /소분류|소카테고리/.test(d)); return i >= 0 ? i : Math.max(0, D.nd - 2); }
+function why(j) {
+  if (j.k === "new") return `신규 (매출 ${fN(j.b.S)}, 판촉율 ${fP(j.cr1)})`;
+  if (j.k === "end") return `계획 매출 없음 (전년 ${fN(j.a.S)})`;
+  if (j.k === "na") return "-";
+  let s;
+  if (j.k === "red") s = `매출 ${fGr(j.dSp)}인데 판촉율 ${fPP(j.dcr)} 상승 → CM ${fD(j.dM)}`;
+  else if (j.k === "warn") s = `매출 ${fGr(j.dSp)} 늘었지만 판촉율 ${fPP(j.dcr)} 상승분이 더 커서 CM ${fD(j.dM)}`;
+  else if (j.k === "up") s = `판촉율 ${fPP(j.dcr)} 상승했지만 매출 ${fGr(j.dSp)} 성장으로 CM ${fD(j.dM)} 유지`;
+  else s = `판촉율 ${fPP(j.dcr)}, 매출 ${fGr(j.dSp)}, CM ${fD(j.dM)}`;
+  if (D.mf.D && D.mf.P && j.a.S && j.b.S && j.dcr != null && j.dcr * 100 > ST.thr) {
+    const dd = j.b.D / j.b.S - j.a.D / j.a.S, dp = j.b.P / j.b.S - j.a.P / j.a.S;
+    s += ` <span class="muted">(차감율 ${fPP(dd)} · 판관비율 ${fPP(dp)} → <b>${dd >= dp ? "차감(행사) 주도" : "판관비 주도"}</b>)</span>`;
+  }
+  return s;
+}
 function insDeep(f) { return Math.max(-1, ...Object.keys(f).filter(k => f[k]).map(Number)); }
 function autoNext(l) { let u = Math.min(D.nd - 1, l + 1); while (u < D.nd - 1 && /제품군/.test(D.dims[u])) u++; return u; }
 function insUnit() {
@@ -539,8 +566,7 @@ function buildIns(lvl, f) {
   const V = views();
   const gs = groups(lvl, f).map(evalG).filter(g => !isSku(lvl) || bigEnough(g));
   const skus = groups(D.nd - 1, f).map(evalG).filter(bigEnough);
-  const nextLv = lvl < D.nd - 1 && autoNext(lvl) < D.nd - 1 ? autoNext(lvl) : null;
-  const nexts = nextLv != null ? groups(nextLv, f).map(evalG) : [];
+  const subsG = lvl < subIdx() ? groups(subIdx(), f).map(evalG) : [];
   const fk = Object.keys(f).filter(k => f[k]).sort((a, b) => a - b);
   const scope = fk.length ? fk.map(k => f[k]).join(" › ") : "전체";
   const cards = [];
@@ -573,18 +599,30 @@ function buildIns(lvl, f) {
     if (!isSku(lvl)) {
       const vk = V.filter(v => g.j[v].k === "red" || g.j[v].k === "warn");
       const v0 = vk.includes("FY") ? "FY" : vk[0];
-      const drv = (arr, label) => {
-        const by = arr.filter(s => inScope(s, g.d)).map(s => ({ s, j: s.j[v0] })).filter(o => o.j.eC != null && o.j.eC < -0.5).sort((a, b) => a.j.eC - b.j.eC).slice(0, 3);
-        if (!by.length) return;
-        h += `<div class="lbl">판촉율 상승 주도 ${esc(label)} (${esc(vl(v0))}, 판촉율효과 큰 순)</div><ul>${by.map(o => `<li>${esc(nm(o.s))}: 판촉율 ${fP(o.j.cr0)}→${fP(o.j.cr1)} (${fPP(o.j.dcr)}), 판촉율효과 <b class="neg">${fD(o.j.eC)}</b>, 매출 ${fGr(o.j.dSp)}, CM ${fD(o.j.dM)} ${jb(o.j.k)}</li>`).join("")}</ul>`;
-        x += `· 판촉율 상승 주도 ${label}(${vl(v0)}): ` + by.map(o => `${nm(o.s)} ${fP(o.j.cr0)}→${fP(o.j.cr1)}(${fD(o.j.eC)})`).join(" / ") + "\n";
-      };
-      if (nextLv != null) drv(nexts, D.dims[nextLv]);
-      drv(skus, "SKU");
-      const byS = skus.filter(s => inScope(s, g.d)).map(s => ({ s, j: s.j[v0] })).filter(o => o.j.dS < -0.5).sort((a, b) => a.j.dS - b.j.dS).slice(0, 3);
-      if (g.j[v0].k === "red" && byS.length) {
-        h += `<div class="lbl">매출 감소 SKU (${esc(vl(v0))})</div><ul>${byS.map(o => `<li>${esc(nm(o.s))}: 매출 ${fN(o.j.a.S)}→${fN(o.j.b.S)} (${fGr(o.j.dSp)}), CM ${fD(o.j.dM)}</li>`).join("")}</ul>`;
-        x += `· 매출 감소 SKU(${vl(v0)}): ` + byS.map(o => `${nm(o.s)} ${fN(o.j.a.S)}→${fN(o.j.b.S)}`).join(" / ") + "\n";
+      const si = subIdx();
+      const pick = (arr, n) => arr.map(s => ({ s, j: s.j[v0] }))
+        .filter(o => o.j.k === "red" || o.j.k === "warn" || (o.j.eC != null && o.j.eC < -0.5))
+        .sort((a, b) => ((a.j.k === "red" || a.j.k === "warn") ? 0 : 1) - ((b.j.k === "red" || b.j.k === "warn") ? 0 : 1) || (a.j.eC || 0) - (b.j.eC || 0)).slice(0, n);
+      const skuHtml = o => `<li><b>${esc(nm(o.s))}</b> ${jb(o.j.k)} — ${why(o.j)}<br><span class="muted">매출 ${fN(o.j.a.S)}→${fN(o.j.b.S)} · 판촉율 ${fP(o.j.cr0)}→${fP(o.j.cr1)} · CM ${fN(o.j.a.M)}→${fN(o.j.b.M)} · 판촉율효과 ${fD(o.j.eC)}</span></li>`;
+      const skuTxt = o => `   - ${nm(o.s)} [${LB[o.j.k]}] ${why(o.j).replace(/<[^>]+>/g, "")} (매출 ${fN(o.j.a.S)}→${fN(o.j.b.S)}, 판촉율 ${fP(o.j.cr0)}→${fP(o.j.cr1)}, CM ${fN(o.j.a.M)}→${fN(o.j.b.M)})`;
+      if (lvl < si) {
+        const subsIn = subsG.filter(s => inScope(s, g.d));
+        const ps = pick(subsIn, 3);
+        if (ps.length) {
+          h += `<div class="lbl">문제 ${esc(D.dims[si])} → SKU (${esc(vl(v0))})</div>`;
+          x += `· 문제 ${D.dims[si]} → SKU (${vl(v0)})\n`;
+          for (const p of ps) {
+            const ks = pick(skus.filter(s => inScope(s, p.s.d)), 3);
+            h += `<div class="subc"><b>▸ ${esc(nm(p.s))}</b> ${jb(p.j.k)} — ${why(p.j)}</div>${ks.length ? `<ul>${ks.map(skuHtml).join("")}</ul>` : ""}`;
+            x += `  ▸ ${nm(p.s)} [${LB[p.j.k]}] ${why(p.j).replace(/<[^>]+>/g, "")}\n` + ks.map(skuTxt).join("\n") + (ks.length ? "\n" : "");
+          }
+        }
+      } else {
+        const ks = pick(skus.filter(s => inScope(s, g.d)), 5);
+        if (ks.length) {
+          h += `<div class="lbl">문제 SKU (${esc(vl(v0))})</div><ul>${ks.map(skuHtml).join("")}</ul>`;
+          x += `· 문제 SKU (${vl(v0)})\n` + ks.map(skuTxt).join("\n") + "\n";
+        }
       }
     }
     const link = canDrill ? ` <a class="lnk" data-drill="${esc(JSON.stringify(g.d))}">${esc(D.dims[autoNext(lvl)])} 보기 ▸</a>` : "";
@@ -609,6 +647,13 @@ function renderIns() {
   const out = $("#insOut");
   if (!D) { out.innerHTML = '<div class="empty card wide">1단계에서 자료를 붙여넣어 주세요</div>'; return; }
   const F = ST.ins.filt;
+  const u = scopeUI(ST.ins, "#insFilts", "#insLvl", "#insCrumb");
+  const cards = buildIns(u, F);
+  out.innerHTML = cards.map(c => `<div class="card ${c.cls}"><h3>${c.t}</h3>${c.h}</div>`).join("");
+  out._txt = cards.map(c => c.x).join("\n\n");
+}
+function scopeUI(S, filtSel, unitSel, crumbSel) {
+  const F = S.filt;
   let fh = "";
   for (let k = 0; k < D.nd - 1; k++) {
     const up = {}; for (let j = 0; j < k; j++) if (F[j]) up[j] = F[j];
@@ -616,14 +661,19 @@ function renderIns() {
     if (F[k] && !opts.includes(F[k])) delete F[k];
     fh += `<label class="f">${esc(D.dims[k])}<select data-fk="${k}"><option value="">전체</option>${opts.map(o => `<option ${o === F[k] ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`;
   }
-  $("#insFilts").innerHTML = fh;
-  const dp = insDeep(F), u = insUnit();
-  $("#insLvl").innerHTML = D.dims.map((d, i) => i > dp ? `<option value="${i}" ${i === u ? "selected" : ""}>${esc(d)}</option>` : "").join("");
+  $(filtSel).innerHTML = fh;
+  const dp = insDeep(F);
+  let u = S.unit; if (u == null || u <= dp) u = autoNext(dp);
+  $(unitSel).innerHTML = D.dims.map((d, i) => i > dp ? `<option value="${i}" ${i === u ? "selected" : ""}>${esc(d)}</option>` : "").join("");
   const fk = Object.keys(F).filter(k => F[k]).map(Number).sort((a, b) => a - b);
-  $("#insCrumb").innerHTML = `<span class="muted">보는 범위:</span> <a data-up="-1">전체</a>${fk.map(k => ` › <a data-up="${k}">${esc(F[k])}</a>`).join("")} <span class="muted">· ${esc(D.dims[u])}별로 보는 중</span>${fk.length ? ` <a data-up="${fk.length > 1 ? fk[fk.length - 2] : -1}">↑ 위로</a>` : ""}`;
-  const cards = buildIns(u, F);
-  out.innerHTML = cards.map(c => `<div class="card ${c.cls}"><h3>${c.t}</h3>${c.h}</div>`).join("");
-  out._txt = cards.map(c => c.x).join("\n\n");
+  $(crumbSel).innerHTML = `<span class="muted">보는 범위:</span> <a data-up="-1">전체</a>${fk.map(k => ` › <a data-up="${k}">${esc(F[k])}</a>`).join("")} <span class="muted">· ${esc(D.dims[u])}별로 보는 중</span>${fk.length ? ` <a data-up="${fk.length > 1 ? fk[fk.length - 2] : -1}">↑ 위로</a>` : ""}`;
+  return u;
+}
+function bindScope(get, filtSel, unitSel, crumbSel, outSel, render) {
+  $(unitSel).onchange = e => { get().unit = +e.target.value; render(); };
+  $(filtSel).onchange = e => { const S = get(), s = e.target.closest("select"); if (!s) return; const k = +s.dataset.fk; S.filt[k] = s.value; Object.keys(S.filt).forEach(j => { if (+j > k) delete S.filt[j]; }); S.unit = null; render(); };
+  $(crumbSel).addEventListener("click", e => { const S = get(), a = e.target.closest("a[data-up]"); if (!a) return; const k = +a.dataset.up; Object.keys(S.filt).forEach(j => { if (+j > k) delete S.filt[j]; }); S.unit = null; render(); });
+  $(outSel).addEventListener("click", e => { const t = e.target.closest("[data-drill]"); if (!t) return; const S = get(); S.filt = {}; JSON.parse(t.dataset.drill).forEach((v, k) => S.filt[k] = v); S.unit = null; render(); window.scrollTo(0, 0); });
 }
 function insDrill(d) { ST.ins.filt = {}; d.forEach((v, k) => ST.ins.filt[k] = v); ST.ins.unit = null; renderIns(); window.scrollTo(0, 0); }
 function aiSummary() {
@@ -653,7 +703,8 @@ $("#go").onclick = () => analyze(true);
 $("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true); };
 $("#clear").onclick = async () => { if (!confirm("저장된 붙여넣기 내용을 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = null; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
 $("#sample").onclick = () => { $("#raw").value = makeSample(); analyze(false).then(() => { setStage(2); toast("샘플 데이터 (가상 숫자)"); }); };
-$("#sumDim").onchange = e => { ST.sumDim = +e.target.value; renderSum(); };
+bindScope(() => ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb", "#sumOut", () => renderSum());
+bindScope(() => ST.ins, "#insFilts", "#insLvl", "#insCrumb", "#insOut", () => renderIns());
 $("#sumCopy").onclick = () => copyText($("#sumOut")._tsv || "", "표를 복사했어요 (엑셀에 붙여넣기)");
 $("#viewBtns").onclick = e => { const b = e.target.closest("button"); if (!b) return; ST.view = b.dataset.v; renderTbl(); };
 $("#lvl").onchange = e => { ST.lvl = +e.target.value; ST.sort = null; renderTbl(); };
@@ -674,10 +725,6 @@ $("#crumb").addEventListener("click", e => {
   else return;
   ST.sort = null; renderTbl();
 });
-$("#insLvl").onchange = e => { ST.ins.unit = +e.target.value; renderIns(); };
-$("#insFilts").onchange = e => { const s = e.target.closest("select"); if (!s) return; const k = +s.dataset.fk; ST.ins.filt[k] = s.value; Object.keys(ST.ins.filt).forEach(j => { if (+j > k) delete ST.ins.filt[j]; }); ST.ins.unit = null; renderIns(); };
-$("#insCrumb").addEventListener("click", e => { const a = e.target.closest("a[data-up]"); if (!a) return; const k = +a.dataset.up; Object.keys(ST.ins.filt).forEach(j => { if (+j > k) delete ST.ins.filt[j]; }); ST.ins.unit = null; renderIns(); });
-$("#insOut").addEventListener("click", e => { const t = e.target.closest("[data-drill]"); if (t) insDrill(JSON.parse(t.dataset.drill)); });
 $("#insCopy").onclick = () => copyText($("#insOut")._txt || "", "INSIGHT를 복사했어요");
 $("#aiCopy").onclick = $("#aiCopy2").onclick = () => copyText(aiSummary(), "요약을 복사했어요 → 디스코드에 붙여넣으면 Claude가 분석해요");
 
