@@ -96,6 +96,12 @@ a.lnk{color:var(--navy2);cursor:pointer;text-decoration:underline;font-size:12px
 .pz.d0 td{font-weight:600;background:#fafbfd}
 .pz.d1 td{background:#fff}
 table.pzt td.pzt{background:#f3f6fb}
+.fx{margin:4px 0 8px;background:#f8fafc;border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+.fx summary{cursor:pointer;color:var(--navy2);font-weight:600}
+.fxb{margin-top:6px;line-height:1.6}
+.fxt td{white-space:normal;border-bottom:1px solid #edf0f5;padding:4px 8px}
+.fxt td:first-child{font-weight:600;white-space:nowrap}
+.fxt td:nth-child(2){font-family:Consolas,monospace;white-space:nowrap}
 .pz.hl td{background:#fff6dd!important}
 .subc{margin:8px 0 2px;padding:5px 8px;background:#f6f8fb;border-radius:4px;line-height:1.55}
 .ins li{margin-bottom:3px}
@@ -425,7 +431,7 @@ async function readBackup(txt) {
 async function saveStore() { if (D) await idb.set("in", { c: toCompact(), thr: ST.thr, minS: ST.minS, at: new Date().toISOString().slice(0, 16) }); }
 
 async function analyze(save, keepView) {
-  const txt = $("#raw").value.trim();
+  const rawAll = $("#raw").value.replace(/[\r\n]+$/, ""), txt = rawAll.trim();   // 피벗 첫 줄 앞 빈 칸(탭)은 지우면 안 됨
   ST.thr = Math.max(0, Number($("#thr").value) || 0); ST.minS = Math.max(0, Number($("#minS").value) || 0);
   const box = $("#pinfo");
   let src = "";
@@ -438,7 +444,7 @@ async function analyze(save, keepView) {
         const o = await readBackup(txt); D = fromCompact(o.c);
         if (o.thr != null) { ST.thr = o.thr; $("#thr").value = o.thr; } if (o.minS != null) { ST.minS = o.minS; $("#minS").value = o.minS; }
         src = "백업 텍스트" + (o.at ? ` (${o.at.replace("T", " ")} 저장)` : "");
-      } else { D = parse(txt); src = "붙여넣기"; }
+      } else { D = parse(rawAll); src = "붙여넣기"; }
     } catch (e) { box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; return; }
   }
   if (save) { await saveStore(); if (txt) $("#raw").value = ""; }
@@ -669,7 +675,38 @@ function puzzle(Ls, lvl, view, mk) { mk = mk || "C";
   }
   return { R, root, levels };
 }
-function pzHtml(P, scope, openSet, mk) { const RN = mk === "V" ? "원가율" : "판촉율";
+function pzFormula(R, RN, mk) {
+  const CN = mk === "V" ? "변동원가" : "판촉비용", y0 = yl(D.y0), y1 = yl(D.y1);
+  const ex = R.rows.filter(r => r.st === "both").sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot))[0];
+  const en = R.rows.filter(r => r.st === "end" || r.st === "new").sort((a, b) => Math.abs(b.mix) - Math.abs(a.mix))[0];
+  const p = x => { const s = (x * 100).toFixed(1) + "%"; return x < 0 ? "(" + s + ")" : s; };
+  let exH = "";
+  if (ex) {
+    const n = esc(ex.d[ex.d.length - 1]);
+    exH += `<p class="muted" style="margin-top:6px"><b>예시 — ${n}</b> (${RN} ${p(ex.cr0)}→${p(ex.cr1)}, 구성비 ${p(ex.w0)}→${p(ex.w1)}, 전체 ${y0} ${RN} ${p(R.CR0)})<br>
+      ① ${p(ex.w1)} × (${p(ex.cr1)} − ${p(ex.cr0)}) = <b>${fPP3(ex.rate)}</b><br>
+      ② (${p(ex.w1)} − ${p(ex.w0)}) × (${p(ex.cr0)} − ${p(R.CR0)}) = <b>${fPP3(ex.mix)}</b><br>
+      기여 합계 = ① + ② = <b>${fPP3(ex.tot)}</b></p>`;
+  }
+  if (en) {
+    const n = esc(en.d[en.d.length - 1]);
+    exH += en.st === "end"
+      ? `<p class="muted"><b>예시 — ${n}</b> (⛔ 종료, ${y0} 구성비 ${p(en.w0)}, ${RN} ${p(en.cr0)})<br>③ −${p(en.w0)} × (${p(en.cr0)} − ${p(R.CR0)}) = <b>${fPP3(en.mix)}</b></p>`
+      : `<p class="muted"><b>예시 — ${n}</b> (🆕 신규, ${y1} 구성비 ${p(en.w1)}, ${RN} ${p(en.cr1)})<br>③ ${p(en.w1)} × (${p(en.cr1)} − ${p(R.CR0)}) = <b>${fPP3(en.mix)}</b></p>`;
+  }
+  return `<details class="fx"><summary>📐 산식 보기 (① ${RN} 변화분 · ② 구성비 변화분 · ③ 종료·신규)</summary>
+    <div class="fxb">
+      <p><b>기호</b> · ${RN} = ${CN} ÷ 매출 · 구성비(w) = 품목 매출 ÷ 이 카드 범위 전체 매출 · R<sub>${y0}</sub> = 범위 전체 ${y0} ${RN} (${p(R.CR0)}) · 기준 = SKU</p>
+      <table class="fxt"><tbody>
+        <tr><td>① ${RN} 변화분</td><td>w<sub>${y1}</sub> × (${RN}<sub>${y1}</sub> − ${RN}<sub>${y0}</sub>)</td><td class="muted">구성비가 그대로여도 그 품목 ${RN}이 바뀐 만큼 (두 해 모두 판매한 SKU)</td></tr>
+        <tr><td>② 구성비 변화분</td><td>(w<sub>${y1}</sub> − w<sub>${y0}</sub>) × (${RN}<sub>${y0}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 높은 품목 비중↑ → +, 낮은 품목 비중↑ → − (두 해 모두 판매한 SKU)</td></tr>
+        <tr><td>③ 종료 품목</td><td>− w<sub>${y0}</sub> × (${RN}<sub>${y0}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 낮던 품목이 빠지면 + (전체 ${RN} 올라감)</td></tr>
+        <tr><td>③ 신규 품목</td><td>w<sub>${y1}</sub> × (${RN}<sub>${y1}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 높은 신규 품목이 들어오면 +</td></tr>
+        <tr><td>기여 합계</td><td>① + ② + ③</td><td class="muted">제품군·대분류·소분류 줄 = 그 안 SKU 값의 합</td></tr>
+        <tr><td>검산</td><td>Σ 기여 합계 = R<sub>${y1}</sub> − R<sub>${y0}</sub></td><td class="muted">${p(R.CR1)} − ${p(R.CR0)} = ${fPP2(R.dCR)} (반올림 차이 외 정확히 일치)</td></tr>
+      </tbody></table>${exH}
+    </div></details>`;
+}function pzHtml(P, scope, openSet, mk) { const RN = mk === "V" ? "원가율" : "판촉율";
   openSet = openSet || new Set();
   const R = P.R; let id = 0; const rows = [], txt = [];
   const sk = arr => [...arr.values()].sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
@@ -694,6 +731,7 @@ function pzHtml(P, scope, openSet, mk) { const RN = mk === "V" ? "원가율" : "
   };
   walk(P.root, 0, 0, true);
   const html = `<p>${esc(scope)} ${RN} <b>${fP(R.CR0)} → ${fP(R.CR1)} (${fPP2(R.dCR)})</b> = ① 기존 품목 ${RN} 변화 <b>${fPP2(R.RT)}</b> + ② 구성비 변화 <b>${fPP2(R.MXc)}</b> + ③ 종료·신규 <b>${fPP2(R.END + R.NEW)}</b></p>
+    ${pzFormula(R, RN, mk)}
     <div class="toolbar" style="margin:6px 0"><span class="muted">행 클릭 = 펼치기/접기 · 모든 단계에서 합계가 위 증감과 맞아요</span><span class="sp"></span><button class="sec" data-pzall="1">모두 펼치기</button><button class="sec" data-pzall="0">모두 접기</button></div>
     <div class="tw" style="max-height:560px"><table class="ov pzt"><thead><tr><th>항목</th><th>매출</th><th>구성비</th><th>${RN}</th><th>① ${RN} 변화분</th><th>② 구성비 변화분</th><th>③ 종료·신규</th><th>기여 합계</th><th>누적</th></tr></thead><tbody>${rows.join("")}
     <tr class="tot"><td>합계</td><td class="n">${fN(R.S0)}→${fN(R.S1)}</td><td class="n">100%</td><td class="n">${fP(R.CR0)}→${fP(R.CR1)}</td><td class="n">${fPP2(R.RT)}</td><td class="n">${fPP2(R.MXc)}</td><td class="n">${fPP2(R.END + R.NEW)}</td><td class="n"><b>${fPP2(R.dCR)}</b></td><td></td></tr></tbody></table></div>`;
