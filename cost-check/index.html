@@ -652,7 +652,7 @@ function chainHtml(d, view) {
 /* 🧩 판촉율 증감 퍼즐: 범위 Δ판촉율 = Σ 하위 기여 (단계별로 펼쳐서 합이 맞음) */
 function puzzle(Ls, lvl, view, mk) { mk = mk || "C";
   const R = rateDecomp(Ls, D.nd - 1, view, mk);
-  const levels = []; for (let k = lvl; k < D.nd; k++) if (k === lvl || k === D.nd - 1 || !/제품군/.test(D.dims[k])) levels.push(k);
+  const levels = []; for (let k = lvl; k < D.nd; k++) levels.push(k);   // 제품군 포함 전 단계
   const root = { kids: new Map() };
   for (const r of R.rows) {
     let node = root;
@@ -759,8 +759,8 @@ function buildIns(lvl, f) {
     const pv = ST.pzv && views().includes(ST.pzv) ? ST.pzv : "FY";
     const dpth = insDeep(f), path0 = fk.map(k => f[k]);
     // 섹터: 현재 범위 → 채널 → 팀 → 전체 (각각 따로)
-    const secs = [{ k: dpth, lvl }];
-    for (const k of [1, 0, -1]) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: autoNext(k) });
+    const secs = [{ k: dpth, lvl: Math.min(D.nd - 1, dpth + 1) }];
+    for (const k of [1, 0, -1]) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: k + 1 });
     const openSet = new Set(); const fullPath = []; for (let k = 0; k <= dpth; k++) { fullPath.push(f[k] || ""); openSet.add(fullPath.join("\u0001")); }
     const pm = ST.pzm || "both", mks = pm === "both" ? ["C", "V"] : [pm];
     const bs = "padding:3px 10px;font-size:12px";
