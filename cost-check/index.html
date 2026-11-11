@@ -90,6 +90,12 @@ a.lnk{color:var(--navy2);cursor:pointer;text-decoration:underline;font-size:12px
 .crumb a{color:var(--navy2);cursor:pointer;text-decoration:underline}
 .chain{display:inline-block;margin-top:2px;font-size:11.5px;color:var(--sub)}
 .chain b{color:var(--txt)}
+.pz.hk{cursor:pointer}
+.pz.hk:hover td{background:#eef3fb}
+.tg{display:inline-block;width:10px;color:var(--sub)}
+.pz.d0 td{font-weight:600;background:#fafbfd}
+.pz.d1 td{background:#fff}
+table.pzt td.pzt{background:#f3f6fb}
 .subc{margin:8px 0 2px;padding:5px 8px;background:#f6f8fb;border-radius:4px;line-height:1.55}
 .ins li{margin-bottom:3px}
 .rep td.g.dr{cursor:pointer}
@@ -589,6 +595,55 @@ function chainHtml(d, view) {
   }
   return parts.length ? `↳ 상위로 가면: ${parts.join(" › ")}` : "";
 }
+/* 🧩 판촉율 증감 퍼즐: 범위 Δ판촉율 = Σ 하위 기여 (단계별로 펼쳐서 합이 맞음) */
+function puzzle(Ls, lvl, view) {
+  const R = rateDecomp(Ls, D.nd - 1, view);
+  const levels = []; for (let k = lvl; k < D.nd; k++) if (k === lvl || k === D.nd - 1 || !/제품군/.test(D.dims[k])) levels.push(k);
+  const root = { kids: new Map() };
+  for (const r of R.rows) {
+    let node = root;
+    for (const k of levels) {
+      const key = r.d.slice(0, k + 1).join("\u0001");
+      let c = node.kids.get(key);
+      if (!c) { c = { name: r.d[k], k, kids: new Map(), S0: 0, S1: 0, C0: 0, C1: 0, rate: 0, mix: 0, en: 0, tot: 0, st: null, n: 0 }; node.kids.set(key, c); }
+      c.S0 += r.a.S; c.S1 += r.b.S; c.C0 += r.a.C; c.C1 += r.b.C;
+      c.rate += r.rate; if (r.st === "end" || r.st === "new") c.en += r.mix; else c.mix += r.mix;
+      c.tot += r.tot; c.n++;
+      if (k === D.nd - 1) c.st = r.st;
+      node = c;
+    }
+  }
+  return { R, root, levels };
+}
+function pzHtml(P, scope) {
+  const R = P.R; let id = 0; const rows = [], txt = [];
+  const sk = arr => [...arr.values()].sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
+  const f3 = x => fPP3(x);
+  const walk = (node, depth, pid) => {
+    let cum = 0;
+    for (const c of sk(node.kids)) {
+      const my = ++id; cum += c.tot;
+      const hasK = c.kids.size > 0;
+      const cr0 = c.S0 ? c.C0 / c.S0 : null, cr1 = c.S1 ? c.C1 / c.S1 : null;
+      const w0 = R.S0 ? c.S0 / R.S0 : 0, w1 = R.S1 ? c.S1 / R.S1 : 0;
+      const tag = c.st === "end" ? " ⛔" : c.st === "new" ? " 🆕" : "";
+      rows.push(`<tr data-pz="${my}" data-pp="${pid}" class="pz d${depth}${hasK ? " hk" : ""}" ${depth ? 'style="display:none"' : ""}>
+        <td style="padding-left:${8 + depth * 18}px">${hasK ? '<span class="tg">▸</span> ' : '<span class="tg"> </span> '}${esc(c.name)}${tag} <small class="muted">${esc(D.dims[c.k])}</small></td>
+        <td class="n">${fN(c.S0)}→${fN(c.S1)}</td><td class="n">${fP(w0)}→${fP(w1)}</td><td class="n">${fP(cr0)}→${fP(cr1)}</td>
+        <td class="n${c.rate > 0.00005 ? " neg" : ""}">${f3(c.rate)}</td><td class="n${c.mix > 0.00005 ? " neg" : ""}">${f3(c.mix)}</td><td class="n${c.en > 0.00005 ? " neg" : ""}">${Math.abs(c.en) < 1e-9 ? "" : f3(c.en)}</td>
+        <td class="n pzt${c.tot > 0.00005 ? " neg" : ""}"><b>${f3(c.tot)}</b></td>${depth === 0 ? `<td class="n muted">${f3(cum)}</td>` : "<td></td>"}</tr>`);
+      if (depth < 2) txt.push(`${"  ".repeat(depth)}${depth ? "- " : ""}${c.name}${tag}: 기여 ${f3(c.tot)} (판촉율변화 ${f3(c.rate)}, 구성비 ${f3(c.mix)}${Math.abs(c.en) > 1e-9 ? ", 종료·신규 " + f3(c.en) : ""}) | 판촉율 ${fP(cr0)}→${fP(cr1)}, 매출 ${fN(c.S0)}→${fN(c.S1)}`);
+      if (hasK) walk(c, depth + 1, my);
+    }
+  };
+  walk(P.root, 0, 0);
+  const html = `<p>${esc(scope)} 판촉율 <b>${fP(R.CR0)} → ${fP(R.CR1)} (${fPP2(R.dCR)})</b> = ① 기존 품목 판촉율 변화 <b>${fPP2(R.RT)}</b> + ② 구성비 변화 <b>${fPP2(R.MXc)}</b> + ③ 종료·신규 <b>${fPP2(R.END + R.NEW)}</b></p>
+    <div class="toolbar" style="margin:6px 0"><span class="muted">행 클릭 = 펼치기/접기 · 모든 단계에서 합계가 위 증감과 맞아요</span><span class="sp"></span><button class="sec" data-pzall="1">모두 펼치기</button><button class="sec" data-pzall="0">모두 접기</button></div>
+    <div class="tw" style="max-height:560px"><table class="ov pzt"><thead><tr><th>항목</th><th>매출</th><th>구성비</th><th>판촉율</th><th>① 판촉율 변화분</th><th>② 구성비 변화분</th><th>③ 종료·신규</th><th>기여 합계</th><th>누적</th></tr></thead><tbody>${rows.join("")}
+    <tr class="tot"><td>합계</td><td class="n">${fN(R.S0)}→${fN(R.S1)}</td><td class="n">100%</td><td class="n">${fP(R.CR0)}→${fP(R.CR1)}</td><td class="n">${fPP2(R.RT)}</td><td class="n">${fPP2(R.MXc)}</td><td class="n">${fPP2(R.END + R.NEW)}</td><td class="n"><b>${fPP2(R.dCR)}</b></td><td></td></tr></tbody></table></div>`;
+  const x = `[🧩 판촉율 증감 퍼즐 — ${scope}] ${fP(R.CR0)}→${fP(R.CR1)} (${fPP2(R.dCR)}) = 판촉율변화 ${fPP2(R.RT)} + 구성비 ${fPP2(R.MXc)} + 종료·신규 ${fPP2(R.END + R.NEW)}\n` + txt.join("\n");
+  return { html, x };
+}
 function enItems(R, n) { return R.rows.filter(r => (r.st === "end" || r.st === "new") && Math.abs(r.mix) >= 0.0005).sort((a, b) => Math.abs(b.mix) - Math.abs(a.mix)).slice(0, n); }
 function enLine(r, R, view) { return enLine0(r, R) + `<br><span class="chain">${chainHtml(r.d, view || "FY")}</span>`; }
 function enLine0(r, R) {
@@ -643,6 +698,12 @@ function buildIns(lvl, f) {
   if (en0.length) { oh += `<ul>${en0.map(r => `<li>${enLine(r, RS)}</li>`).join("")}</ul>`; ox += en0.map(r => "  " + strip(enLine(r, RS))).join("\n") + "\n"; }
   const RL = rateDecomp(scopeL, lvl, "FY");
   cards.push({ cls: "b wide", t: `📌 ${esc(scope)} <small>${esc(D.dims[lvl])} 기준 ${gs.length}개</small>`, h: oh, x: ox.trimEnd() });
+  // 🧩 퍼즐
+  {
+    const pv = ST.pzv && views().includes(ST.pzv) ? ST.pzv : "FY";
+    const PZ = pzHtml(puzzle(scopeL, lvl, pv), scope);
+    cards.push({ cls: "b wide", t: `🧩 판촉율 증감 퍼즐 <small>${esc(scope)} · ${esc(D.dims[lvl])} → … → SKU</small> <span class="grp" style="margin-left:auto;display:flex;gap:2px">${views().map(v => `<button class="${v === pv ? "on" : "sec"}" data-pzv="${esc(v)}" style="padding:3px 10px;font-size:12px">${esc(vl(v))}</button>`).join("")}</span>`, h: PZ.html, x: PZ.x });
+  }
   // ② 한눈에 보기 (클릭 → 하위)
   const srt = gs.slice().sort((a, b) => worst(a) - worst(b) || (a.j.FY.dM || 0) - (b.j.FY.dM || 0));
   const lim = srt.slice(0, 60);
@@ -773,7 +834,18 @@ $("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true); };
 $("#clear").onclick = async () => { if (!confirm("저장된 붙여넣기 내용을 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = null; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
 $("#sample").onclick = () => { $("#raw").value = makeSample(); analyze(false).then(() => { setStage(2); toast("샘플 데이터 (가상 숫자)"); }); };
 bindScope(() => ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb", "#sumOut", () => renderSum());
-bindScope(() => ST.ins, "#insFilts", "#insLvl", "#insCrumb", "#insOut", () => renderIns());
+$("#insOut").addEventListener("click", e => {
+  const b = e.target.closest("button[data-pzv]"); if (b) { ST.pzv = b.dataset.pzv; renderIns(); return; }
+  const all = e.target.closest("button[data-pzall]");
+  if (all) { const on = all.dataset.pzall === "1"; $("#insOut").querySelectorAll("tr.pz").forEach(r => { if (!r.classList.contains("d0")) r.style.display = on ? "" : "none"; const t = r.querySelector(".tg"); if (r.classList.contains("hk") && t) t.textContent = on ? "▾" : "▸"; }); return; }
+  const tr = e.target.closest("tr.pz.hk"); if (!tr) return;
+  const tb = tr.parentNode, id = tr.dataset.pz;
+  const kids = [...tb.querySelectorAll(`tr[data-pp="${id}"]`)];
+  const open = kids.some(k => k.style.display !== "none");
+  const hideDesc = pid => tb.querySelectorAll(`tr[data-pp="${pid}"]`).forEach(k => { k.style.display = "none"; const t = k.querySelector(".tg"); if (k.classList.contains("hk") && t) t.textContent = "▸"; hideDesc(k.dataset.pz); });
+  if (open) hideDesc(id); else kids.forEach(k => k.style.display = "");
+  tr.querySelector(".tg").textContent = open ? "▸" : "▾";
+});bindScope(() => ST.ins, "#insFilts", "#insLvl", "#insCrumb", "#insOut", () => renderIns());
 $("#sumCopy").onclick = () => copyText($("#sumOut")._tsv || "", "표를 복사했어요 (엑셀에 붙여넣기)");
 $("#viewBtns").onclick = e => { const b = e.target.closest("button"); if (!b) return; ST.view = b.dataset.v; renderTbl(); };
 $("#lvl").onchange = e => { ST.lvl = +e.target.value; ST.sort = null; renderTbl(); };
