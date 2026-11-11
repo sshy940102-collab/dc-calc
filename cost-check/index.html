@@ -36,6 +36,8 @@ button:disabled{opacity:.4;cursor:default}
 .stages button b{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#c9d0dc;color:#fff;font-size:12px;align-items:center;justify-content:center}
 .stages button.on{color:var(--navy);border-bottom-color:var(--navy);font-weight:700}
 .stages button.on b{background:var(--navy)}
+.bkg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:18px}
+.bkg>div{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:#fafbfd}
 .stages .ngrp{align-self:center;margin-left:14px;padding:3px 10px;border-left:2px solid var(--line);font-size:12px;color:var(--sub);white-space:nowrap;font-weight:600}
 .modebar{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
@@ -140,7 +142,7 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
       · 값 열은 <b>총매출·매출차감·판관비·비용·변동원가·공헌이익(운송비제외)</b> 금액만 사용 (율·총매출2 행은 붙여넣어도 자동으로 무시, 율은 금액으로 다시 계산)<br>
       · <b>판촉비용 = 비용</b>(매출차감+판관비) · <b>CM = 공헌이익(운송비제외)</b> · 연간 = 반기(또는 월) 합계<br>
       · 분석하면 필요한 금액만 <b>가볍게 저장</b>되고 입력칸은 비워져요 (새로고침해도 유지)<br>
-      · <b>💾 백업 텍스트 복사</b> → 메모장·엑셀 A열·메신저에 붙여넣어 보관/팀원 공유 → 받는 사람은 이 칸에 그대로 붙여넣고 분석하기 (여러 줄이면 모든 줄 복사)
+      · 백업 만들기·불러오기는 아래 <b>💾 백업 · 공유</b> 칸에서 (이 칸에 백업 텍스트를 붙여넣어도 돼요)
     </div>
     <textarea id="raw" spellcheck="false" placeholder="여기에 피벗 또는 백업 텍스트(CCHK1~로 시작) 붙여넣기 (Ctrl+V)"></textarea>
     <div class="row">
@@ -148,13 +150,27 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
       <label class="f">SKU 최소 매출 (미만은 SKU 판정 제외)<input type="number" id="minS" step="1" min="0" value="0"></label>
       <button id="go">분석하기</button>
       <button class="sec" id="sample">🧪 샘플 불러오기</button>
-      <button class="sec" id="bkCopy">💾 백업 텍스트 복사</button>
-      <button class="sec" id="bkFile">📄 백업 파일 저장</button>
       <button class="sec" id="clear">🗑 저장된 자료 지우기</button>
     </div>
     <div id="pinfo"></div>
   </div>
   <div class="card">
+    <h2>💾 백업 · 공유 <small>가볍게 보관하거나 팀원에게 전달</small></h2>
+    <div class="bkg">
+      <div>
+        <b>① 백업 만들기</b>
+        <div class="help">지금 분석된 자료를 압축 텍스트로 → 메모장·엑셀 A열·메신저에 붙여넣어 보관/공유</div>
+        <div class="row"><button id="bkCopy">💾 백업 텍스트 복사</button><button class="sec" id="bkFile">📄 백업 파일 저장</button></div>
+      </div>
+      <div>
+        <b>② 백업 불러오기</b>
+        <div class="help">받은 백업 텍스트(CCHK1~로 시작)를 <b>모든 줄</b> 복사 → 아래 칸에 붙여넣고 「불러오기」</div>
+        <textarea id="bkIn" style="height:80px" spellcheck="false" placeholder="CCHK1~1/1|……|END"></textarea>
+        <div class="row"><button id="bkLoad">📥 불러오기</button><button class="sec" id="bkClip">📋 클립보드에서 바로 불러오기</button><button class="sec" id="bkOpen">📂 백업 파일 열기</button><input type="file" id="bkFileIn" accept=".txt,text/plain" hidden></div>
+        <div id="bkInfo"></div>
+      </div>
+    </div>
+  </div>  <div class="card">
     <h2>판정 기준</h2>
     <div class="help">
       <span class="j red">🔴 큰 문제</span> 판촉비용율 ↑ + 매출 ↓(또는 동일)<br>
@@ -971,7 +987,20 @@ $("#stages").addEventListener("click", e => { const b = e.target.closest("button
 $("#go").onclick = () => analyze(true);
 $("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true, true); };
 $("#clear").onclick = async () => { if (!confirm("저장된 자료를 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = DC = DP = null; ST.saved = {}; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
-$("#bkCopy").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); copyText(b, `백업 텍스트 복사 (${b.split("\n").length}줄, ${Math.round(b.length / 1024)}KB) → 메모장·엑셀 A열·메신저에 붙여넣어 보관/공유`); };
+async function loadBackupText(txt) {
+  const info = $("#bkInfo");
+  txt = (txt || "").replace(/^\uFEFF/, "");
+  if (!/CCHK1~/.test(txt)) { info.innerHTML = '<div class="chips"><span class="chip no">❌ 백업 텍스트가 아니에요 (CCHK1~ 로 시작해야 해요)</span></div>'; return; }
+  try { await readBackup(txt); }
+  catch (e) { info.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; return; }
+  $("#raw").value = txt.slice(txt.indexOf("CCHK1~")); $("#bkIn").value = "";
+  info.innerHTML = '<div class="chips"><span class="chip ok">✅ 불러왔어요</span></div>';
+  await analyze(true);
+}
+$("#bkLoad").onclick = () => loadBackupText($("#bkIn").value);
+$("#bkClip").onclick = async () => { try { const s = await navigator.clipboard.readText(); $("#bkIn").value = s; loadBackupText(s); } catch (e) { $("#bkInfo").innerHTML = '<div class="chips"><span class="chip w">⚠ 클립보드 읽기가 막혀 있어요 → 위 칸에 Ctrl+V 후 「불러오기」</span></div>'; } };
+$("#bkOpen").onclick = () => $("#bkFileIn").click();
+$("#bkFileIn").onchange = e => { const fl = e.target.files[0]; if (!fl) return; const r = new FileReader(); r.onload = () => loadBackupText(String(r.result)); r.onerror = () => { $("#bkInfo").innerHTML = '<div class="chips"><span class="chip no">❌ 파일을 읽지 못했어요 (보안 프로그램이 막았을 수 있어요) → 텍스트 복사로 해주세요</span></div>'; }; r.readAsText(fl, "utf-8"); e.target.value = ""; };$("#bkCopy").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); copyText(b, `백업 텍스트 복사 (${b.split("\n").length}줄, ${Math.round(b.length / 1024)}KB) → 메모장·엑셀 A열·메신저에 붙여넣어 보관/공유`); };
 $("#bkFile").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([b], { type: "text/plain" })); a.download = "판촉비용율점검_백업_" + new Date().toISOString().slice(0, 10) + ".txt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
 $("#sample").onclick = () => { $("#raw").value = makeSample(); analyze(false).then(() => { setStage(2); toast("샘플 데이터 (가상 숫자)"); }); };
 bindScope(() => ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb", "#sumOut", () => renderSum());
