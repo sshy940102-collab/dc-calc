@@ -48,6 +48,8 @@ button:disabled{opacity:.4;cursor:default}
 .msl label:hover{background:#f2f6fd}
 .msa{display:flex;gap:6px;justify-content:flex-end;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
 .msa button{padding:4px 12px}.stages .ngrp{align-self:center;margin-left:14px;padding:3px 10px;border-left:2px solid var(--line);font-size:12px;color:var(--sub);white-space:nowrap;font-weight:600}
+.cmpb{display:inline-flex;gap:3px;align-items:center;margin-left:16px;flex-wrap:wrap}
+.cmpb button{padding:3px 10px;font-size:12px}
 .modebar{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .stg{display:none}
@@ -246,8 +248,8 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&am
 const IC = { red: "🔴", warn: "⚠️", up: "🟢", ok: "✅", new: "🆕", end: "⛔", na: "·" };
 const LB = { red: "큰 문제", warn: "문제", up: "판촉↑·CM유지", ok: "OK", new: "신규", end: "종료", na: "-" };
 const SEV = { red: 0, warn: 1, up: 2, new: 3, end: 4, ok: 5, na: 6 };
-const ST = { mode: "c", saved: {}, thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null } };
-let D = null, DC = null, DP = null;
+const ST = { mode: "c", cmp: "year", saved: {}, thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null } };
+let D = null, DC = null, DP = null, DC0 = null;
 const LEAF = () => D && D.mode === "p" ? "SKU·채널" : "SKU";
 const LEAF_END = () => D && D.mode === "p" ? D.dims[D.nd - 1] : "SKU";
 function permuteD(X) {
@@ -256,7 +258,26 @@ function permuteD(X) {
   const order = [...X.dims.map((_, i) => i).filter(i => !head.includes(i)), ...head];
   return Object.assign({}, X, { mode: "p", dims: order.map(i => X.dims[i]), leaves: X.leaves.map(L => ({ d: order.map(i => L.d[i]), v: L.v })) });
 }
-function setModes(X) { X.mode = "c"; DC = X; DP = permuteD(X); D = ST.mode === "p" ? DP : DC; }
+function setModes(X) { DC0 = X; X.mode = "c"; if (ST.cmp !== "year" && !(X.years || []).includes(ST.cmp)) ST.cmp = "year"; applyCmp(); }
+function applyCmp() {
+  const B = ST.cmp === "year" ? DC0 : halfD(DC0, ST.cmp);
+  B.mode = "c"; DC = B; DP = permuteD(B); D = ST.mode === "p" ? DP : DC;
+}
+/* 상반기 → 하반기 비교: 같은 해 앞쪽 기간 vs 뒤쪽 기간 */
+function halfD(X, y) {
+  const n = X.subs.length, h = Math.ceil(n / 2), A = X.subs.slice(0, h), B = X.subs.slice(h);
+  if (!B.length) return X;
+  const nmP = ss => ss.length === 1 ? ss[0] : ss[0] + "~" + ss[ss.length - 1];
+  const la = `${yl(y)} ${nmP(A)}`, lb = `${yl(y)} ${nmP(B)}`;
+  const sumS = (v, ss) => { const o = { S: 0, D: 0, P: 0, C: 0, V: 0, M: 0 }; for (const s of ss) { const x = v && v[s]; if (x) for (const k in o) o[k] += x[k]; } return o; };
+  return Object.assign({}, X, { y0: la, y1: lb, years: [la, lb], subs: ["기간"], cmp: "half", mode: "c",
+    leaves: X.leaves.map(L => ({ d: L.d, v: { [la]: { 기간: sumS(L.v[y], A) }, [lb]: { 기간: sumS(L.v[y], B) } } })) });
+}
+function cmpBar() {
+  if (!DC0) return "";
+  const opts = [["year", `${yl(DC0.y0)} → ${yl(DC0.y1)} (연도 비교)`], ...[DC0.y0, DC0.y1].map(y => [y, `${yl(y)} 상반기 → 하반기`])];
+  return `<span class="cmpb">비교 기준: ${opts.map(([k, n]) => `<button class="${k === ST.cmp ? "on" : "sec"}" data-cmp="${esc(k)}">${esc(n)}</button>`).join("")}</span>`;
+}
 const VIEWF = ["lvl", "filt", "sort", "view", "jf", "q", "sum", "ins", "pzv", "pzm"];
 function viewDefaults() { return { lvl: Math.min(1, D.nd - 1), filt: {}, sort: null, view: "FY", jf: "all", q: "", sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null }, pzv: ST.pzv, pzm: ST.pzm }; }
 function switchMode(m) {
@@ -278,7 +299,7 @@ const fGr = x => (x == null || !isFinite(x)) ? "-" : r1(x) + "%";
 const nc = x => (x != null && isFinite(x) && Math.round(x) < 0) ? " neg" : "";
 const jb = k => `<span class="j ${k}">${IC[k]} ${LB[k]}</span>`;
 const yl = y => /^\d{4}$/.test(y) ? y.slice(2) + "년" : y;
-const vl = v => v === "FY" ? "연간" : v;
+const vl = v => v === "FY" ? (D && D.cmp === "half" ? "상→하" : "연간") : v;
 
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1800); }
 function copyText(s, msg) {
@@ -466,7 +487,7 @@ function groups(lvl, f) {
   }
   return [...m.values()];
 }
-const views = () => [...D.subs, "FY"];
+const views = () => D.cmp === "half" ? ["FY"] : [...D.subs, "FY"];
 function evalG(g) { g.j = {}; for (const v of views()) g.j[v] = judge(sumv(g.L, D.y0, v), sumv(g.L, D.y1, v)); return g; }
 const isSku = lvl => lvl === D.nd - 1;
 const bigEnough = g => Math.max(Math.abs(g.j.FY.a.S), Math.abs(g.j.FY.b.S)) >= ST.minS;
@@ -479,7 +500,7 @@ const path = g => g.d.slice(0, -1).join(" > ");
 const MK6 = ["S", "D", "P", "C", "V", "M"];
 const rnd = x => Math.round(x * 1000) / 1000;
 function toCompact() {
-  const X = DC || D; return { v: 1, dims: X.dims, y: [X.y0, X.y1], subs: X.subs, mf: X.mf,
+  const X = DC0 || DC || D; return { v: 1, dims: X.dims, y: [X.y0, X.y1], subs: X.subs, mf: X.mf,
     L: X.leaves.map(L => [L.d, [X.y0, X.y1].flatMap(y => X.subs.flatMap(s => MK6.map(k => rnd(L.v[y][s][k]))))]) };
 }
 function fromCompact(o) {
@@ -615,7 +636,7 @@ function colDefs() {
   const C = [];
   for (let k = 0; k <= ST.lvl; k++) C.push({ h: D.dims[k], v: g => g.d[k], t: "s" });
   C.push({ h: "판정", v: g => SEV[g.jj.k], html: g => jb(g.jj.k), txt: g => IC[g.jj.k] + " " + LB[g.jj.k] });
-  if (ST.view === "FY") C.push({ h: "반기 판정", v: g => Math.min(...D.subs.map(s => SEV[g.j[s].k])), html: g => D.subs.map(s => `<span title="${esc(s)}: ${LB[g.j[s].k]}">${esc(s.slice(0, 1))}${IC[g.j[s].k]}</span>`).join(" "), txt: g => D.subs.map(s => s + IC[g.j[s].k]).join(" ") });
+  if (ST.view === "FY" && D.cmp !== "half") C.push({ h: "반기 판정", v: g => Math.min(...D.subs.map(s => SEV[g.j[s].k])), html: g => D.subs.map(s => `<span title="${esc(s)}: ${LB[g.j[s].k]}">${esc(s.slice(0, 1))}${IC[g.j[s].k]}</span>`).join(" "), txt: g => D.subs.map(s => s + IC[g.j[s].k]).join(" ") });
   const A = [
     ["매출 " + y0, g => g.jj.a.S, fN], ["매출 " + y1, g => g.jj.b.S, fN], ["매출 Δ", g => g.jj.dS, fD, 1], ["매출 Δ%", g => g.jj.dSp, fGr, 1],
     ["판촉비용 " + y0, g => g.jj.a.C, fN], ["판촉비용 " + y1, g => g.jj.b.C, fN],
@@ -644,6 +665,7 @@ function filtOk(g) {
   return true;
 }
 function renderTbl() {
+  if (D && !views().includes(ST.view)) ST.view = "FY";
   const out = $("#tblOut");
   if (!D) { out.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; return; }
   $("#viewBtns").innerHTML = views().map(v => `<button class="${v === ST.view ? "on" : "sec"}" data-v="${esc(v)}">${esc(vl(v))}</button>`).join("");
@@ -929,11 +951,11 @@ function buildIns(lvl, f) {
   let oh = "<ul>", ox = `[개요] ${scope} / ${D.dims[lvl]} 기준 ${gs.length}개 / 비교 ${yl(D.y0)}→${yl(D.y1)}\n`;
   for (const v of V) { const j = tot.j[v], c = cntBy(v); oh += `<li><b>${esc(vl(v))}</b> ${jb(j.k)} ${line(j)} <span class="muted">— 🔴${c.red || 0} ⚠️${c.warn || 0} 🟢${c.up || 0} ✅${c.ok || 0}</span></li>`; ox += `· ${vl(v)} ${IC[j.k]}${LB[j.k]}: ${line(j)} (🔴${c.red || 0} ⚠️${c.warn || 0} 🟢${c.up || 0} ✅${c.ok || 0})\n`; }
   oh += "</ul>";
-  if (tot.j.FY.eS != null) { oh += `<p class="muted">연간 CM 분해: ${decomp(tot.j.FY)}</p>`; ox += `· 연간 CM 분해: ${decomp(tot.j.FY)}\n`; }
+  if (tot.j.FY.eS != null) { oh += `<p class="muted">${vl("FY")} CM 분해: ${decomp(tot.j.FY)}</p>`; ox += `· ${vl("FY")} CM 분해: ${decomp(tot.j.FY)}\n`; }
   const scopeL = gs.flatMap(g => g.L);
   const RS = rateDecomp(scopeL, D.nd - 1, "FY");
-  oh += `<p>📐 <b>판촉율 증감 분해</b> (연간, ${LEAF()} 기준): ${rdLine(RS, "기존 " + LEAF())}</p>`;
-  ox += `· 판촉율 증감 분해(연간, ${LEAF()} 기준): ${strip(rdLine(RS, "기존 " + LEAF()))}\n`;
+  oh += `<p>📐 <b>판촉율 증감 분해</b> (${vl("FY")}, ${LEAF()} 기준): ${rdLine(RS, "기존 " + LEAF())}</p>`;
+  ox += `· 판촉율 증감 분해(${vl("FY")}, ${LEAF()} 기준): ${strip(rdLine(RS, "기존 " + LEAF()))}\n`;
   { const EN = enSkuHtml(RS, "FY"); oh += EN.h; ox += EN.x; }
   const RL = rateDecomp(scopeL, lvl, "FY");
   cards.push({ cls: "b wide", t: `📌 ${esc(scope)} <small>${esc(D.dims[lvl])} 기준 ${gs.length}개</small>`, h: oh, x: ox.trimEnd() });
@@ -966,8 +988,8 @@ function buildIns(lvl, f) {
   const canDrill = lvl < D.nd - 1;
   cards.push({
     cls: "b wide", t: `🧭 ${esc(D.dims[lvl])}별 한눈에 보기 ${canDrill ? `<small>행 클릭 → ${esc(D.dims[autoNext(lvl)])}(으)로 내려가기</small>` : ""}`,
-    h: `<div class="tw" style="max-height:420px"><table class="ov"><thead><tr><th>${esc(D.dims[lvl])}</th>${V.map(v => `<th>${esc(vl(v))}</th>`).join("")}<th>매출 (연간)</th><th>판촉율 (연간)</th><th>CM (연간)</th><th title="이 항목이 범위 전체 판촉율 증감에 준 영향 (합계 = 전체 증감)">판촉율 기여</th><th>판촉율효과</th></tr></thead><tbody>${lim.map((g, i) => { const j = g.j.FY; return `<tr ${canDrill ? `data-drill="${esc(JSON.stringify(g.d))}" class="dr"` : ""}><td><b>${esc(nm(g))}</b>${canDrill ? ' <span class="muted">▸</span>' : ""}</td>${V.map(v => `<td>${IC[g.j[v].k]} <span class="muted">${LB[g.j[v].k]}</span></td>`).join("")}<td class="n">${fN(j.a.S)}→${fN(j.b.S)} <span class="${nc(j.dS)}">(${fGr(j.dSp)})</span></td><td class="n">${fP(j.cr0)}→${fP(j.cr1)} <span class="${j.dcr != null && j.dcr * 100 > ST.thr + 1e-9 ? "neg" : ""}">(${fPP(j.dcr)})</span></td><td class="n">${fN(j.a.M)}→${fN(j.b.M)} <span class="${nc(j.dM)}">(${fD(j.dM)})</span></td><td class="n${(RL.map.get(g.d.join("\u0001")) || {}).tot > 0.00005 ? " neg" : ""}">${fPP2((RL.map.get(g.d.join("\u0001")) || {}).tot)}${(RL.map.get(g.d.join("\u0001")) || {}).st === "end" ? " ⛔" : (RL.map.get(g.d.join("\u0001")) || {}).st === "new" ? " 🆕" : ""}</td><td class="n${nc(j.eC)}">${fD(j.eC)}</td></tr>`; }).join("")}<tr class="tot"><td>합계</td>${V.map(() => "<td></td>").join("")}<td></td><td class="n">${fP(RL.CR0)}→${fP(RL.CR1)}</td><td></td><td class="n">${fPP2(RL.dCR)}</td><td></td></tr></tbody></table></div>${srt.length > lim.length ? `<p class="muted">상위 ${lim.length}개만 표시 (전체 ${srt.length}개는 판정표에서)</p>` : ""}`,
-    x: `[${D.dims[lvl]}별 한눈에]\n` + srt.slice(0, 30).map(g => `${nm(g)}: ` + V.map(v => vl(v) + IC[g.j[v].k]).join(" ") + ` | 연간 ${line(g.j.FY)} | 판촉율 기여 ${fPP2((RL.map.get(g.d.join("\u0001")) || {}).tot)}`).join("\n")
+    h: `<div class="tw" style="max-height:420px"><table class="ov"><thead><tr><th>${esc(D.dims[lvl])}</th>${V.map(v => `<th>${esc(vl(v))}</th>`).join("")}<th>매출 (${esc(vl("FY"))})</th><th>판촉율 (${esc(vl("FY"))})</th><th>CM (${esc(vl("FY"))})</th><th title="이 항목이 범위 전체 판촉율 증감에 준 영향 (합계 = 전체 증감)">판촉율 기여</th><th>판촉율효과</th></tr></thead><tbody>${lim.map((g, i) => { const j = g.j.FY; return `<tr ${canDrill ? `data-drill="${esc(JSON.stringify(g.d))}" class="dr"` : ""}><td><b>${esc(nm(g))}</b>${canDrill ? ' <span class="muted">▸</span>' : ""}</td>${V.map(v => `<td>${IC[g.j[v].k]} <span class="muted">${LB[g.j[v].k]}</span></td>`).join("")}<td class="n">${fN(j.a.S)}→${fN(j.b.S)} <span class="${nc(j.dS)}">(${fGr(j.dSp)})</span></td><td class="n">${fP(j.cr0)}→${fP(j.cr1)} <span class="${j.dcr != null && j.dcr * 100 > ST.thr + 1e-9 ? "neg" : ""}">(${fPP(j.dcr)})</span></td><td class="n">${fN(j.a.M)}→${fN(j.b.M)} <span class="${nc(j.dM)}">(${fD(j.dM)})</span></td><td class="n${(RL.map.get(g.d.join("\u0001")) || {}).tot > 0.00005 ? " neg" : ""}">${fPP2((RL.map.get(g.d.join("\u0001")) || {}).tot)}${(RL.map.get(g.d.join("\u0001")) || {}).st === "end" ? " ⛔" : (RL.map.get(g.d.join("\u0001")) || {}).st === "new" ? " 🆕" : ""}</td><td class="n${nc(j.eC)}">${fD(j.eC)}</td></tr>`; }).join("")}<tr class="tot"><td>합계</td>${V.map(() => "<td></td>").join("")}<td></td><td class="n">${fP(RL.CR0)}→${fP(RL.CR1)}</td><td></td><td class="n">${fPP2(RL.dCR)}</td><td></td></tr></tbody></table></div>${srt.length > lim.length ? `<p class="muted">상위 ${lim.length}개만 표시 (전체 ${srt.length}개는 판정표에서)</p>` : ""}`,
+    x: `[${D.dims[lvl]}별 한눈에]\n` + srt.slice(0, 30).map(g => `${nm(g)}: ` + V.map(v => vl(v) + IC[g.j[v].k]).join(" ") + ` | ${vl("FY")} ${line(g.j.FY)} | 판촉율 기여 ${fPP2((RL.map.get(g.d.join("\u0001")) || {}).tot)}`).join("\n")
   });
   // ③ 문제 항목 카드
   const bad = gs.filter(g => V.some(v => g.j[v].k === "red" || g.j[v].k === "warn")).sort((a, b) => worst(a) - worst(b) || (a.j.FY.dM || 0) - (b.j.FY.dM || 0));
@@ -977,7 +999,7 @@ function buildIns(lvl, f) {
     for (const v of V) { const j = g.j[v]; h += `<li><b>${esc(vl(v))}</b> ${jb(j.k)} ${line(j)}</li>`; x += `· ${vl(v)} ${IC[j.k]}${LB[j.k]}: ${line(j)}\n`; }
     h += "</ul>";
     const fy = g.j.FY;
-    if (fy.eS != null) { h += `<p class="muted">연간 CM 분해: ${decomp(fy)}</p>`; x += `· 연간 CM 분해: ${decomp(fy)}\n`; }
+    if (fy.eS != null) { h += `<p class="muted">${vl("FY")} CM 분해: ${decomp(fy)}</p>`; x += `· ${vl("FY")} CM 분해: ${decomp(fy)}\n`; }
     if (!isSku(lvl)) {
       const vk = V.filter(v => g.j[v].k === "red" || g.j[v].k === "warn");
       const v0 = vk.includes("FY") ? "FY" : vk[0];
@@ -1021,9 +1043,9 @@ function buildIns(lvl, f) {
     if (top.length) {
       const sd = D.dims.slice(0, -1).map((d, i) => i).filter(i => i > insDeep(f));
       cards.push({
-        cls: "b wide", t: `🔎 ${esc(scope)} 문제 ${esc(LEAF())} TOP ${top.length} <small>연간, CM 감소 큰 순</small>`,
+        cls: "b wide", t: `🔎 ${esc(scope)} 문제 ${esc(LEAF())} TOP ${top.length} <small>${vl("FY")}, CM 감소 큰 순</small>`,
         h: `<div class="tw" style="max-height:none"><table><thead><tr><th>판정</th>${sd.map(i => `<th>${esc(D.dims[i])}</th>`).join("")}<th>${esc(LEAF_END())}</th><th>매출</th><th>판촉율</th><th>CM</th><th>판촉율효과</th></tr></thead><tbody>${top.map(s => { const j = s.j.FY; return `<tr><td>${jb(j.k)}</td>${sd.map(i => `<td>${esc(s.d[i])}</td>`).join("")}<td>${esc(nm(s))}</td><td class="n">${fN(j.a.S)}→${fN(j.b.S)}</td><td class="n">${fP(j.cr0)}→${fP(j.cr1)}</td><td class="n">${fN(j.a.M)}→${fN(j.b.M)} <span class="neg">(${fD(j.dM)})</span></td><td class="n neg">${fD(j.eC)}</td></tr>`; }).join("")}</tbody></table></div>`,
-        x: `[${scope} 문제 ${LEAF()} TOP ${top.length} (연간)]\n` + top.map(s => { const j = s.j.FY; return `${IC[j.k]} ${s.d.join(" > ")}: 매출 ${fN(j.a.S)}→${fN(j.b.S)}, 판촉율 ${fP(j.cr0)}→${fP(j.cr1)}, CM ${fN(j.a.M)}→${fN(j.b.M)}(${fD(j.dM)}), 판촉율효과 ${fD(j.eC)}`; }).join("\n")
+        x: `[${scope} 문제 ${LEAF()} TOP ${top.length} (${vl("FY")})]\n` + top.map(s => { const j = s.j.FY; return `${IC[j.k]} ${s.d.join(" > ")}: 매출 ${fN(j.a.S)}→${fN(j.b.S)}, 판촉율 ${fP(j.cr0)}→${fP(j.cr1)}, CM ${fN(j.a.M)}→${fN(j.b.M)}(${fD(j.dM)}), 판촉율효과 ${fD(j.eC)}`; }).join("\n")
       });
     }
   }
@@ -1065,7 +1087,7 @@ function insDrill(d) { ST.ins.filt = drillF(ST.ins.filt, d); ST.ins.unit = null;
 function aiSummary() {
   if (!D) return "";
   const L = [];
-  L.push(`[판촉비용율 점검 요약] 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${D.subs.join("·")}·연간 / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
+  L.push(`[판촉비용율 점검 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")} / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
   L.push(`판정: 🔴 판촉율↑(>${ST.thr}%p)+매출↓, ⚠️ 판촉율↑+매출↑+CM↓, 🟢 판촉율↑+CM 동등 이상, ✅ 판촉율 유지·개선`);
   L.push("");
   L.push(`■ ${D.dims[0]}별`);
@@ -1081,13 +1103,18 @@ function aiSummary() {
 }
 
 /* ---------- 공통 ---------- */
-function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || !D; if (D) mb.innerHTML = ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`; } window.scrollTo(0, 0); }
+function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpBar(); } window.scrollTo(0, 0); }
 function renderAll() { renderSum(); renderTbl(); renderIns(); }
 
-$("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.m) switchMode(b.dataset.m); setStage(b.dataset.s); });
+$("#modeBar").addEventListener("click", e => {
+  const b = e.target.closest("button[data-cmp]"); if (!b || !DC0) return;
+  ST.cmp = b.dataset.cmp; applyCmp(); ST.view = "FY"; ST.pzv = "FY"; ST.saved = {};
+  renderAll(); setStage(document.body.dataset.stage);
+  toast(ST.cmp === "year" ? "연도 비교로 바꿨어요" : `${yl(ST.cmp)} 상반기 → 하반기 비교로 바꿨어요`);
+});$("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.m) switchMode(b.dataset.m); setStage(b.dataset.s); });
 $("#go").onclick = () => analyze(true);
 $("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true, true); };
-$("#clear").onclick = async () => { if (!confirm("저장된 자료를 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = DC = DP = null; ST.saved = {}; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
+$("#clear").onclick = async () => { if (!confirm("저장된 자료를 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = DC = DP = DC0 = null; ST.saved = {}; ST.cmp = "year"; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
 async function loadBackupText(txt) {
   const info = $("#bkInfo");
   txt = (txt || "").replace(/^\uFEFF/, "");
