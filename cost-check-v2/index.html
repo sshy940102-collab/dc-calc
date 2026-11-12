@@ -601,7 +601,11 @@ function msBind(el, getF, after) {
     if (e.target.closest("[data-msok]")) {
       const k = +ms.dataset.fk, vals = [...pop.querySelectorAll("input:checked")].map(i => i.value), F = getF();
       if (!vals.length) delete F[k]; else F[k] = vals.length === 1 ? vals[0] : vals;
-      Object.keys(F).forEach(j => { if (+j > k) delete F[j]; }); pop.hidden = true; after();
+      Object.keys(F).forEach(j => { if (+j > k) delete F[j]; });
+      // 하위를 고르면 비어 있는 상위 단계는 자동으로 맞춤 (예: 팀 D.SSM → 부문 유통). 상위가 2개 이상에 걸치면 그대로 둠
+      if (vals.length) { const Ls = D.leaves.filter(L => passF(L, F));
+        for (let j = k - 1; j >= 0; j--) { if (F[j] && !(Array.isArray(F[j]) && !F[j].length)) continue; const u = [...new Set(Ls.map(L => L.d[j]))]; if (u.length === 1) F[j] = u[0]; } }
+      pop.hidden = true; after();
     }
   });
 }
