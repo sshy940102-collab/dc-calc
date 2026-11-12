@@ -260,10 +260,43 @@ function permuteD(X) {
   const order = [...X.dims.map((_, i) => i).filter(i => !head.includes(i)), ...head];
   return Object.assign({}, X, { mode: "p", dims: order.map(i => X.dims[i]), leaves: X.leaves.map(L => ({ d: order.map(i => L.d[i]), v: L.v })) });
 }
-function setModes(X) { DC0 = X; X.mode = "c"; if (ST.cmp !== "year" && !(X.years || []).includes(ST.cmp)) ST.cmp = "year"; applyCmp(); }
+function setModes(X) { DC0 = X; X.mode = "c"; ST.per = null; if (ST.cmp === "per" ? !isMonthly(X) : (ST.cmp !== "year" && !(X.years || []).includes(ST.cmp))) ST.cmp = "year"; applyCmp(); }
 function applyCmp() {
-  const B = ST.cmp === "year" ? DC0 : halfD(DC0, ST.cmp);
+  let base = DC0;
+  if (isMonthly(DC0) && ST.cmp !== "per") base = halvesD(DC0);   // 월별 자료도 연도·상→하 비교는 Ver1과 같은 상/하반기 화면
+  const B = ST.cmp === "year" ? base : ST.cmp === "per" ? periodD(DC0, perGet()) : halfD(base, ST.cmp);
   B.mode = "c"; DC = B; DP = permuteD(B); D = ST.mode === "p" ? DP : DC;
+}
+/* 월별 자료: 연도별로 실제 값이 있는 달 */
+function monthsOf(X, y) {
+  if (!X._my) X._my = {};
+  if (!X._my[y]) { const s = new Set(); for (const L of X.leaves) for (const m of X.subs) { const v = L.v[y] && L.v[y][m]; if (v && (v.S || v.C || v.V || v.M || v.D || v.P)) s.add(m); } X._my[y] = X.subs.filter(m => s.has(m)).map(m => parseInt(m)); }
+  return X._my[y];
+}
+const sum6 = (v, ss) => { const o = { S: 0, D: 0, P: 0, C: 0, V: 0, M: 0 }; for (const s of ss) { const x = v && v[s]; if (x) for (const k in o) o[k] += x[k]; } return o; };
+/* 월별 → 상/하반기 (두 연도 모두 값이 있는 달만) */
+function halvesD(X) {
+  const a = new Set(monthsOf(X, X.y0)), common = monthsOf(X, X.y1).filter(m => a.has(m));
+  const H = [["상반기", common.filter(m => m <= 6)], ["하반기", common.filter(m => m > 6)]].filter(h => h[1].length);
+  const nm = (n, ms) => ms.length === 6 ? n : `${n}(${ms[0]}~${ms[ms.length - 1]}월)`;
+  const subs = H.map(([n, ms]) => nm(n, ms));
+  return Object.assign({}, X, { subs, mode: "c", leaves: X.leaves.map(L => { const v = {}; for (const y of [X.y0, X.y1]) { v[y] = {}; H.forEach(([n, ms], i) => v[y][subs[i]] = sum6(L.v[y], ms.map(m => m + "월"))); } return { d: L.d, v }; }) });
+}
+/* 📅 기간 비교: 기준 기간 vs 비교 기간, 금액 = 월평균 (합 ÷ 개월수) · 율은 합계 기준과 동일 */
+function perDefault(X) {
+  const a = monthsOf(X, X.y0), b = monthsOf(X, X.y1);
+  const q4 = a.filter(m => m >= 10);
+  return { a: { y: X.y0, m0: q4.length ? q4[0] : (a[0] || 1), m1: a[a.length - 1] || 12 }, b: { y: X.y1, m0: b[0] || 1, m1: b[b.length - 1] || 12 } };
+}
+function perGet() { if (!ST.per) ST.per = perDefault(DC0); return ST.per; }
+function perMonths(X, p) { return monthsOf(X, p.y).filter(m => m >= p.m0 && m <= p.m1); }
+function perLabel(p, ms) { return `${yl(p.y)} ${p.m0 === p.m1 ? p.m0 + "월" : p.m0 + "~" + p.m1 + "월"}`; }
+function periodD(X, P) {
+  const A = perMonths(X, P.a), B = perMonths(X, P.b);
+  let la = perLabel(P.a, A), lb = perLabel(P.b, B); if (la === lb) lb += " ";
+  const avg = (v, ms) => { const o = sum6(v, ms.map(m => m + "월")), n = ms.length || 1; for (const k in o) o[k] /= n; return o; };
+  return Object.assign({}, X, { y0: la, y1: lb, years: [la, lb], subs: ["월평균"], cmp: "per", nA: A.length, nB: B.length, mode: "c",
+    leaves: X.leaves.map(L => ({ d: L.d, v: { [la]: { 월평균: avg(L.v[P.a.y], A) }, [lb]: { 월평균: avg(L.v[P.b.y], B) } } })) });
 }
 /* 상반기 → 하반기 비교: 같은 해 앞쪽 기간 vs 뒤쪽 기간 */
 function halfD(X, y) {
@@ -277,8 +310,21 @@ function halfD(X, y) {
 }
 function cmpBar() {
   if (!DC0) return "";
-  const opts = [["year", `${yl(DC0.y0)} → ${yl(DC0.y1)} (연도 비교)`], ...[DC0.y0, DC0.y1].map(y => [y, `${yl(y)} 상반기 → 하반기`])];
-  return `<span class="cmpb">비교 기준: ${opts.map(([k, n]) => `<button class="${k === ST.cmp ? "on" : "sec"}" data-cmp="${esc(k)}">${esc(n)}</button>`).join("")}</span>`;
+  const mon = isMonthly(DC0);
+  const opts = [["year", `${yl(DC0.y0)} → ${yl(DC0.y1)} (연도 비교)`], ...[DC0.y0, DC0.y1].map(y => [y, `${yl(y)} 상반기 → 하반기`]), ...(mon ? [["per", "📅 기간 비교 (월평균)"]] : [])];
+  let h = `<span class="cmpb">비교 기준: ${opts.map(([k, n]) => `<button class="${k === ST.cmp ? "on" : "sec"}" data-cmp="${esc(k)}">${esc(n)}</button>`).join("")}</span>`;
+  if (mon && ST.cmp === "per") {
+    const P = perGet(), yrs = [DC0.y0, DC0.y1];
+    const sel = (w, f, opts2, cur) => `<select data-per="${w}.${f}" style="padding:2px 4px">${opts2.map(([v, n]) => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`;
+    const ms = Array.from({ length: 12 }, (_, i) => [i + 1, (i + 1) + "월"]);
+    const side = (w, t) => { const p = P[w], have = monthsOf(DC0, p.y), n = perMonths(DC0, p).length;
+      return `<b>${t}</b> ${sel(w, "y", yrs.map(y => [y, yl(y)]), p.y)} ${sel(w, "m0", ms, p.m0)}~${sel(w, "m1", ms, p.m1)} <span class="muted">(${n}개월${have.length < 12 ? `, 자료 있는 달 ${have[0]}~${have[have.length - 1]}월` : ""})</span>`; };
+    const pre = (k, n) => `<button class="sec" data-perp="${k}" style="padding:2px 8px;font-size:12px">${n}</button>`;
+    h += `<div class="cmpb" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">${side("a", "기준")} <span>→</span> ${side("b", "비교")}
+      <span class="muted">빠른 선택:</span>${pre("q4fy", `${yl(DC0.y0)} 4Q → ${yl(DC0.y1)} 연간`)}${pre("q4q4", `${yl(DC0.y0)} 4Q → ${yl(DC0.y1)} 4Q (같은 계절)`)}${pre("fyfy", "연간 → 연간")}
+      <span class="muted" style="flex-basis:100%">💡 매출·판촉비·CM 금액 = <b>월평균</b>(기간 합 ÷ 개월수) · 판촉율·원가율·CM율·구성비·퍼즐은 개월수와 무관하게 그대로</span></div>`;
+  }
+  return h;
 }
 const VIEWF = ["lvl", "filt", "sort", "view", "jf", "q", "sum", "ins", "pzv", "pzm", "pzo"];
 function viewDefaults() { return { lvl: Math.min(1, D.nd - 1), filt: {}, sort: null, view: "FY", jf: "all", q: "", sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null }, pzv: ST.pzv, pzm: ST.pzm, pzo: ST.pzo }; }
@@ -301,7 +347,7 @@ const fGr = x => (x == null || !isFinite(x)) ? "-" : r1(x) + "%";
 const nc = x => (x != null && isFinite(x) && Math.round(x) < 0) ? " neg" : "";
 const jb = k => `<span class="j ${k}">${IC[k]} ${LB[k]}</span>`;
 const yl = y => /^\d{4}$/.test(y) ? y.slice(2) + "년" : y;
-const vl = v => v === "FY" ? (D && D.cmp === "half" ? "상→하" : "연간") : v;
+const vl = v => v === "FY" ? (D && D.cmp === "half" ? "상→하" : D && D.cmp === "per" ? "월평균" : "연간") : v;
 
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1800); }
 function copyText(s, msg) {
@@ -345,8 +391,27 @@ function mkey(name) {
   if (/^(공헌이익|CM)/i.test(n)) return { k: "M", n };
   return { k: null, n };
 }
+/* 엑셀 복사 텍스트 → 행·열 (셀 안 줄바꿈은 "…" 로 감싸져 옴: "26년\n1월") */
+function splitTSV(text) {
+  text = text.replace(/\r\n?/g, "\n");
+  if (!text.includes('"')) return text.split("\n").map(l => l.split("\t"));
+  const rows = []; let row = [], cell = "", i = 0, q = false, start = true;
+  while (i < text.length) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i += 2; continue; } q = false; i++; continue; } cell += ch; i++; continue; }
+    if (ch === '"' && start) { q = true; start = false; i++; continue; }
+    if (ch === "\t") { row.push(cell); cell = ""; start = true; i++; continue; }
+    if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; start = true; i++; continue; }
+    cell += ch; start = false; i++;
+  }
+  row.push(cell); rows.push(row);
+  return rows;
+}
+const MON_RE = /^(\d{1,2})\s*(월|M)?$/i;
+const monN = s => { const m = String(s).match(MON_RE); return m && +m[1] >= 1 && +m[1] <= 12 ? +m[1] : null; };
+const isMonthly = X => !!X && X.subs.length > 1 && X.subs.every(s => /^\d{1,2}월$/.test(s));
 function parse(text) {
-  const rows = text.replace(/\r\n?/g, "\n").split("\n").map(l => l.split("\t"));
+  const rows = splitTSV(text);
   let hi = -1, vi = -1;
   for (let i = 0; i < Math.min(rows.length, 40) && hi < 0; i++) { const j = rows[i].findIndex(c => /^(Σ|∑)?\s*값$/.test(cl(c))); if (j >= 0) { hi = i; vi = j; } }
   if (vi < 0) for (let i = 0; i < rows.length && vi < 0; i++) { const j = rows[i].findIndex(c => /^합계\s*[:：]/.test(cl(c))); if (j >= 0) { vi = j; hi = i - 1; } }
@@ -372,6 +437,7 @@ function parse(text) {
     const m = L.match(/(20\d{2})/) || L.match(/(\d{2})\s*(년|Y|T|B)/i);
     let y = null, sub = L;
     if (m) { y = m[1].length === 2 ? "20" + m[1] : m[1]; sub = L.replace(m[0], "").replace(/\s+/g, " ").trim(); }
+    const mn = monN(sub); if (mn) sub = mn + "월";   // "10월", "10", "01월" → "10월"
     per.push({ c, L, y, sub: sub || "연간" });
   }
   if (!per.length) throw new Error("기간 열(26년 상반기 등)을 찾지 못했어요.");
@@ -385,10 +451,14 @@ function parse(text) {
   const y0 = years[0], y1 = years[years.length - 1];
   const subsOf = y => per.filter(p => p.y === y).map(p => p.sub);
   const s1set = new Set(subsOf(y1));
-  const subs = subsOf(y0).filter(s => s1set.has(s));
-  const onlyOne = [...subsOf(y0), ...subsOf(y1)].filter(s => !subs.includes(s));
+  const allSub = [...subsOf(y0), ...subsOf(y1)];
+  const monthly = allSub.length > 1 && allSub.every(s => /^\d{1,2}월$/.test(s));
+  // 월별 자료: 두 연도 월을 모두 보관 (없는 달은 0) — 연도 비교는 공통 월만, 기간 비교는 고른 월
+  const subs = monthly ? [...new Set(allSub)].sort((a, b) => parseInt(a) - parseInt(b)) : subsOf(y0).filter(s => s1set.has(s));
+  const onlyOne = monthly ? [] : allSub.filter(s => !subs.includes(s));
   if (!subs.length) throw new Error("두 연도에 공통 기간(상반기·하반기 등)이 없어요.");
   if (onlyOne.length) W.push("한쪽 연도에만 있는 기간은 비교에서 제외: " + [...new Set(onlyOne)].join(", "));
+  if (monthly) { const a = subsOf(y0).length, b = subsOf(y1).length; W.push(`월별 자료 인식: ${yl(y0)} ${a}개월 · ${yl(y1)} ${b}개월 → '📅 기간 비교(월평균)'에서 기간을 골라 비교할 수 있어요`); }
   if (years.length > 2) W.push(`연도가 ${years.length}개라 처음(${yl(y0)})과 마지막(${yl(y1)})을 비교해요.`);
 
   const nd = dims.length, leaves = new Map(), ign = {}, mf = {}, mname = {}, dupM = {};
@@ -495,7 +565,7 @@ function groups(lvl, f) {
   }
   return [...m.values()];
 }
-const views = () => D.cmp === "half" ? ["FY"] : [...D.subs, "FY"];
+const views = () => D.cmp === "half" || D.cmp === "per" ? ["FY"] : [...D.subs, "FY"];
 function evalG(g) { g.j = {}; for (const v of views()) g.j[v] = judge(sumv(g.L, D.y0, v), sumv(g.L, D.y1, v)); return g; }
 const isSku = lvl => lvl === D.nd - 1;
 const bigEnough = g => Math.max(Math.abs(g.j.FY.a.S), Math.abs(g.j.FY.b.S)) >= ST.minS;
@@ -644,7 +714,7 @@ function colDefs() {
   const C = [];
   for (let k = 0; k <= ST.lvl; k++) C.push({ h: D.dims[k], v: g => g.d[k], t: "s" });
   C.push({ h: "판정", v: g => SEV[g.jj.k], html: g => jb(g.jj.k), txt: g => IC[g.jj.k] + " " + LB[g.jj.k] });
-  if (ST.view === "FY" && D.cmp !== "half") C.push({ h: "반기 판정", v: g => Math.min(...D.subs.map(s => SEV[g.j[s].k])), html: g => D.subs.map(s => `<span title="${esc(s)}: ${LB[g.j[s].k]}">${esc(s.slice(0, 1))}${IC[g.j[s].k]}</span>`).join(" "), txt: g => D.subs.map(s => s + IC[g.j[s].k]).join(" ") });
+  if (ST.view === "FY" && D.cmp !== "half" && D.cmp !== "per") C.push({ h: "반기 판정", v: g => Math.min(...D.subs.map(s => SEV[g.j[s].k])), html: g => D.subs.map(s => `<span title="${esc(s)}: ${LB[g.j[s].k]}">${esc(s.slice(0, 1))}${IC[g.j[s].k]}</span>`).join(" "), txt: g => D.subs.map(s => s + IC[g.j[s].k]).join(" ") });
   const A = [
     ["매출 " + y0, g => g.jj.a.S, fN], ["매출 " + y1, g => g.jj.b.S, fN], ["매출 Δ", g => g.jj.dS, fD, 1], ["매출 Δ%", g => g.jj.dSp, fGr, 1],
     ["판촉비용 " + y0, g => g.jj.a.C, fN], ["판촉비용 " + y1, g => g.jj.b.C, fN],
@@ -1136,7 +1206,7 @@ function aiSummary() { const keepX = ST.pzx, keepF = ST.curF; try { return aiSum
 function aiSummary0() {
   if (!D) return "";
   const L = [];
-  L.push(`[판촉비용율 점검 Ver2 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")} / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
+  L.push(`[판촉비용율 점검 Ver2 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")}${D.cmp === "per" ? ` (${D.nA}개월 vs ${D.nB}개월, 금액=월평균, 율=기간 합계 기준)` : ""} / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
   L.push(`판정: 🔴 판촉율↑(>${ST.thr}%p)+매출↓, ⚠️ 판촉율↑+매출↑+CM↓, 🟢 판촉율↑+CM 동등 이상, ✅ 판촉율 유지·개선`);
   L.push("");
   L.push(`■ ${D.dims[0]}별`);
@@ -1280,11 +1350,21 @@ function pzFileName(sfx) { return `증감퍼즐_${(ST.mode === "p" ? "제품" : 
 function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpBar(); } window.scrollTo(0, 0); }
 function renderAll() { renderSum(); renderTbl(); renderIns(); }
 
+const perApply = msg => { applyCmp(); ST.view = "FY"; ST.pzv = "FY"; ST.saved = {}; renderAll(); setStage(document.body.dataset.stage); if (msg) toast(msg); };
 $("#modeBar").addEventListener("click", e => {
+  const pp = e.target.closest("button[data-perp]");
+  if (pp && DC0) { const a = monthsOf(DC0, DC0.y0), b = monthsOf(DC0, DC0.y1), k = pp.dataset.perp, lo = ms => ms[0] || 1, hi = ms => ms[ms.length - 1] || 12;
+    ST.per = k === "q4fy" ? { a: { y: DC0.y0, m0: 10, m1: 12 }, b: { y: DC0.y1, m0: lo(b), m1: hi(b) } } : k === "q4q4" ? { a: { y: DC0.y0, m0: 10, m1: 12 }, b: { y: DC0.y1, m0: 10, m1: 12 } } : { a: { y: DC0.y0, m0: lo(a), m1: hi(a) }, b: { y: DC0.y1, m0: lo(b), m1: hi(b) } };
+    perApply(pp.textContent + " 으로 비교해요"); return; }
   const b = e.target.closest("button[data-cmp]"); if (!b || !DC0) return;
-  ST.cmp = b.dataset.cmp; applyCmp(); ST.view = "FY"; ST.pzv = "FY"; ST.saved = {};
-  renderAll(); setStage(document.body.dataset.stage);
-  toast(ST.cmp === "year" ? "연도 비교로 바꿨어요" : `${yl(ST.cmp)} 상반기 → 하반기 비교로 바꿨어요`);
+  ST.cmp = b.dataset.cmp; perApply(ST.cmp === "year" ? "연도 비교로 바꿨어요" : ST.cmp === "per" ? `기간 비교(월평균): ${D.y0} → ${D.y1}` : `${yl(ST.cmp)} 상반기 → 하반기 비교로 바꿨어요`);
+});
+$("#modeBar").addEventListener("change", e => {
+  const s = e.target.closest("select[data-per]"); if (!s || !DC0) return;
+  const [w, f] = s.dataset.per.split("."), P = perGet(); P[w][f] = f === "y" ? s.value : +s.value;
+  if (P[w].m0 > P[w].m1) { if (f === "m0") P[w].m1 = P[w].m0; else P[w].m0 = P[w].m1; }
+  if (!perMonths(DC0, P[w]).length) toast("⚠ 고른 기간에 자료가 없어요 — 0으로 계산돼요");
+  perApply();
 });$("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.m) switchMode(b.dataset.m); setStage(b.dataset.s); });
 $("#go").onclick = () => analyze(true);
 $("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true, true); };
