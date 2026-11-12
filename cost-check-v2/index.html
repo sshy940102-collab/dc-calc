@@ -256,8 +256,8 @@ let D = null, DC = null, DP = null, DC0 = null;
 const LEAF = () => D && D.mode === "p" ? "SKU·채널" : "SKU";
 const LEAF_END = () => D && D.mode === "p" ? D.dims[D.nd - 1] : "SKU";
 function permuteD(X) {
-  const ti = X.dims.findIndex(d => /팀/.test(d)), ci = X.dims.findIndex(d => /채널/.test(d));
-  const head = [ti, ci].filter(i => i >= 0);
+  const bi = X.dims.findIndex(d => /부문/.test(d)), ti = X.dims.findIndex(d => /팀/.test(d)), ci = X.dims.findIndex(d => /채널/.test(d));
+  const head = [bi, ti, ci].filter(i => i >= 0);   // 조직 단계(부문·팀·채널)는 제품 분석에서 맨 뒤로
   const order = [...X.dims.map((_, i) => i).filter(i => !head.includes(i)), ...head];
   return Object.assign({}, X, { mode: "p", dims: order.map(i => X.dims[i]), leaves: X.leaves.map(L => ({ d: order.map(i => L.d[i]), v: L.v, m: L.m })) });
 }
@@ -341,7 +341,10 @@ function cmpBar() {
   return h;
 }
 const VIEWF = ["lvl", "filt", "sort", "view", "jf", "q", "sum", "ins", "pzv", "pzm", "pzo"];
-function viewDefaults() { return { lvl: Math.min(1, D.nd - 1), filt: {}, sort: null, view: "FY", jf: "all", q: "", sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null }, pzv: ST.pzv, pzm: ST.pzm, pzo: ST.pzo }; }
+/* 기본으로 보는 단위 = 채널 (부문이 앞에 붙어도 Ver1처럼 채널부터) */
+function defLvl() { if (D.mode !== "p") { const ci = D.dims.findIndex(d => /채널/.test(d)); if (ci >= 0) return ci; } return Math.min(1, D.nd - 1); }
+const orgIdx = () => ["부문", "팀", "채널"].map(n => D.dims.findIndex(d => new RegExp(n).test(d))).filter(i => i >= 0);
+function viewDefaults() { return { lvl: defLvl(), filt: {}, sort: null, view: "FY", jf: "all", q: "", sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null }, pzv: ST.pzv, pzm: ST.pzm, pzo: ST.pzo }; }
 function switchMode(m) {
   if (m === ST.mode || !DC) { ST.mode = m; return; }
   ST.saved = ST.saved || {}; ST.saved[ST.mode] = {}; VIEWF.forEach(k => ST.saved[ST.mode][k] = ST[k]);
@@ -655,7 +658,7 @@ async function analyze(save, keepView) {
     } catch (e) { box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; return; }
   }
   if (save) { await saveStore(); if (txt) $("#raw").value = ""; }
-  if (!keepView) { ST.lvl = Math.min(1, D.nd - 1); ST.ins = { filt: {}, unit: null }; ST.filt = {}; ST.sum = { filt: {}, unit: null }; ST.view = "FY"; ST.sort = null; }
+  if (!keepView) { ST.lvl = defLvl(); ST.ins = { filt: {}, unit: null }; ST.filt = {}; ST.sum = { filt: {}, unit: null }; ST.view = "FY"; ST.sort = null; }
   const ignN = Object.entries(D.ign);
   const mName = { S: "총매출", D: "매출차감", P: "판관비", C: "비용", V: "변동원가", M: "공헌이익" };
   box.innerHTML = `<div class="chips">
@@ -1201,7 +1204,7 @@ function buildIns(lvl, f) {
     const dpth = insDeep(f), path0 = fk.map(k => lab(f[k]));
     // 섹터: 현재 범위 → 채널 → 팀 → 전체 (각각 따로)
     const secs = [{ k: dpth, lvl: Math.min(D.nd - 1, dpth + 1) }];
-    for (const k of (D.mode === "p" ? [subIdx() - 1, 1, -1] : [1, 0, -1])) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: k + 1 });
+    for (const k of (D.mode === "p" ? [subIdx() - 1, 1, -1] : [...orgIdx().reverse(), -1])) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: k + 1 });
     const openSet = new Set(); const fullPath = []; for (let k = 0; k <= dpth; k++) { fullPath.push(lab(f[k]) || ""); openSet.add(fullPath.join("\u0001")); }
     const pm = ST.pzm || "both", mks = pm === "both" ? ["C", "V"] : [pm];
     const bs = "padding:3px 10px;font-size:12px";
@@ -1332,11 +1335,14 @@ function aiSummary0() {
   L.push(`[판촉비용율 점검 Ver2 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")}${D.cmp === "per" ? ` (${D.nA}개월 vs ${D.nB}개월, 금액=${D.agg}, 율=기간 합계 기준)` : ""} / 금액 단위 백만원 / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
   L.push(`판정: 🔴 판촉율↑(>${ST.thr}%p)+매출↓, ⚠️ 판촉율↑+매출↑+CM↓, 🟢 판촉율↑+CM 동등 이상, ✅ 판촉율 유지·개선`);
   L.push("");
-  L.push(`■ ${D.dims[0]}별`);
-  for (const g of groups(0, {}).map(evalG)) L.push(`${g.d[0]}: ` + views().map(v => `${vl(v)} ${IC[g.j[v].k]} ${line(g.j[v])}`).join(" | "));
-  const l1 = Math.min(1, D.nd - 1);
+  const tops = D.mode === "p" ? [0] : orgIdx().filter(i => i < defLvl()); if (!tops.length) tops.push(0);
+  for (const t of tops) {
+    L.push(`■ ${D.dims[t]}별`);
+    for (const g of groups(t, {}).map(evalG)) L.push(`${g.d.slice(0, t + 1).join(" > ")}: ` + views().map(v => `${vl(v)} ${IC[g.j[v].k]} ${line(g.j[v])}`).join(" | "));
+  }
+  const l1 = defLvl();
   L.push(""); L.push(`■ ${D.dims[l1]} 기준 문제 항목`);
-  L.push(buildIns(l1, {}).filter((c, i) => i !== 1).slice(1).map(c => c.x).join("\n\n"));
+  { const cs = buildIns(l1, {}), pi = cs.findIndex(c => /증감 퍼즐/.test(c.t)); L.push(cs.filter((c, i) => i !== pi).slice(1).map(c => c.x).join("\n\n")); }
   if (insDeep(ST.ins.filt) >= 0) {
     L.push(""); L.push(`■ 지금 보고 있는 범위 상세`);
     L.push(buildIns(insUnit(), ST.ins.filt).map(c => c.x).join("\n\n"));
@@ -1553,7 +1559,7 @@ $("#tblOut").addEventListener("click", e => {
   ST.filt = drillF(ST.filt, g.d); ST.lvl++; ST.sort = null; renderTbl();
 });
 $("#crumb").addEventListener("click", e => {
-  if (e.target.id === "crumbReset") { ST.filt = {}; ST.lvl = Math.min(1, D.nd - 1); }
+  if (e.target.id === "crumbReset") { ST.filt = {}; ST.lvl = defLvl(); }
   else if (e.target.id === "crumbUp") { const ks = Object.keys(ST.filt).filter(k => ST.filt[k]).map(Number); const mx = Math.max(...ks); delete ST.filt[mx]; ST.lvl = Math.max(0, mx); }
   else return;
   ST.sort = null; renderTbl();
