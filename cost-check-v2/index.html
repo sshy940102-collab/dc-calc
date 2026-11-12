@@ -1160,6 +1160,69 @@ function trendCard(scopeL, scope) {
   const x = `[📈 월별 추이 — ${sku || scope}]\n` + [DC0.y0, DC0.y1].map(y => `${yl(y)} 판촉율: ` + pts.filter(p => p.y === y).map(p => `${p.m}월 ${fP(p.cr)}`).join(", ")).join("\n") + (same.length ? `\n같은 달보다 높은 달 ${upN}/${same.length}개월 · ${strip(verdict)}` : "");
   return { cls: "b wide", t: `📈 월별 추이 <small>${esc(sku || scope)} · 매출 막대 + 판촉율 선</small> <span style="margin-left:auto">${sel}</span>`, h: leg + svg + lines + tbl, x };
 }
+/* 💧 CM 브릿지 — 기준·비교 각각 총매출→비용→CM 폭포 (같은 눈금) + CM 증감 브릿지 */
+const BRC = { S: "#1f3864", D: "#e07b39", P: "#f2b134", C: "#e07b39", X: "#b0b7c3", V: "#8e9aaf", M: "#2e7d32", up: "#3a9d5d", dn: "#c0392b" };
+function wfSvg(bars, lo, hi, base, label) {
+  const W = 620, H = 250, L = 8, Rm = 8, T = 24, B = 44, y = v => T + (hi - v) / (hi - lo || 1) * (H - T - B);
+  const bw = (W - L - Rm) / bars.length, w = bw * 0.62;
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="${esc(label)}"><line x1="${L}" x2="${W - Rm}" y1="${y(0)}" y2="${y(0)}" stroke="#5b6577" stroke-opacity=".4"/>`;
+  bars.forEach((x, i) => {
+    const cx = L + bw * i + bw / 2, top = y(Math.max(x.a, x.b)), bot = y(Math.min(x.a, x.b)), hg = Math.max(1, bot - top);
+    if (i < bars.length - 1) s += `<line x1="${cx + w / 2}" x2="${L + bw * (i + 1) + bw / 2 - w / 2}" y1="${y(x.b)}" y2="${y(x.b)}" stroke="#5b6577" stroke-dasharray="3 3" stroke-opacity=".6"/>`;
+    const pc = base ? fP(x.v / base) : "";
+    s += `<rect x="${cx - w / 2}" y="${top}" width="${w}" height="${hg}" rx="2" fill="${x.c}"><title>${esc(x.n)} ${fD(x.v)} (${pc})</title></rect>`;
+    s += `<text x="${cx}" y="${top - 6}" text-anchor="middle" font-size="12" font-weight="700" fill="#1d2433">${x.tot ? fN(x.v) : fD(x.v)}</text>`;
+    s += `<text x="${cx}" y="${H - B + 17}" text-anchor="middle" font-size="11.5" fill="#1d2433">${esc(x.n)}</text>`;
+    if (pc) s += `<text x="${cx}" y="${H - B + 32}" text-anchor="middle" font-size="11" fill="#5b6577">${pc}</text>`;
+  });
+  return s + `</svg>`;
+}
+function costSteps(t, split) {   // 총매출 → 차감 → 판관비 → (기타 판촉비) → 변동원가 → (기타) → CM
+  const st = split ? [["매출차감", t.D, BRC.D], ["판관비", t.P, BRC.P]] : [["판촉비", t.C, BRC.C]];
+  if (split && Math.abs(t.C - t.D - t.P) > 0.5) st.push(["기타 판촉비", t.C - t.D - t.P, BRC.X]);
+  st.push(["변동원가", t.V, BRC.V]);
+  if (Math.abs(t.S - t.C - t.V - t.M) > 0.5) st.push(["기타", t.S - t.C - t.V - t.M, BRC.X]);
+  return st;
+}
+function wfBars(t, split) {
+  const bars = [{ n: "총매출", a: 0, b: t.S, v: t.S, c: BRC.S, tot: 1 }]; let run = t.S;
+  for (const [n, v, c] of costSteps(t, split)) { const nx = run - v; bars.push({ n, a: run, b: nx, v: -v, c: v >= 0 ? c : BRC.up }); run = nx; }
+  bars.push({ n: "공헌이익", a: 0, b: t.M, v: t.M, c: t.M >= 0 ? BRC.M : BRC.dn, tot: 1 });
+  return bars;
+}
+function bridgeCard(tot, scope) {
+  const j = tot.j.FY, A = j.a, Bv = j.b, amt = vl("FY");
+  const split = !!(D.mf.D || D.mf.P) && (Math.abs(A.D) + Math.abs(A.P) + Math.abs(Bv.D) + Math.abs(Bv.P) > 0.5);
+  const ba = wfBars(A, split), bb = wfBars(Bv, split), ys = [...ba, ...bb].flatMap(x => [x.a, x.b]);
+  const lo = Math.min(0, ...ys), hi = Math.max(0, ...ys) || 1;
+  let h = `<p class="muted">총매출에서 비용을 차례로 빼서 공헌이익까지 · 금액 = ${esc(amt)}(백만원), 아래 % = 총매출 대비 · 두 그래프 같은 눈금</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:14px">
+      <div><div class="lbl">기준 ${esc(yl(D.y0))}</div>${wfSvg(ba, lo, hi, A.S, "기준 CM 브릿지")}</div>
+      <div><div class="lbl">비교 ${esc(yl(D.y1))}</div>${wfSvg(bb, lo, hi, Bv.S, "비교 CM 브릿지")}</div></div>`;
+  // 항목별 비교 표
+  const has = new Set([...costSteps(A, split), ...costSteps(Bv, split)].map(s => s[0]));
+  const rows = [["총매출", "S"], ...["매출차감", "판관비", "판촉비", "기타 판촉비", "변동원가", "기타"].filter(n => has.has(n)).map(n => [n, n]), ["공헌이익", "M"]];
+  const val = (t, k) => { const m = { 총매출: "S", 매출차감: "D", 판관비: "P", 판촉비: "C", 변동원가: "V", 공헌이익: "M" }; if (m[k]) return t[m[k]]; if (k === "기타 판촉비") return t.C - t.D - t.P; if (k === "기타") return t.S - t.C - t.V - t.M; return t[k]; };
+  const pr = (t, k) => t.S ? val(t, k) / t.S : null;
+  h += `<div class="tw" style="max-height:none;margin-top:8px"><table><thead><tr><th>항목</th><th>기준 ${esc(yl(D.y0))}</th><th>비교 ${esc(yl(D.y1))}</th><th>증감</th><th>매출 대비 %</th><th>%p 증감</th></tr></thead><tbody>${rows.map(([n, k]) => { const a = val(A, k), b = val(Bv, k), d = b - a, ra = pr(A, k), rb = pr(Bv, k), dr = ra != null && rb != null ? rb - ra : null;
+      const good = n === "총매출" || n === "공헌이익"; const badD = good ? d < -0.5 : d > 0.5, badR = n === "총매출" ? false : good ? (dr != null && dr < -0.0005) : (dr != null && dr > 0.0005);
+      return `<tr${good ? ' class="tot"' : ""}><td>${esc(n)}</td><td class="n">${fN(a)}</td><td class="n">${fN(b)}</td><td class="n${badD ? " neg" : ""}">${fD(d)}</td><td class="n">${n === "총매출" ? "100%" : fP(ra) + "→" + fP(rb)}</td><td class="n${badR ? " neg" : ""}">${n === "총매출" ? "" : fPP(dr)}</td></tr>`; }).join("")}</tbody></table></div>`;
+  let x = `[💧 CM 브릿지 — ${scope}, ${amt}] 기준 ${yl(D.y0)}: 매출 ${fN(A.S)} − 판촉비 ${fN(A.C)} − 변동원가 ${fN(A.V)} = CM ${fN(A.M)} (${fP(j.mr0)}) / 비교 ${yl(D.y1)}: 매출 ${fN(Bv.S)} − 판촉비 ${fN(Bv.C)} − 변동원가 ${fN(Bv.V)} = CM ${fN(Bv.M)} (${fP(j.mr1)})`;
+  // CM 증감 브릿지: 기준 CM → 매출효과 → 판촉율효과 → 원가율효과 → (기타) → 비교 CM
+  if (j.eS != null) {
+    const ef = [["매출 효과", j.eS], ["판촉율 효과", j.eC], ["원가율 효과", j.eV]]; if (Math.abs(j.eX) > 0.5) ef.push(["기타", j.eX]);
+    const bars = [{ n: `기준 CM`, a: 0, b: A.M, v: A.M, c: BRC.M, tot: 1 }]; let run = A.M;
+    for (const [n, v] of ef) { bars.push({ n, a: run, b: run + v, v, c: v >= 0 ? BRC.up : BRC.dn }); run += v; }
+    bars.push({ n: `비교 CM`, a: 0, b: Bv.M, v: Bv.M, c: BRC.M, tot: 1 });
+    const zs = bars.flatMap(b => [b.a, b.b]), zl = Math.min(...zs), zh = Math.max(...zs), pad = (zh - zl) * 0.25 || 1;
+    const lo2 = Math.max(Math.min(0, zl), zl - pad * 2), hi2 = zh + pad * 0.2;   // 차이가 잘 보이게 아래를 잘라서 표시
+    h += `<div class="lbl" style="margin-top:12px">CM 증감 브릿지 — 기준 CM ${fN(A.M)} → 비교 CM ${fN(Bv.M)} (<span class="${nc(j.dM)}">${fD(j.dM)}</span>)</div>
+      <div style="max-width:720px">${wfSvg(bars, lo2, hi2, 0, "CM 증감 브릿지")}</div>
+      <p class="muted">매출 효과 = 매출 증감 × 기준 CM율 · 판촉율 효과 = −판촉율 증감 × 비교 매출 · 원가율 효과 = −원가율 증감 × 비교 매출${Math.abs(j.eX) > 0.5 ? " · 기타 = 나머지" : ""} · 합 = CM 증감 (세로축은 차이가 보이게 아래를 잘라서 그림)</p>`;
+    x += `\nCM 증감 ${fD(j.dM)} = 매출효과 ${fD(j.eS)} + 판촉율효과 ${fD(j.eC)} + 원가율효과 ${fD(j.eV)}${Math.abs(j.eX) > 0.5 ? " + 기타 " + fD(j.eX) : ""}`;
+  }
+  return { cls: "b wide", t: `💧 CM 브릿지 <small>${esc(scope)} · 기준 ${esc(yl(D.y0))} vs 비교 ${esc(yl(D.y1))}</small>`, h, x };
+}
 /* 🛡 CM 유지 한계 판촉율 — 비교 매출·원가율 그대로일 때 기준 CM을 지키는 최대 판촉율 */
 function cmLim(j) {
   if (!j || j.k === "new" || j.k === "end" || j.k === "na" || !j.b.S) return null;
@@ -1241,6 +1304,7 @@ function buildIns(lvl, f, part) {
   } else {
     oh += `<p><a class="lnk" data-gostage="5">🧩 증감 퍼즐에서 숫자로 쪼개 보기 ▸</a></p>`;
     cards.push({ cls: "b wide", t: `📌 ${esc(scope)} <small>${esc(D.dims[lvl])} 기준 ${gs.length}개 · ${esc(cmpTxt)}</small>`, h: oh, x: ox.trimEnd() });
+    cards.push(bridgeCard(tot, scope));
     const TC = trendCard(scopeL, scope); if (TC) cards.push(TC);
   }
   // 🧩 퍼즐
