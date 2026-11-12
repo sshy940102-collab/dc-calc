@@ -1,0 +1,1383 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>판촉비용율 점검 Ver2</title>
+<style>
+:root{--navy:#1f3864;--navy2:#2f5597;--bg:#f4f6fa;--card:#fff;--line:#d9dfe8;--txt:#1d2433;--sub:#5b6577;--red:#c00000;--redbg:#fde3e3;--warn:#b26a00;--warnbg:#fff6e5;--ok:#2e7d32;--okbg:#eaf6ec;--pink:#ffc7ce}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:"Malgun Gothic","맑은 고딕",system-ui,sans-serif;font-size:13px}
+header{background:var(--navy);color:#fff;padding:14px 24px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header h1{font-size:19px;margin:0}
+header span{opacity:.8;font-size:12px}
+main{max-width:1600px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:14px;margin-bottom:12px}
+.card h2{font-size:14px;margin:0 0 10px;color:var(--navy);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card h2 small{color:var(--sub);font-weight:400;font-size:11.5px}
+.help{font-size:12px;color:var(--sub);line-height:1.65}
+.help b{color:var(--txt)}
+textarea{width:100%;height:200px;font:12px/1.4 Consolas,monospace;border:1px solid var(--line);border-radius:4px;padding:8px;white-space:pre;resize:vertical;background:#fff;color:var(--txt)}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--sub)}
+input[type=number],input[type=text],select{font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--txt)}
+input[type=number]{width:90px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
+button{font:inherit;border:0;border-radius:4px;padding:7px 14px;cursor:pointer;background:var(--navy);color:#fff}
+button.sec{background:#e7ebf2;color:var(--txt)}
+button.on{background:var(--navy2);color:#fff}
+button:disabled{opacity:.4;cursor:default}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-size:11.5px;padding:3px 9px;border-radius:12px;background:#eef1f6;color:var(--sub)}
+.chip.ok{background:var(--okbg);color:var(--ok)}
+.chip.no{background:var(--redbg);color:var(--red)}
+.chip.w{background:var(--warnbg);color:var(--warn)}
+.stages{display:flex;background:#fff;border-bottom:1px solid var(--line);padding:0 24px;overflow-x:auto}
+.stages button{background:transparent;color:var(--sub);border-radius:0;padding:12px 20px 10px;border-bottom:3px solid transparent;display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:14px}
+.stages button b{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#c9d0dc;color:#fff;font-size:12px;align-items:center;justify-content:center}
+.stages button.on{color:var(--navy);border-bottom-color:var(--navy);font-weight:700}
+.stages button.on b{background:var(--navy)}
+.bkg{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:18px}
+.bkg>div{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:#fafbfd}
+.ms{position:relative;display:inline-block}
+.msb{background:#fff;color:var(--txt);border:1px solid var(--line);padding:5px 8px;min-width:110px;max-width:220px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msb.msx{border-color:var(--navy2);background:#eef3fb;color:var(--navy);font-weight:600}
+.msp{position:absolute;top:100%;left:0;z-index:20;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);padding:8px;min-width:220px;margin-top:2px}
+.msp[hidden]{display:none}
+.msl{display:flex;flex-direction:column;max-height:280px;overflow:auto;gap:2px}
+.msl label{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--txt);padding:3px 4px;border-radius:3px;cursor:pointer;white-space:nowrap}
+.msl label:hover{background:#f2f6fd}
+.msa{display:flex;gap:6px;justify-content:flex-end;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+.msa button{padding:4px 12px}.stages .ngrp{align-self:center;margin-left:14px;padding:3px 10px;border-left:2px solid var(--line);font-size:12px;color:var(--sub);white-space:nowrap;font-weight:600}
+.cmpb{display:inline-flex;gap:3px;align-items:center;margin-left:16px;flex-wrap:wrap}
+.cmpb button{padding:3px 10px;font-size:12px}
+.modebar{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}
+.stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
+.stg{display:none}
+body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4{display:block}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+.toolbar .sp{flex:1}
+.toolbar .grp{display:flex;gap:2px}
+.toolbar .grp button{padding:6px 12px}
+.tw{overflow:auto;max-height:70vh;border:1px solid var(--line);background:#fff;border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th{position:sticky;top:0;background:var(--navy);color:#fff;font-weight:600;padding:6px 8px;white-space:nowrap;z-index:1}
+.jt th{cursor:pointer}
+.jt th:hover{background:var(--navy2)}
+td{padding:5px 8px;border-bottom:1px solid #edf0f5;white-space:nowrap}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.jt tbody tr{cursor:pointer}
+.jt tbody tr:hover td{background:#f6f9ff}
+tr.tot td{font-weight:700;background:#f0f3f8;position:sticky;bottom:0;cursor:default}
+.neg{color:var(--red)}
+.pk{background:var(--pink)!important}
+.muted{color:var(--sub)}
+.empty{padding:40px;text-align:center;color:var(--sub)}
+.j{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11.5px;font-weight:600}
+.j.red{background:var(--redbg);color:var(--red)}
+.j.warn{background:var(--warnbg);color:var(--warn)}
+.j.up{background:#e8f1ff;color:var(--navy2)}
+.j.ok{background:var(--okbg);color:var(--ok)}
+.j.new,.j.end,.j.na{background:#eef1f6;color:var(--sub)}
+.rep th{position:static;text-align:center}
+.rep th.l{text-align:left}
+.rep td.g{font-weight:700;background:#eef2f8;color:var(--navy)}
+.rep td.it{padding-left:18px}
+.rep td.it.rt{font-style:italic;color:var(--sub)}
+.rep td.hat{background:repeating-linear-gradient(45deg,#fff,#fff 3px,#d6dbe4 3px,#d6dbe4 4px)}
+.rep td.sep,.rep th.sep{border-left:2px solid #b8c2d3}
+.rep tr.jr td{border-bottom:2px solid #c9d0dc}
+.crumb{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;margin-bottom:8px}
+.crumb a{color:var(--navy2);cursor:pointer;text-decoration:underline}
+.ins{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(520px,100%),1fr));gap:12px}
+.ins .card{border-left:4px solid #c9d0dc;margin:0}
+.ins .card.red{border-left-color:var(--red)}.ins .card.warn{border-left-color:#e0a100}.ins .card.b{border-left-color:var(--navy2)}.ins .card.ok{border-left-color:var(--ok)}
+.ins h3{margin:0 0 6px;font-size:13.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ins h3 small{font-weight:400;color:var(--sub)}
+.ins p{margin:3px 0;line-height:1.6}
+.ins ul{margin:4px 0;padding-left:18px;line-height:1.6}
+.ins .lbl{color:var(--sub);font-size:12px;margin-top:8px}
+.ins table th{position:static;background:#eef1f6;color:var(--txt);cursor:default}
+.wide{grid-column:1/-1}
+.ins table.ov th{position:sticky;top:0;background:#eef1f6;color:var(--txt);z-index:1}
+.ins tr.dr{cursor:pointer}
+.ins tr.dr:hover td{background:#eef3fb}
+a.lnk{color:var(--navy2);cursor:pointer;text-decoration:underline;font-size:12px;font-weight:400}
+.crumb a{color:var(--navy2);cursor:pointer;text-decoration:underline}
+details.more{margin:2px 0 6px 18px}
+details.more summary{cursor:pointer;color:var(--navy2);font-size:12.5px}
+.chain{display:inline-block;margin-top:2px;font-size:11.5px;color:var(--sub)}
+.chain b{color:var(--txt)}
+.pz.hk{cursor:pointer}
+.pz.hk:hover td{background:#eef3fb}
+.tg{display:inline-block;width:10px;color:var(--sub)}
+.pz.d0 td{font-weight:600;background:#fafbfd}
+.pz.d1 td{background:#fff}
+table.pzt td.pzt{background:#f3f6fb}
+.fx{margin:4px 0 8px;background:#f8fafc;border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+.fx summary{cursor:pointer;color:var(--navy2);font-weight:600}
+.fxb{margin-top:6px;line-height:1.6}
+.fxt td{white-space:normal;border-bottom:1px solid #edf0f5;padding:4px 8px}
+.fxt td:first-child{font-weight:600;white-space:nowrap}
+.fxt td:nth-child(2){font-family:Consolas,monospace;white-space:nowrap}
+.pz.hl td{background:#fff6dd!important}
+.subc{margin:8px 0 2px;padding:5px 8px;background:#f6f8fb;border-radius:4px;line-height:1.55}
+.ins li{margin-bottom:3px}
+.rep td.g.dr{cursor:pointer}
+.rep td.g.dr:hover{background:#dde6f3}
+#insCrumb,#sumCrumb{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px 12px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2433;color:#fff;padding:8px 16px;border-radius:6px;font-size:12.5px;opacity:0;transition:.2s;pointer-events:none;z-index:9}
+.toast.show{opacity:1}
+footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
+@media (max-width:600px){main{padding:10px}header{padding:12px 16px}.stages{padding:0 8px}.stages button{padding:10px 12px}}
+</style>
+</head>
+<body data-stage="1">
+<header><h1>판촉비용율 점검 <small style="font-size:.6em;opacity:.8">Ver2</small></h1><span>전년 실적 vs 계획 · 매출 / 판촉비용율 / CM 판정 | 모든 계산은 이 PC 브라우저 안에서만 처리 (외부 전송 없음)</span></header>
+<nav class="stages" id="stages">
+  <button data-s="1" class="on"><b>1</b>붙여넣기</button>
+  <span class="ngrp">📍 채널 분석</span>
+  <button data-s="2" data-m="c"><b>2</b>요약표</button>
+  <button data-s="3" data-m="c"><b>3</b>판정표 <span class="badge" id="bdg" hidden></span></button>
+  <button data-s="4" data-m="c"><b>4</b>INSIGHT</button>
+  <span class="ngrp">📦 제품 분석</span>
+  <button data-s="2" data-m="p"><b>2</b>요약표</button>
+  <button data-s="3" data-m="p"><b>3</b>판정표 <span class="badge" id="bdgP" hidden></span></button>
+  <button data-s="4" data-m="p"><b>4</b>INSIGHT</button>
+</nav>
+<main>
+<div id="modeBar" class="modebar" hidden></div>
+
+<section id="stage1" class="stg">
+  <div class="card">
+    <h2>① 피벗 붙여넣기 <small>엑셀 피벗을 그대로 복사</small></h2>
+    <div class="help">
+      피벗에서 <b>연도 행(26년·27년)부터 머리글(팀·채널…·값·상반기/하반기)과 데이터 끝까지</b> 통째로 복사(Ctrl+C) → 아래 칸에 붙여넣기(Ctrl+V) → <b>분석하기</b><br>
+      · 값 열은 <b>총매출·매출차감·판관비·비용·변동원가·공헌이익(운송비제외)</b> 금액만 사용 (율·총매출2 행은 붙여넣어도 자동으로 무시, 율은 금액으로 다시 계산)<br>
+      · <b>판촉비용 = 비용</b>(매출차감+판관비) · <b>CM = 공헌이익(운송비제외)</b> · 연간 = 반기(또는 월) 합계<br>
+      · 분석하면 필요한 금액만 <b>가볍게 저장</b>되고 입력칸은 비워져요 (새로고침해도 유지)<br>
+      · 백업 만들기·불러오기는 아래 <b>💾 백업 · 공유</b> 칸에서 (이 칸에 백업 텍스트를 붙여넣어도 돼요)
+    </div>
+    <textarea id="raw" spellcheck="false" placeholder="여기에 피벗 또는 백업 텍스트(CCHK1~로 시작) 붙여넣기 (Ctrl+V)"></textarea>
+    <div class="row">
+      <label class="f">판촉비용율 상승 기준 (%p 초과)<input type="number" id="thr" step="0.1" min="0" value="0.1"></label>
+      <label class="f">SKU 최소 매출 (미만은 SKU 판정 제외)<input type="number" id="minS" step="1" min="0" value="0"></label>
+      <button id="go">분석하기</button>
+      <button class="sec" id="sample">🧪 샘플 불러오기</button>
+      <button class="sec" id="clear">🗑 저장된 자료 지우기</button>
+    </div>
+    <div id="pinfo"></div>
+  </div>
+  <div class="card">
+    <h2>💾 백업 · 공유 <small>가볍게 보관하거나 팀원에게 전달</small></h2>
+    <div class="bkg">
+      <div>
+        <b>① 백업 만들기</b>
+        <div class="help">지금 분석된 자료를 압축 텍스트로 → 메모장·엑셀 A열·메신저에 붙여넣어 보관/공유</div>
+        <div class="row"><button id="bkCopy">💾 백업 텍스트 복사</button><button class="sec" id="bkFile">📄 백업 파일 저장</button></div>
+      </div>
+      <div>
+        <b>② 백업 불러오기</b>
+        <div class="help">받은 백업 텍스트(CCHK1~로 시작)를 <b>모든 줄</b> 복사 → 아래 칸에 붙여넣고 「불러오기」</div>
+        <textarea id="bkIn" style="height:80px" spellcheck="false" placeholder="CCHK1~1/1|……|END"></textarea>
+        <div class="row"><button id="bkLoad">📥 불러오기</button><button class="sec" id="bkClip">📋 클립보드에서 바로 불러오기</button><button class="sec" id="bkOpen">📂 백업 파일 열기</button><input type="file" id="bkFileIn" accept=".txt,text/plain" hidden></div>
+        <div id="bkInfo"></div>
+      </div>
+    </div>
+  </div>  <div class="card">
+    <h2>판정 기준</h2>
+    <div class="help">
+      <span class="j red">🔴 큰 문제</span> 판촉비용율 ↑ + 매출 ↓(또는 동일)<br>
+      <span class="j warn">⚠️ 문제</span> 판촉비용율 ↑ + 매출 ↑ 인데 CM 금액 ↓<br>
+      <span class="j up">🟢 판촉↑·CM유지</span> 판촉비용율 ↑ 이지만 매출 성장으로 CM 금액이 전년 동등 이상 → 괜찮음<br>
+      <span class="j ok">✅ OK</span> 판촉비용율 유지·개선 &nbsp;|&nbsp; <span class="j new">🆕 신규</span> 전년 매출 없음 &nbsp; <span class="j end">⛔ 종료</span> 계획 매출 없음<br>
+      CM 변동 분해 = <b>매출효과</b>(매출 증감 × 전년 CM율) + <b>판촉율효과</b>(−판촉비용율 증감 × 계획 매출) + <b>원가율효과</b>(−변동원가율 증감 × 계획 매출)
+    </div>
+  </div>
+</section>
+
+<section id="stage2" class="stg">
+  <div class="toolbar">
+    <span id="sumFilts" class="row" style="margin:0"></span>
+    <label class="f">보는 단위<select id="sumUnit"></select></label>
+    <span class="sp"></span>
+    <button class="sec" id="sumCopy">📋 표 복사</button>
+  </div>
+  <div class="crumb" id="sumCrumb"></div>
+  <div class="tw" id="sumOut"></div>
+  <p class="help">분홍 칸 = 판촉비용율 상승(기준 초과) · 마진율 하락. 맨 아래 줄 = 기간별 판정.</p>
+</section>
+
+<section id="stage3" class="stg">
+  <div class="toolbar">
+    <div class="grp" id="viewBtns"></div>
+    <label class="f">단위<select id="lvl"></select></label>
+    <span id="filts" class="row" style="margin:0"></span>
+    <label class="f">판정<select id="jf">
+      <option value="all">전체</option><option value="bad">문제만 (🔴·⚠️)</option><option value="red">🔴 큰 문제만</option><option value="up">판촉율 ↑ 전체 (🔴·⚠️·🟢)</option>
+    </select></label>
+    <label class="f">검색<input type="text" id="q" placeholder="이름 일부" style="width:140px"></label>
+    <span class="sp"></span>
+    <button class="sec" id="tblCopy">📋 표 복사</button>
+    <button class="sec" id="aiCopy2">📋 분석용 요약 복사</button>
+  </div>
+  <div class="crumb" id="crumb"></div>
+  <div class="tw" id="tblOut"></div>
+  <p class="help">행을 클릭하면 한 단계 아래로 내려가요. 머리글 클릭 = 정렬.</p>
+  <div id="tblFx"></div>
+</section>
+
+<section id="stage4" class="stg">
+  <div class="toolbar">
+    <span id="insFilts" class="row" style="margin:0"></span>
+    <label class="f">보는 단위<select id="insLvl"></select></label>
+    <span class="sp"></span>
+    <button class="sec" id="pzAllX">📥 증감 퍼즐 엑셀 (전체)</button>
+    <button class="sec" id="insCopy">📋 INSIGHT 전체 복사</button>
+    <button id="aiCopy">📋 분석용 요약 복사 (Claude 전달용)</button>
+  </div>
+  <div class="crumb" id="insCrumb"></div>
+  <div class="ins" id="insOut"></div>
+</section>
+
+</main>
+<footer>판촉비용율 점검 Ver2 · 입력 자료는 이 브라우저(IndexedDB)에만 저장됩니다</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const IC = { red: "🔴", warn: "⚠️", up: "🟢", ok: "✅", new: "🆕", end: "⛔", na: "·" };
+const LB = { red: "큰 문제", warn: "문제", up: "판촉↑·CM유지", ok: "OK", new: "신규", end: "종료", na: "-" };
+const SEV = { red: 0, warn: 1, up: 2, new: 3, end: 4, ok: 5, na: 6 };
+const ST = { mode: "c", cmp: "year", saved: {}, thr: 0.1, minS: 0, view: "FY", lvl: 1, filt: {}, jf: "all", q: "", sort: null, sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null } };
+let D = null, DC = null, DP = null, DC0 = null;
+const LEAF = () => D && D.mode === "p" ? "SKU·채널" : "SKU";
+const LEAF_END = () => D && D.mode === "p" ? D.dims[D.nd - 1] : "SKU";
+function permuteD(X) {
+  const ti = X.dims.findIndex(d => /팀/.test(d)), ci = X.dims.findIndex(d => /채널/.test(d));
+  const head = [ti, ci].filter(i => i >= 0);
+  const order = [...X.dims.map((_, i) => i).filter(i => !head.includes(i)), ...head];
+  return Object.assign({}, X, { mode: "p", dims: order.map(i => X.dims[i]), leaves: X.leaves.map(L => ({ d: order.map(i => L.d[i]), v: L.v })) });
+}
+function setModes(X) { DC0 = X; X.mode = "c"; if (ST.cmp !== "year" && !(X.years || []).includes(ST.cmp)) ST.cmp = "year"; applyCmp(); }
+function applyCmp() {
+  const B = ST.cmp === "year" ? DC0 : halfD(DC0, ST.cmp);
+  B.mode = "c"; DC = B; DP = permuteD(B); D = ST.mode === "p" ? DP : DC;
+}
+/* 상반기 → 하반기 비교: 같은 해 앞쪽 기간 vs 뒤쪽 기간 */
+function halfD(X, y) {
+  const n = X.subs.length, h = Math.ceil(n / 2), A = X.subs.slice(0, h), B = X.subs.slice(h);
+  if (!B.length) return X;
+  const nmP = ss => ss.length === 1 ? ss[0] : ss[0] + "~" + ss[ss.length - 1];
+  const la = `${yl(y)} ${nmP(A)}`, lb = `${yl(y)} ${nmP(B)}`;
+  const sumS = (v, ss) => { const o = { S: 0, D: 0, P: 0, C: 0, V: 0, M: 0 }; for (const s of ss) { const x = v && v[s]; if (x) for (const k in o) o[k] += x[k]; } return o; };
+  return Object.assign({}, X, { y0: la, y1: lb, years: [la, lb], subs: ["기간"], cmp: "half", mode: "c",
+    leaves: X.leaves.map(L => ({ d: L.d, v: { [la]: { 기간: sumS(L.v[y], A) }, [lb]: { 기간: sumS(L.v[y], B) } } })) });
+}
+function cmpBar() {
+  if (!DC0) return "";
+  const opts = [["year", `${yl(DC0.y0)} → ${yl(DC0.y1)} (연도 비교)`], ...[DC0.y0, DC0.y1].map(y => [y, `${yl(y)} 상반기 → 하반기`])];
+  return `<span class="cmpb">비교 기준: ${opts.map(([k, n]) => `<button class="${k === ST.cmp ? "on" : "sec"}" data-cmp="${esc(k)}">${esc(n)}</button>`).join("")}</span>`;
+}
+const VIEWF = ["lvl", "filt", "sort", "view", "jf", "q", "sum", "ins", "pzv", "pzm", "pzo"];
+function viewDefaults() { return { lvl: Math.min(1, D.nd - 1), filt: {}, sort: null, view: "FY", jf: "all", q: "", sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null }, pzv: ST.pzv, pzm: ST.pzm, pzo: ST.pzo }; }
+function switchMode(m) {
+  if (m === ST.mode || !DC) { ST.mode = m; return; }
+  ST.saved = ST.saved || {}; ST.saved[ST.mode] = {}; VIEWF.forEach(k => ST.saved[ST.mode][k] = ST[k]);
+  ST.mode = m; D = m === "p" ? DP : DC;
+  Object.assign(ST, ST.saved[m] || viewDefaults());
+  $("#jf").value = ST.jf; $("#q").value = ST.q;
+  renderAll();
+}
+
+/* ---------- 숫자·표시 ---------- */
+const fN = x => (x == null || !isFinite(x)) ? "-" : Math.round(x).toLocaleString("ko-KR");
+const fD = x => (x == null || !isFinite(x)) ? "-" : (Math.round(x) > 0 ? "+" : "") + Math.round(x).toLocaleString("ko-KR");
+const fP = x => (x == null || !isFinite(x)) ? "-" : (x * 100).toFixed(1) + "%";
+const r1 = x => { const r = Math.round(x * 1000) / 10; return r === 0 ? "0.0" : (r > 0 ? "+" : "") + r.toFixed(1); };
+const fPP = x => (x == null || !isFinite(x)) ? "-" : r1(x) + "%p";
+const fGr = x => (x == null || !isFinite(x)) ? "-" : r1(x) + "%";
+const nc = x => (x != null && isFinite(x) && Math.round(x) < 0) ? " neg" : "";
+const jb = k => `<span class="j ${k}">${IC[k]} ${LB[k]}</span>`;
+const yl = y => /^\d{4}$/.test(y) ? y.slice(2) + "년" : y;
+const vl = v => v === "FY" ? (D && D.cmp === "half" ? "상→하" : "연간") : v;
+
+function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1800); }
+function copyText(s, msg) {
+  const done = () => toast(msg || "복사했어요");
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(s).then(done, () => fallback());
+  else fallback();
+  function fallback() { const ta = document.createElement("textarea"); ta.value = s; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); done(); } catch (e) { alert("복사 실패"); } ta.remove(); }
+}
+
+/* ---------- 저장 (IndexedDB) ---------- */
+const idb = (() => {
+  let p;
+  const db = () => p || (p = new Promise((res, rej) => { const r = indexedDB.open("cost_check_v2", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+  const run = (mode, fn) => db().then(d => new Promise(res => { const t = d.transaction("kv", mode); const q = fn(t.objectStore("kv")); t.oncomplete = () => res(q && q.result); t.onerror = () => res(null); })).catch(() => null);
+  // Ver2 첫 실행: 저장 자료가 없으면 Ver1(cost_check) 저장분을 한 번 가져옴
+  const v1 = k => new Promise(res => { try { const r = indexedDB.open("cost_check"); r.onsuccess = () => { const d = r.result; if (!d.objectStoreNames.contains("kv")) { d.close(); return res(null); } const q = d.transaction("kv", "readonly").objectStore("kv").get(k); q.onsuccess = () => { d.close(); res(q.result || null); }; q.onerror = () => { d.close(); res(null); }; }; r.onerror = () => res(null); r.onupgradeneeded = () => { r.transaction.abort(); res(null); }; } catch (e) { res(null); } });
+  const getV2 = async k => { const v = await run("readonly", s => s.get(k)); if (v != null || k !== "in") return v; const o = await v1(k); if (o) await run("readwrite", s => s.put(o, k)); return o; };
+  return { get: getV2, set: (k, v) => run("readwrite", s => s.put(v, k)), del: k => run("readwrite", s => s.delete(k)) };
+})();
+
+/* ---------- 파싱 ---------- */
+const cl = s => (s == null ? "" : String(s)).replace(/[⊟⊞▣▶▼]/g, "").replace(/ /g, " ").replace(/^"|"$/g, "").trim();
+function num(s) {
+  s = cl(s); if (!s || s === "-") return 0;
+  if (/%$/.test(s)) return null;
+  let neg = false; if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+  s = s.replace(/[,\s원₩]/g, "");
+  if (s === "-" || s === "") return 0;
+  const v = Number(s); if (!isFinite(v)) return null;
+  return neg ? -v : v;
+}
+function mkey(name) {
+  const n = cl(name).replace(/^(합계|평균|개수|최대|최소|Sum of)\s*[:：]?\s*/i, "").replace(/\s/g, "");
+  if (!n) return { k: null, n: "(빈칸)" };
+  if (/율|률|%|비중|구성비|2$/.test(n)) return { k: null, n, rate: true };
+  if (/^(총매출|매출액?|GrossRevenue)$/i.test(n)) return { k: "S", n };
+  if (/^(매출)?차감(액)?$/.test(n)) return { k: "D", n };
+  if (/^판관비/.test(n)) return { k: "P", n };
+  if (/^(판촉)?비용(계)?$/.test(n)) return { k: "C", n };
+  if (/^변동원가/.test(n)) return { k: "V", n };
+  if (/^(공헌이익|CM)/i.test(n)) return { k: "M", n };
+  return { k: null, n };
+}
+function parse(text) {
+  const rows = text.replace(/\r\n?/g, "\n").split("\n").map(l => l.split("\t"));
+  let hi = -1, vi = -1;
+  for (let i = 0; i < Math.min(rows.length, 40) && hi < 0; i++) { const j = rows[i].findIndex(c => /^(Σ|∑)?\s*값$/.test(cl(c))); if (j >= 0) { hi = i; vi = j; } }
+  if (vi < 0) for (let i = 0; i < rows.length && vi < 0; i++) { const j = rows[i].findIndex(c => /^합계\s*[:：]/.test(cl(c))); if (j >= 0) { vi = j; hi = i - 1; } }
+  if (vi < 0) throw new Error("'값' 열(합계 : 총매출 …)을 찾지 못했어요. 피벗의 머리글 행부터 복사해 주세요.");
+  const hdr = hi >= 0 ? rows[hi] : [];
+  const dims = []; for (let k = 0; k < vi; k++) dims.push(cl(hdr[k]) || ("구분" + (k + 1)));
+  const maxC = Math.max(...rows.slice(0, Math.max(hi + 1, 1) + 50).map(r => r.length));
+  const lab = [];
+  for (let c = vi + 1; c < maxC; c++) lab[c] = [];
+  for (let i = 0; i <= hi; i++) {
+    let last = "";
+    for (let c = vi + 1; c < maxC; c++) {
+      let v = cl(rows[i][c]).replace(/열\s*레이블|Column\s*Labels/ig, "").trim();
+      if (i < hi) { if (v) last = v; v = last; }
+      if (v) lab[c].push(v);
+    }
+  }
+  const W = [], per = [], skipped = [];
+  for (let c = vi + 1; c < maxC; c++) {
+    const L = (lab[c] || []).join(" ").replace(/\s+/g, " ").trim();
+    if (!L) continue;
+    if (/총합계|요약|합계|total/i.test(L)) { skipped.push(L); continue; }
+    const m = L.match(/(20\d{2})/) || L.match(/(\d{2})\s*(년|Y|T|B)/i);
+    let y = null, sub = L;
+    if (m) { y = m[1].length === 2 ? "20" + m[1] : m[1]; sub = L.replace(m[0], "").replace(/\s+/g, " ").trim(); }
+    per.push({ c, L, y, sub: sub || "연간" });
+  }
+  if (!per.length) throw new Error("기간 열(26년 상반기 등)을 찾지 못했어요.");
+  if (per.every(p => !p.y)) {
+    if (per.length % 2) throw new Error("연도(26년·27년) 행을 찾지 못했어요. 연도 행까지 포함해서 복사해 주세요.");
+    const h = per.length / 2; per.forEach((p, i) => p.y = i < h ? "기준" : "비교");
+    W.push("연도 행이 없어 앞쪽 열을 '기준', 뒤쪽 열을 '비교'로 가정했어요.");
+  } else if (per.some(p => !p.y)) { per.filter(p => !p.y).forEach(p => skipped.push(p.L)); for (let i = per.length - 1; i >= 0; i--) if (!per[i].y) per.splice(i, 1); }
+  const years = [...new Set(per.map(p => p.y))];
+  if (years.length < 2) throw new Error("비교할 연도가 2개 이상 필요해요. (인식된 연도: " + years.map(yl).join(", ") + ")");
+  const y0 = years[0], y1 = years[years.length - 1];
+  const subsOf = y => per.filter(p => p.y === y).map(p => p.sub);
+  const s1set = new Set(subsOf(y1));
+  const subs = subsOf(y0).filter(s => s1set.has(s));
+  const onlyOne = [...subsOf(y0), ...subsOf(y1)].filter(s => !subs.includes(s));
+  if (!subs.length) throw new Error("두 연도에 공통 기간(상반기·하반기 등)이 없어요.");
+  if (onlyOne.length) W.push("한쪽 연도에만 있는 기간은 비교에서 제외: " + [...new Set(onlyOne)].join(", "));
+  if (years.length > 2) W.push(`연도가 ${years.length}개라 처음(${yl(y0)})과 마지막(${yl(y1)})을 비교해요.`);
+
+  const nd = dims.length, leaves = new Map(), ign = {}, mf = {}, mname = {}, dupM = {};
+  let prev = dims.map(() => ""), nRows = 0, nSub = 0;
+  for (let i = hi + 1; i < rows.length; i++) {
+    const r = rows[i]; if (!r.some(c => cl(c))) continue;
+    const dv = []; let isSub = false;
+    for (let k = 0; k < nd; k++) { const v = cl(r[k]); if (/(요약|합계)$|^총합계|^total/i.test(v)) isSub = true; dv.push(v); }
+    if (isSub) { nSub++; continue; }
+    for (let k = 0; k < nd; k++) if (!dv[k]) dv[k] = prev[k];
+    prev = dv.slice();
+    const mk = mkey(r[vi]);
+    if (mk.k && mname[mk.k] && mname[mk.k] !== mk.n) { ign[mk.n + " (같은 항목 중복→제외)"] = (ign[mk.n + " (같은 항목 중복→제외)"] || 0) + 1; dupM[mk.n] = mname[mk.k]; continue; }
+    if (mk.k && !mname[mk.k]) mname[mk.k] = mk.n;
+    if (!mk.k) { ign[mk.n] = (ign[mk.n] || 0) + 1; continue; }
+    mf[mk.k] = (mf[mk.k] || 0) + 1; nRows++;
+    const key = dv.join("\u0001");
+    let Lf = leaves.get(key); if (!Lf) { Lf = { d: dv, raw: {} }; leaves.set(key, Lf); }
+    for (const p of per) { const v = num(r[p.c]); if (v == null) continue; const kk = mk.k + "|" + p.y + "|" + p.sub; Lf.raw[kk] = (Lf.raw[kk] || 0) + v; }
+  }
+  for (const [n, o] of Object.entries(dupM)) W.push(`값 항목 "${n}"은 "${o}"와 같은 항목으로 인식돼 제외했어요 (이중 합산 방지)`);
+  if (!mf.S) throw new Error("'총매출' 행을 찾지 못했어요.");
+  if (!mf.C && !(mf.D || mf.P)) throw new Error("'비용'(또는 매출차감·판관비) 행을 찾지 못했어요.");
+  if (!mf.M && !mf.V) W.push("공헌이익·변동원가 행이 없어 CM을 계산할 수 없어요 (CM = 매출 − 비용).");
+  const LL = [...leaves.values()];
+  for (const Lf of LL) {
+    Lf.v = {};
+    for (const y of [y0, y1]) {
+      Lf.v[y] = {};
+      for (const s of subs) {
+        const g = k => Lf.raw[k + "|" + y + "|" + s];
+        const S = g("S") || 0, Dd = g("D") || 0, P = g("P") || 0, V = g("V") || 0;
+        let C = g("C"); if (C == null) C = Dd + P;
+        let M = g("M"); if (M == null) M = S - C - V;
+        Lf.v[y][s] = { S, D: Dd, P, C, V, M };
+      }
+    }
+  }
+  return { dims, nd, years, y0, y1, subs, leaves: LL, ign, mf, nRows, nSub, skipped, W };
+}
+
+/* ---------- 집계·판정 ---------- */
+function sumv(Ls, y, view) {
+  const o = { S: 0, D: 0, P: 0, C: 0, V: 0, M: 0 };
+  const ss = view === "FY" ? D.subs : [view];
+  for (const L of Ls) for (const s of ss) { const v = L.v[y][s]; if (!v) continue; for (const k in o) o[k] += v[k]; }
+  return o;
+}
+function judge(a, b) {
+  const r = { a, b }, e = 1e-9;
+  r.cr0 = a.S ? a.C / a.S : null; r.cr1 = b.S ? b.C / b.S : null;
+  r.vr0 = a.S ? a.V / a.S : null; r.vr1 = b.S ? b.V / b.S : null;
+  r.mr0 = a.S ? a.M / a.S : null; r.mr1 = b.S ? b.M / b.S : null;
+  r.dS = b.S - a.S; r.dSp = Math.abs(a.S) > e ? r.dS / Math.abs(a.S) : null;
+  r.dM = b.M - a.M; r.dC = b.C - a.C;
+  r.dcr = (r.cr0 != null && r.cr1 != null) ? r.cr1 - r.cr0 : null;
+  r.dmr = (r.mr0 != null && r.mr1 != null) ? r.mr1 - r.mr0 : null;
+  if (Math.abs(a.S) < e && Math.abs(b.S) < e) { r.k = "na"; return r; }
+  if (a.S <= e) { r.k = "new"; return r; }
+  if (b.S <= e) { r.k = "end"; return r; }
+  r.eS = r.dS * r.mr0; r.eC = -r.dcr * b.S; r.eV = -(r.vr1 - r.vr0) * b.S; r.eX = r.dM - r.eS - r.eC - r.eV;
+  const up = r.dcr * 100 > ST.thr + 1e-9;
+  r.k = !up ? "ok" : (b.S <= a.S + e ? "red" : (b.M < a.M - e ? "warn" : "up"));
+  return r;
+}
+const lab = v => Array.isArray(v) ? v.join("+") : v;
+const passF = (L, f) => { for (const k in f) { const v = f[k]; if (!v || (Array.isArray(v) && !v.length)) continue; if (Array.isArray(v) ? !v.includes(L.d[k]) : L.d[k] !== v) return false; } return true; };
+/* 여러 개 선택한 단계는 하나로 합쳐서 봄 (예: 이마트+롯데마트) */
+function vleaves(f, filt, mergeF) {
+  f = f || {}; const M = mergeF || f, mm = [];
+  for (const k in M) if (Array.isArray(M[k]) && M[k].length > 1) mm.push([+k, new Set(M[k]), lab(M[k])]);
+  const src = filt === false ? D.leaves : D.leaves.filter(L => passF(L, f));
+  if (!mm.length) return src;
+  return src.map(L => { let d = L.d; for (const [k, s, lb] of mm) if (s.has(L.d[k])) { if (d === L.d) d = d.slice(); d[k] = lb; } return d === L.d ? L : { d, v: L.v }; });
+}
+function drillF(oldF, d) { const F = {}; d.forEach((v, k) => { F[k] = (Array.isArray(oldF[k]) && v === lab(oldF[k])) ? oldF[k] : v; }); return F; }
+function msHtml(k, opts, cur) {
+  const sel = cur == null || cur === "" ? [] : (Array.isArray(cur) ? cur : [cur]);
+  const txt = !sel.length ? "전체" : sel.length === 1 ? sel[0] : `${sel[0]} 외 ${sel.length - 1}개`;
+  return `<label class="f">${esc(D.dims[k])}<span class="ms" data-fk="${k}"><button type="button" class="msb${sel.length ? " msx" : ""}">${esc(txt)} ▾</button><span class="msp" hidden><span class="msl">${opts.map(o => `<label><input type="checkbox" value="${esc(o)}" ${sel.includes(o) ? "checked" : ""}> ${esc(o)}</label>`).join("")}</span><span class="msa"><button type="button" class="sec" data-msall>전체 해제</button><button type="button" data-msok>적용</button></span></span></span></label>`;
+}
+function msClean(F, k, opts) { const v = F[k]; if (!v) return; if (Array.isArray(v)) { const w = v.filter(x => opts.includes(x)); if (!w.length) delete F[k]; else F[k] = w.length === 1 ? w[0] : w; } else if (!opts.includes(v)) delete F[k]; }
+function msBind(el, getF, after) {
+  el.addEventListener("click", e => {
+    const ms = e.target.closest(".ms"); if (!ms) return;
+    const pop = ms.querySelector(".msp");
+    if (e.target.closest(".msb")) { document.querySelectorAll(".msp").forEach(p => { if (p !== pop) p.hidden = true; }); pop.hidden = !pop.hidden; return; }
+    if (e.target.closest("[data-msall]")) { pop.querySelectorAll("input").forEach(i => i.checked = false); return; }
+    if (e.target.closest("[data-msok]")) {
+      const k = +ms.dataset.fk, vals = [...pop.querySelectorAll("input:checked")].map(i => i.value), F = getF();
+      if (!vals.length) delete F[k]; else F[k] = vals.length === 1 ? vals[0] : vals;
+      Object.keys(F).forEach(j => { if (+j > k) delete F[j]; }); pop.hidden = true; after();
+    }
+  });
+}
+document.addEventListener("click", e => { if (!e.target.closest(".ms")) document.querySelectorAll(".msp").forEach(p => p.hidden = true); });
+function groups(lvl, f) {
+  const m = new Map();
+  for (const L of vleaves(f)) {
+    
+    const key = L.d.slice(0, lvl + 1).join("\u0001");
+    let g = m.get(key); if (!g) { g = { d: L.d.slice(0, lvl + 1), L: [] }; m.set(key, g); }
+    g.L.push(L);
+  }
+  return [...m.values()];
+}
+const views = () => D.cmp === "half" ? ["FY"] : [...D.subs, "FY"];
+function evalG(g) { g.j = {}; for (const v of views()) g.j[v] = judge(sumv(g.L, D.y0, v), sumv(g.L, D.y1, v)); return g; }
+const isSku = lvl => lvl === D.nd - 1;
+const bigEnough = g => Math.max(Math.abs(g.j.FY.a.S), Math.abs(g.j.FY.b.S)) >= ST.minS;
+const worst = g => Math.min(...views().map(v => SEV[g.j[v].k]));
+const nm = g => g.d[g.d.length - 1];
+const path = g => g.d.slice(0, -1).join(" > ");
+
+/* ---------- 1. 붙여넣기 ---------- */
+/* ---------- 가벼운 저장 형식 + 백업 텍스트 ---------- */
+const MK6 = ["S", "D", "P", "C", "V", "M"];
+const rnd = x => Math.round(x * 1000) / 1000;
+function toCompact() {
+  const X = DC0 || DC || D; return { v: 1, dims: X.dims, y: [X.y0, X.y1], subs: X.subs, mf: X.mf,
+    L: X.leaves.map(L => [L.d, [X.y0, X.y1].flatMap(y => X.subs.flatMap(s => MK6.map(k => rnd(L.v[y][s][k]))))]) };
+}
+function fromCompact(o) {
+  const [y0, y1] = o.y, subs = o.subs;
+  const leaves = o.L.map(([d, a]) => { const L = { d, v: {} }; let i = 0; for (const y of [y0, y1]) { L.v[y] = {}; for (const s of subs) { const v = {}; for (const k of MK6) v[k] = a[i++]; L.v[y][s] = v; } } return L; });
+  return { dims: o.dims, nd: o.dims.length, years: [y0, y1], y0, y1, subs, leaves, ign: {}, mf: o.mf || { S: 1, D: 1, P: 1, C: 1, V: 1, M: 1 }, nRows: 0, nSub: 0, skipped: [], W: [], stored: true };
+}
+function u8b64(buf) { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
+async function gz(str) { const cs = new CompressionStream("gzip"); const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(str)); w.close(); return u8b64(await new Response(cs.readable).arrayBuffer()); }
+async function gunz(b64) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const ds = new DecompressionStream("gzip"); const w = ds.writable.getWriter(); w.write(u); w.close(); return await new Response(ds.readable).text(); }
+const BK_CH = 30000;
+async function makeBackup() {
+  const p = await gz(JSON.stringify({ c: toCompact(), thr: ST.thr, minS: ST.minS, at: new Date().toISOString().slice(0, 16) }));
+  const parts = []; for (let i = 0; i < p.length; i += BK_CH) parts.push(p.slice(i, i + BK_CH));
+  const n = parts.length;
+  return parts.map((c, i) => (i === 0 ? "CCHK1~" : "~") + (i + 1) + "/" + n + "|" + c + (i === n - 1 ? "|END" : "")).join("\n");
+}
+async function readBackup(txt) {
+  const lines = txt.replace(/\r/g, "").split("\n").map(l => l.trim().replace(/^"+|"+$/g, "").replace(/\t.*$/, "")).filter(Boolean);
+  const got = {}; let n = 0, end = false;
+  for (const l of lines) {
+    const m = l.match(/^(?:CCHK1)?~(\d+)\/(\d+)\|(.*)$/); if (!m) continue;
+    n = +m[2]; let body = m[3]; if (body.endsWith("|END")) { body = body.slice(0, -4); end = true; }
+    got[+m[1]] = body;
+  }
+  if (!n) throw new Error("백업 텍스트 형식이 아니에요 (CCHK1~ 로 시작해야 해요)");
+  const miss = []; for (let i = 1; i <= n; i++) if (got[i] == null) miss.push(i);
+  if (miss.length) throw new Error(`백업 ${n}줄 중 ${miss.join(", ")}번째 줄이 빠졌어요. 모든 줄을 복사해 주세요.`);
+  if (!end) throw new Error("백업 마지막 줄(|END)이 잘렸어요. 끝까지 복사해 주세요.");
+  let o; try { o = JSON.parse(await gunz(Array.from({ length: n }, (_, i) => got[i + 1]).join(""))); } catch (e) { throw new Error("백업 내용이 손상됐어요 (일부 글자가 잘렸거나 바뀜)"); }
+  return o;
+}
+async function saveStore() { if (D) await idb.set("in", { c: toCompact(), thr: ST.thr, minS: ST.minS, at: new Date().toISOString().slice(0, 16) }); }
+
+async function analyze(save, keepView) {
+  const rawAll = $("#raw").value.replace(/[\r\n]+$/, ""), txt = rawAll.trim();   // 피벗 첫 줄 앞 빈 칸(탭)은 지우면 안 됨
+  ST.thr = Math.max(0, Number($("#thr").value) || 0); ST.minS = Math.max(0, Number($("#minS").value) || 0);
+  const box = $("#pinfo");
+  let src = "";
+  if (!txt) {
+    if (D && !DC) setModes(D);
+    if (!D) { box.innerHTML = '<div class="chips"><span class="chip no">붙여넣은 내용이 없어요</span></div>'; return; }
+    keepView = true; src = "저장된 자료";
+  } else {
+    try {
+      if (/^"?CCHK1~/.test(txt)) {
+        const o = await readBackup(txt); setModes(fromCompact(o.c)); ST.saved = {};
+        if (o.thr != null) { ST.thr = o.thr; $("#thr").value = o.thr; } if (o.minS != null) { ST.minS = o.minS; $("#minS").value = o.minS; }
+        src = "백업 텍스트" + (o.at ? ` (${o.at.replace("T", " ")} 저장)` : "");
+      } else { setModes(parse(rawAll)); ST.saved = {}; src = "붙여넣기"; }
+    } catch (e) { box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; return; }
+  }
+  if (save) { await saveStore(); if (txt) $("#raw").value = ""; }
+  if (!keepView) { ST.lvl = Math.min(1, D.nd - 1); ST.ins = { filt: {}, unit: null }; ST.filt = {}; ST.sum = { filt: {}, unit: null }; ST.view = "FY"; ST.sort = null; }
+  const ignN = Object.entries(D.ign);
+  const mName = { S: "총매출", D: "매출차감", P: "판관비", C: "비용", V: "변동원가", M: "공헌이익" };
+  box.innerHTML = `<div class="chips">
+    <span class="chip ok">✅ ${D.leaves.length.toLocaleString()}개 품목${D.nRows ? ` · 금액 ${D.nRows.toLocaleString()}행` : ""} · ${esc(src)}</span>
+    <span class="chip ok">비교: ${yl(D.y0)} → ${yl(D.y1)} (${D.subs.join(" · ")})</span>
+    <span class="chip">구분: ${D.dims.map(esc).join(" › ")}</span>
+    ${Object.keys(mName).map(k => `<span class="chip ${D.mf[k] ? "ok" : "w"}">${mName[k]} ${D.mf[k] ? "✓" : (k === "C" ? "없음→차감+판관" : k === "M" ? "없음→계산" : "없음")}</span>`).join("")}
+    ${ignN.length ? `<span class="chip" title="${esc(ignN.map(([k, v]) => k + " " + v).join(", "))}">무시한 행 ${ignN.reduce((s, x) => s + x[1], 0).toLocaleString()} (율·총매출2 등)</span>` : ""}
+    ${D.nSub ? `<span class="chip">소계 행 ${D.nSub} 제외</span>` : ""}
+    ${D.skipped.length ? `<span class="chip" title="${esc(D.skipped.join(", "))}">합계 열 ${D.skipped.length} 제외</span>` : ""}
+    ${D.W.map(w => `<span class="chip w">⚠ ${esc(w)}</span>`).join("")}
+  </div>`;
+  renderAll();
+  if (save) { setStage(2); toast("분석 완료"); }
+}
+
+/* ---------- 2. 요약표 (보고 양식) ---------- */
+const ITEMS = [["S", "Gross Revenue (총매출)"], ["C", "판촉비용"], ["cr", "% 판촉비용률"], ["M", "CM (공헌이익)"], ["mr", "% margin"]];
+function sumBlock(g) {
+  const V = views(), J = V.map(v => g.j[v]);
+  const val = (j, side, it) => it === "cr" ? (side ? j.cr1 : j.cr0) : it === "mr" ? (side ? j.mr1 : j.mr0) : (side ? j.b : j.a)[it];
+  const rows = [];
+  for (const [it, label] of ITEMS) {
+    const rt = it === "cr" || it === "mr";
+    const c0 = J.map(j => val(j, 0, it)), c1 = J.map(j => val(j, 1, it));
+    const dl = J.map((j, i) => (c1[i] == null || c0[i] == null) ? null : c1[i] - c0[i]);
+    const pc = J.map((j, i) => rt || !c0[i] ? null : dl[i] / Math.abs(c0[i]));
+    rows.push({ it, label, rt, c0, c1, dl, pc });
+  }
+  return rows;
+}
+function renderSum() {
+  const out = $("#sumOut");
+  if (!D) { out.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; return; }
+  const F = ST.sum.filt;
+  const u = scopeUI(ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb");
+  const dp = insDeep(F);
+  const fk = Object.keys(F).filter(k => F[k]).map(Number).sort((a, b) => a - b);
+  const scope = fk.length ? fk.map(k => lab(F[k])).join(" › ") : "전체";
+  const gs = groups(u, F).map(evalG);
+  const tot = evalG({ d: [scope + " 합계"], L: D.leaves.filter(L => passF(L, F)), tot: 1 });
+  const canDrill = u < D.nd - 1;
+  const V = views(), n = V.length;
+  const vh = V.map(vl);
+  let h = `<table class="rep"><thead><tr><th class="l" rowspan="2">${esc(D.dims[u])} / 항목${canDrill ? ' <small style="font-weight:400;opacity:.8">(이름 클릭 → 하위)</small>' : ""}</th>
+    <th colspan="${n}" class="sep">${esc(yl(D.y0))}</th><th colspan="${n}" class="sep">${esc(yl(D.y1))}</th><th colspan="${n}" class="sep">Δ (${esc(yl(D.y1))} − ${esc(yl(D.y0))})</th><th colspan="${n}" class="sep">%</th></tr><tr>`;
+  for (let b = 0; b < 4; b++) vh.forEach((x, i) => h += `<th class="${i === 0 ? "sep" : ""}">${esc(x)}</th>`);
+  h += "</tr></thead><tbody>";
+  const tsv = [[D.dims[u], "항목", ...vh.map(x => yl(D.y0) + " " + x), ...vh.map(x => yl(D.y1) + " " + x), ...vh.map(x => "Δ " + x), ...vh.map(x => "% " + x)].join("\t")];
+  for (const g of [...gs, tot]) {
+    const gname = g.tot ? g.d[0] : g.d.slice(dp + 1).join(" › ");
+    h += g.tot || !canDrill ? `<tr><td class="g" colspan="${1 + n * 4}">${esc(gname)}</td></tr>`
+      : `<tr><td class="g dr" colspan="${1 + n * 4}" data-drill="${esc(JSON.stringify(g.d))}">${esc(gname)} <span class="muted" style="font-weight:400">▸ ${esc(D.dims[autoNext(u)])} 보기</span></td></tr>`;
+    for (const r of sumBlock(g)) {
+      const f = r.rt ? fP : fN;
+      h += `<tr><td class="it${r.rt ? " rt" : ""}">${r.label}</td>`;
+      r.c0.forEach((x, i) => h += `<td class="n${i === 0 ? " sep" : ""}">${f(x)}</td>`);
+      r.c1.forEach((x, i) => h += `<td class="n${i === 0 ? " sep" : ""}">${f(x)}</td>`);
+      r.dl.forEach((x, i) => {
+        const pk = (r.it === "cr" && x != null && x * 100 > ST.thr + 1e-9) || (r.it === "mr" && x != null && x * 100 <= -0.05);
+        h += `<td class="n${i === 0 ? " sep" : ""}${pk ? " pk" : ""}${nc(r.rt ? x * 1000 : x)}">${r.rt ? fPP(x) : fD(x)}</td>`;
+      });
+      r.pc.forEach((x, i) => h += r.rt ? `<td class="hat${i === 0 ? " sep" : ""}"></td>` : `<td class="n${i === 0 ? " sep" : ""}${nc(x * 1000)}">${fGr(x)}</td>`);
+      h += "</tr>";
+      tsv.push([g.d.join(" > "), r.label, ...r.c0.map(x => r.rt ? fP(x) : Math.round(x)), ...r.c1.map(x => r.rt ? fP(x) : Math.round(x)), ...r.dl.map(x => r.rt ? fPP(x) : Math.round(x)), ...r.pc.map(x => r.rt ? "" : fGr(x))].join("\t"));
+    }
+    h += `<tr class="jr"><td class="it rt">판정</td><td colspan="${n * 2}" class="sep"></td>`;
+    V.forEach((v, i) => h += `<td class="${i === 0 ? "sep" : ""}" style="text-align:center">${jb(g.j[v].k)}</td>`);
+    h += `<td colspan="${n}" class="sep"></td></tr>`;
+    tsv.push([g.d.join(" > "), "판정", ...Array(n * 2).fill(""), ...V.map(v => IC[g.j[v].k] + " " + LB[g.j[v].k])].join("\t"));
+  }
+  out.innerHTML = h + "</tbody></table>";
+  out._tsv = tsv.join("\n");
+}
+
+/* ---------- 3. 판정표 ---------- */
+function colDefs() {
+  const y0 = yl(D.y0), y1 = yl(D.y1);
+  const C = [];
+  for (let k = 0; k <= ST.lvl; k++) C.push({ h: D.dims[k], v: g => g.d[k], t: "s" });
+  C.push({ h: "판정", v: g => SEV[g.jj.k], html: g => jb(g.jj.k), txt: g => IC[g.jj.k] + " " + LB[g.jj.k] });
+  if (ST.view === "FY" && D.cmp !== "half") C.push({ h: "반기 판정", v: g => Math.min(...D.subs.map(s => SEV[g.j[s].k])), html: g => D.subs.map(s => `<span title="${esc(s)}: ${LB[g.j[s].k]}">${esc(s.slice(0, 1))}${IC[g.j[s].k]}</span>`).join(" "), txt: g => D.subs.map(s => s + IC[g.j[s].k]).join(" ") });
+  const A = [
+    ["매출 " + y0, g => g.jj.a.S, fN], ["매출 " + y1, g => g.jj.b.S, fN], ["매출 Δ", g => g.jj.dS, fD, 1], ["매출 Δ%", g => g.jj.dSp, fGr, 1],
+    ["판촉비용 " + y0, g => g.jj.a.C, fN], ["판촉비용 " + y1, g => g.jj.b.C, fN],
+    ["판촉율 " + y0, g => g.jj.cr0, fP], ["판촉율 " + y1, g => g.jj.cr1, fP], ["판촉율 Δ", g => g.jj.dcr, fPP, 2],
+    ["CM " + y0, g => g.jj.a.M, fN], ["CM " + y1, g => g.jj.b.M, fN], ["CM Δ", g => g.jj.dM, fD, 1],
+    ["CM율 " + y0, g => g.jj.mr0, fP], ["CM율 " + y1, g => g.jj.mr1, fP], ["CM율 Δ", g => g.jj.dmr, fPP, 1],
+    ["ΔCM: 매출효과", g => g.jj.eS, fD, 1], ["판촉율효과", g => g.jj.eC, fD, 1], ["원가율효과", g => g.jj.eV, fD, 1]
+  ];
+  for (const [h, v, f, mode] of A) C.push({ h, v, f, n: 1, mode });
+  return C;
+}
+function cellCls(c, x) {
+  if (!c.n) return "";
+  let s = "n";
+  if (c.mode === 1 && x != null && isFinite(x) && (c.f === fN || c.f === fD ? Math.round(x) < 0 : x * 100 <= -0.05)) s += " neg";
+  if (c.mode === 2 && x != null && x * 100 > ST.thr + 1e-9) s += " pk";
+  return s;
+}
+function filtOk(g) {
+  const k = g.jj.k;
+  if (ST.jf === "bad" && !(k === "red" || k === "warn")) return false;
+  if (ST.jf === "red" && k !== "red") return false;
+  if (ST.jf === "up" && !(k === "red" || k === "warn" || k === "up")) return false;
+  if (ST.q && !g.d.join(" ").toLowerCase().includes(ST.q.toLowerCase())) return false;
+  if (isSku(ST.lvl) && !bigEnough(g)) return false;
+  return true;
+}
+function renderTbl() {
+  if (D && !views().includes(ST.view)) ST.view = "FY";
+  const out = $("#tblOut");
+  if (!D) { out.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; return; }
+  $("#viewBtns").innerHTML = views().map(v => `<button class="${v === ST.view ? "on" : "sec"}" data-v="${esc(v)}">${esc(vl(v))}</button>`).join("");
+  $("#lvl").innerHTML = D.dims.map((d, i) => `<option value="${i}" ${i === ST.lvl ? "selected" : ""}>${esc(d)}</option>`).join("");
+  let fh = "";
+  for (let k = 0; k < Math.min(ST.lvl, D.nd - 1); k++) {
+    const up = {}; for (let j = 0; j < k; j++) if (ST.filt[j]) up[j] = ST.filt[j];
+    const opts = [...new Set(D.leaves.filter(L => passF(L, up)).map(L => L.d[k]))];
+    msClean(ST.filt, k, opts);
+    fh += msHtml(k, opts, ST.filt[k]);
+  }
+  $("#filts").innerHTML = fh;
+  Object.keys(ST.filt).forEach(k => { if (+k >= ST.lvl) delete ST.filt[k]; });
+  const fk = Object.keys(ST.filt).filter(k => ST.filt[k]).sort((a, b) => a - b);
+  $("#crumb").innerHTML = fk.length ? `<span class="muted">필터:</span> ${fk.map(k => `<b>${esc(lab(ST.filt[k]))}</b>`).join(" › ")} <a id="crumbUp">↑ 한 단계 위로</a> <a id="crumbReset">전체 보기</a>` : "";
+
+  const C = colDefs();
+  let gs = groups(ST.lvl, ST.filt).map(evalG);
+  gs.forEach(g => g.jj = g.j[ST.view]);
+  const all = gs.slice();
+  gs = gs.filter(filtOk);
+  const cnt = { red: 0, warn: 0 }; all.forEach(g => { if (filtOk2(g) && (g.jj.k === "red" || g.jj.k === "warn")) cnt[g.jj.k]++; });
+  if (ST.sort) { const c = C[ST.sort.i]; const dir = ST.sort.d; gs.sort((a, b) => { const x = c.v(a), y = c.v(b); if (c.t === "s") return String(x).localeCompare(String(y), "ko") * dir; return ((x == null ? -Infinity : x) - (y == null ? -Infinity : y)) * dir; }); }
+  else gs.sort((a, b) => SEV[a.jj.k] - SEV[b.jj.k] || (a.jj.dM || 0) - (b.jj.dM || 0));
+  const tg = evalG({ d: ["합계"], L: gs.flatMap(g => g.L) }); tg.jj = tg.j[ST.view];
+  let h = `<table class="jt"><thead><tr>${C.map((c, i) => `<th data-i="${i}">${esc(c.h)}${ST.sort && ST.sort.i === i ? (ST.sort.d > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead><tbody>`;
+  if (!gs.length) h += `<tr><td colspan="${C.length}" class="empty">해당하는 항목이 없어요</td></tr>`;
+  gs.forEach((g, ri) => {
+    h += `<tr data-r="${ri}">`;
+    for (const c of C) { const x = c.v(g); h += c.html ? `<td>${c.html(g)}</td>` : c.n ? `<td class="${cellCls(c, x)}">${c.f(x)}</td>` : `<td>${esc(x)}</td>`; }
+    h += "</tr>";
+  });
+  h += `<tr class="tot">`;
+  C.forEach((c, i) => { if (i === 0) h += `<td>합계 (${gs.length})</td>`; else if (!c.n) h += c.h === "판정" ? `<td>${jb(tg.jj.k)}</td>` : "<td></td>"; else { const x = c.v(tg); h += `<td class="${cellCls(c, x)}">${c.f(x)}</td>`; } });
+  h += "</tr></tbody></table>";
+  out.innerHTML = h;
+  $("#tblFx").innerHTML = cmFormula(gs[0] && gs[0].jj, gs[0] && nm(gs[0]));
+  out._rows = gs; out._C = C;
+  out._tsv = [C.map(c => c.h).join("\t"), ...gs.map(g => C.map(c => c.txt ? c.txt(g) : c.n ? (c.f === fN || c.f === fD ? Math.round(c.v(g)) : c.f(c.v(g))) : c.v(g)).join("\t"))].join("\n");
+  const b = $(D.mode === "p" ? "#bdgP" : "#bdg"); const t = cnt.red + cnt.warn; b.hidden = !t; b.textContent = t;
+}
+function filtOk2(g) { return !(isSku(ST.lvl) && !bigEnough(g)); }
+
+/* ---------- 4. INSIGHT ---------- */
+function line(j) {
+  return `매출 ${fN(j.a.S)}→${fN(j.b.S)} (${fGr(j.dSp)}), 판촉율 ${fP(j.cr0)}→${fP(j.cr1)} (${fPP(j.dcr)}), CM ${fN(j.a.M)}→${fN(j.b.M)} (${fD(j.dM)})`;
+}
+function cmFormula(j, name) {
+  const y0 = yl(D.y0), y1 = yl(D.y1);
+  const p = x => { const s = (x * 100).toFixed(1) + "%"; return x < 0 ? "(" + s + ")" : s; };
+  let ex = "";
+  if (j && j.eS != null) {
+    ex = `<p class="muted" style="margin-top:6px"><b>예시 — ${esc(name || "")}</b> (매출 ${fN(j.a.S)}→${fN(j.b.S)}, 판촉율 ${p(j.cr0)}→${p(j.cr1)}, 원가율 ${p(j.vr0)}→${p(j.vr1)}, CM율 ${y0} ${p(j.mr0)})<br>
+      ① (${fN(j.b.S)} − ${fN(j.a.S)}) × ${p(j.mr0)} = <b>${fD(j.eS)}</b><br>
+      ② −(${p(j.cr1)} − ${p(j.cr0)}) × ${fN(j.b.S)} = <b>${fD(j.eC)}</b><br>
+      ③ −(${p(j.vr1)} − ${p(j.vr0)}) × ${fN(j.b.S)} = <b>${fD(j.eV)}</b><br>
+      합계 ${fD(j.eS + j.eC + j.eV)}${Math.abs(j.eX) >= 0.5 ? ` + 기타 ${fD(j.eX)}` : ""} = CM ${fN(j.a.M)}→${fN(j.b.M)} (<b>${fD(j.dM)}</b>) ※ 화면 숫자는 반올림이라 ±1 차이 날 수 있어요</p>`;
+  }
+  return `<details class="fx"><summary>📐 산식 보기 (CM 분해: 매출효과 · 판촉율효과 · 원가율효과)</summary><div class="fxb">
+    <p><b>기호</b> · 판촉율 = 판촉비용(매출차감+판관비) ÷ 매출 · 원가율 = 변동원가 ÷ 매출 · CM율 = CM(공헌이익) ÷ 매출 · ₁ = ${y0}, ₂ = ${y1}</p>
+    <table class="fxt"><tbody>
+      <tr><td>① 매출효과</td><td>(매출₂ − 매출₁) × CM율₁</td><td class="muted">이익률이 그대로일 때, 매출이 늘거나 줄어서 생긴 CM 변화</td></tr>
+      <tr><td>② 판촉율효과</td><td>−(판촉율₂ − 판촉율₁) × 매출₂</td><td class="muted">판촉비용율이 오른 만큼 ${y1} 매출에서 빠지는 CM (판촉율↑ → −)</td></tr>
+      <tr><td>③ 원가율효과</td><td>−(원가율₂ − 원가율₁) × 매출₂</td><td class="muted">변동원가율 변화로 생긴 CM 변화 (원가율↓ → +)</td></tr>
+      <tr><td>검산</td><td>① + ② + ③ = CM₂ − CM₁</td><td class="muted">CM = 매출 − 판촉비용 − 변동원가라서 정확히 일치. 자료의 CM이 이 식과 다르면 차이를 '기타'로 따로 표시</td></tr>
+    </tbody></table>${ex}</div></details>`;
+}function decomp(j) { return j.eS == null ? "" : `매출효과 ${fD(j.eS)} / 판촉율효과 ${fD(j.eC)} / 원가율효과 ${fD(j.eV)}` + (Math.abs(j.eX) >= 0.5 ? ` / 기타 ${fD(j.eX)}` : ""); }
+const inScope = (g, d) => d.every((x, i) => g.d[i] === x);
+const fPP2 = x => (x == null || !isFinite(x)) ? "-" : (Math.abs(x * 100) < 0.005 ? "0.00" : ((x > 0 ? "+" : "") + (x * 100).toFixed(2))) + "%p";
+/* 판촉율 증감 기여 분해: Δ판촉율 = Σ 품목 기여 (기존 품목 = 구성비 변화 + 품목 판촉율 변화, 종료·신규 품목 = 빠지거나 들어온 영향) */
+function rateDecomp(Ls, unit, view, mk) { mk = mk || "C";
+  const m = new Map();
+  for (const L of Ls) { const key = L.d.slice(0, unit + 1).join("\u0001"); let g = m.get(key); if (!g) { g = { d: L.d.slice(0, unit + 1), L: [] }; m.set(key, g); } g.L.push(L); }
+  const it = [...m.values()].map(g => ({ d: g.d, a: sumv(g.L, D.y0, view), b: sumv(g.L, D.y1, view) }));
+  const S0 = it.reduce((s, x) => s + x.a.S, 0), S1 = it.reduce((s, x) => s + x.b.S, 0);
+  const C0 = it.reduce((s, x) => s + x.a[mk], 0), C1 = it.reduce((s, x) => s + x.b[mk], 0);
+  const CR0 = S0 ? C0 / S0 : 0, CR1 = S1 ? C1 / S1 : 0, e = 1e-9;
+  const R = { rows: [], map: new Map(), S0, S1, CR0, CR1, dCR: CR1 - CR0, RT: 0, MXc: 0, END: 0, NEW: 0 };
+  for (const x of it) {
+    const has0 = Math.abs(x.a.S) > e, has1 = Math.abs(x.b.S) > e;
+    const w0 = S0 ? x.a.S / S0 : 0, w1 = S1 ? x.b.S / S1 : 0;
+    const cr0 = has0 ? x.a[mk] / x.a.S : null, cr1 = has1 ? x.b[mk] / x.b.S : null;
+    let mix = 0, rate = 0, st;
+    if (has0 && has1) { mix = (w1 - w0) * (cr0 - CR0); rate = w1 * (cr1 - cr0); st = "both"; R.MXc += mix; R.RT += rate; }
+    else if (has1) { mix = (S1 ? x.b[mk] / S1 : 0) - (S0 ? x.a[mk] / S0 : 0) - (w1 - w0) * CR0; st = "new"; R.NEW += mix; }
+    else if (has0) { mix = (S1 ? x.b[mk] / S1 : 0) - (S0 ? x.a[mk] / S0 : 0) - (w1 - w0) * CR0; st = "end"; R.END += mix; }
+    else { mix = (S1 ? x.b[mk] / S1 : 0) - (S0 ? x.a[mk] / S0 : 0); st = "zero"; R.MXc += mix; if (Math.abs(mix) < e) continue; }
+    const r = { d: x.d, a: x.a, b: x.b, w0, w1, cr0, cr1, mix, rate, tot: mix + rate, st };
+    R.rows.push(r); R.map.set(x.d.join("\u0001"), r);
+  }
+  return R;
+}
+function rdLine(R, lab) {
+  const p = [`${lab} 판촉율 변화 ${fPP2(R.RT)}`, `구성비 변화 ${fPP2(R.MXc)}`];
+  if (Math.abs(R.END) >= 0.00005) p.push(`<b>종료 품목 ${fPP2(R.END)}</b>`);
+  if (Math.abs(R.NEW) >= 0.00005) p.push(`<b>신규 품목 ${fPP2(R.NEW)}</b>`);
+  return `판촉율 ${fP(R.CR0)}→${fP(R.CR1)} (${fPP2(R.dCR)}) = ` + p.join(" + ");
+}
+let RDC = new Map(), RDD = null;
+function rdScope(k, d, view) { // k = 상위 단계 index (-1 = 전체), d = 기준 경로
+  if (RDD !== D) { RDC = new Map(); RDD = D; }
+  const pre = d.slice(0, k + 1), key = k + "|" + pre.join("\u0001") + "|" + view + "|" + JSON.stringify(ST.curF || {});
+  if (!RDC.has(key)) RDC.set(key, rateDecomp(vleaves({}, false, ST.curF || {}).filter(L => pre.every((x, i) => L.d[i] === x)), D.nd - 1, view));
+  return RDC.get(key);
+}
+const fPP3 = x => (x == null || !isFinite(x)) ? "-" : Math.abs(x * 100) < 0.1 && Math.abs(x * 100) >= 0.0005 ? ((x > 0 ? "+" : "") + (x * 100).toFixed(3) + "%p") : fPP2(x);
+function chainHtml(d, view) {
+  const parts = [];
+  for (let k = D.nd - 2; k >= -1; k--) {
+    if (k >= 0 && D.mode !== "p" && /제품군/.test(D.dims[k])) continue;
+    if (D.mode === "p" && k > subIdx()) continue;   // 제품 분석: 팀 단계는 건너뛰고 SKU부터
+    const R = rdScope(k, d, view), r = R.map.get(d.join("\u0001"));
+    if (!r) continue;
+    parts.push(`${esc(k < 0 ? "전체" : d[k])} <b>${fPP3(r.tot)}</b> <span class="muted">(${fP(R.CR0)}→${fP(R.CR1)})</span>`);
+  }
+  return parts.length ? `↳ 상위로 가면: ${parts.join(" › ")}` : "";
+}
+/* 🧩 판촉율 증감 퍼즐: 범위 Δ판촉율 = Σ 하위 기여 (단계별로 펼쳐서 합이 맞음) */
+function pzProdStart() { if (D.mode === "p") return -1; const i = D.dims.findIndex(n => /제품군/.test(n)); return i > 0 ? i : -1; }
+function puzzle(Ls, lvl, view, mk, ord) { mk = mk || "C";
+  const R = rateDecomp(Ls, D.nd - 1, view, mk);
+  let levels = []; for (let k = lvl; k < D.nd; k++) levels.push(k);   // 제품군 포함 전 단계
+  // 제품별 보기: 팀·채널 단계를 뒤로 (제품군→대분류→소분류→SKU→채널) — 같은 SKU×채널 기여를 묶는 순서만 바뀜, 합계 동일
+  const ps = pzProdStart();
+  if (ord === "pr" && ps > lvl) levels = [...levels.filter(k => k >= ps), ...levels.filter(k => k < ps)];
+  const last = levels[levels.length - 1];
+  const root = { kids: new Map() };
+  for (const r of R.rows) {
+    let node = root; const vp = [];
+    for (const k of levels) {
+      vp.push(r.d[k]);
+      const key = levels[0] === lvl && levels.every((x, i) => i === 0 || x === levels[i - 1] + 1) ? r.d.slice(0, k + 1).join("\u0001") : "pr\u0002" + vp.join("\u0001");
+      let c = node.kids.get(key);
+      if (!c) { c = { key, name: r.d[k], k, kids: new Map(), S0: 0, S1: 0, C0: 0, C1: 0, rate: 0, mix: 0, en: 0, tot: 0, st: null, sts: new Set(), n: 0 }; node.kids.set(key, c); }
+      c.S0 += r.a.S; c.S1 += r.b.S; c.C0 += r.a[mk]; c.C1 += r.b[mk];
+      c.rate += r.rate; if (r.st === "end" || r.st === "new") c.en += r.mix; else c.mix += r.mix;
+      c.tot += r.tot; c.n++;
+      if (k === D.nd - 1 || k === last) { c.sts.add(r.st); c.st = c.sts.size === 1 ? r.st : null; }   // SKU가 여러 채널이면 전부 종료/신규일 때만 표시
+      node = c;
+    }
+  }
+  return { R, root, levels };
+}
+function pzFormula(R, RN, mk) {
+  const CN = mk === "V" ? "변동원가" : "판촉비용", y0 = yl(D.y0), y1 = yl(D.y1);
+  const ex = R.rows.filter(r => r.st === "both").sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot))[0];
+  const en = R.rows.filter(r => r.st === "end" || r.st === "new").sort((a, b) => Math.abs(b.mix) - Math.abs(a.mix))[0];
+  const p = x => { const s = (x * 100).toFixed(1) + "%"; return x < 0 ? "(" + s + ")" : s; };
+  let exH = "";
+  if (ex) {
+    const n = esc(ex.d[ex.d.length - 1]);
+    exH += `<p class="muted" style="margin-top:6px"><b>예시 — ${n}</b> (${RN} ${p(ex.cr0)}→${p(ex.cr1)}, 구성비 ${p(ex.w0)}→${p(ex.w1)}, 전체 ${y0} ${RN} ${p(R.CR0)})<br>
+      ① ${p(ex.w1)} × (${p(ex.cr1)} − ${p(ex.cr0)}) = <b>${fPP3(ex.rate)}</b><br>
+      ② (${p(ex.w1)} − ${p(ex.w0)}) × (${p(ex.cr0)} − ${p(R.CR0)}) = <b>${fPP3(ex.mix)}</b><br>
+      기여 합계 = ① + ② = <b>${fPP3(ex.tot)}</b></p>`;
+  }
+  if (en) {
+    const n = esc(en.d[en.d.length - 1]);
+    exH += en.st === "end"
+      ? `<p class="muted"><b>예시 — ${n}</b> (⛔ 종료, ${y0} 구성비 ${p(en.w0)}, ${RN} ${p(en.cr0)})<br>③ −${p(en.w0)} × (${p(en.cr0)} − ${p(R.CR0)}) = <b>${fPP3(en.mix)}</b></p>`
+      : `<p class="muted"><b>예시 — ${n}</b> (🆕 신규, ${y1} 구성비 ${p(en.w1)}, ${RN} ${p(en.cr1)})<br>③ ${p(en.w1)} × (${p(en.cr1)} − ${p(R.CR0)}) = <b>${fPP3(en.mix)}</b></p>`;
+  }
+  return `<details class="fx"><summary>📐 산식 보기 (① ${RN} 변화분 · ② 구성비 변화분 · ③ 종료·신규)</summary>
+    <div class="fxb">
+      <p><b>기호</b> · ${RN} = ${CN} ÷ 매출 · 구성비(w) = 품목 매출 ÷ 이 카드 범위 전체 매출 · R<sub>${y0}</sub> = 범위 전체 ${y0} ${RN} (${p(R.CR0)}) · 기준 = ${LEAF()}</p>
+      <table class="fxt"><tbody>
+        <tr><td>① ${RN} 변화분</td><td>w<sub>${y1}</sub> × (${RN}<sub>${y1}</sub> − ${RN}<sub>${y0}</sub>)</td><td class="muted">구성비가 그대로여도 그 품목 ${RN}이 바뀐 만큼 (두 해 모두 판매한 ${LEAF()})</td></tr>
+        <tr><td>② 구성비 변화분</td><td>(w<sub>${y1}</sub> − w<sub>${y0}</sub>) × (${RN}<sub>${y0}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 높은 품목 비중↑ → +, 낮은 품목 비중↑ → − (두 해 모두 판매한 ${LEAF()})</td></tr>
+        <tr><td>③ 종료 품목</td><td>− w<sub>${y0}</sub> × (${RN}<sub>${y0}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 낮던 품목이 빠지면 + (전체 ${RN} 올라감)</td></tr>
+        <tr><td>③ 신규 품목</td><td>w<sub>${y1}</sub> × (${RN}<sub>${y1}</sub> − R<sub>${y0}</sub>)</td><td class="muted">평균보다 ${RN} 높은 신규 품목이 들어오면 +</td></tr>
+        <tr><td>기여 합계</td><td>① + ② + ③</td><td class="muted">제품군·대분류·소분류 줄 = 그 안 ${LEAF()} 값의 합</td></tr>
+        <tr><td>검산</td><td>Σ 기여 합계 = R<sub>${y1}</sub> − R<sub>${y0}</sub></td><td class="muted">${p(R.CR1)} − ${p(R.CR0)} = ${fPP2(R.dCR)} (반올림 차이 외 정확히 일치)</td></tr>
+      </tbody></table>${exH}
+    </div></details>`;
+}
+/* 퍼즐 증감 표시: a→b (Δ) · t = "S" 매출(음수 빨강) / "W" 구성비(색 없음) / "R" 판촉·원가율(양수 빨강) */
+function pzChg(a, b, t) {
+  const base = t === "S" ? `${fN(a)}→${fN(b)}` : `${fP(a)}→${fP(b)}`;
+  if (a == null || b == null || !isFinite(a) || !isFinite(b)) return base;
+  let d, s;
+  if (t === "S") { d = Math.round(b) - Math.round(a); s = (d > 0 ? "+" : "") + d.toLocaleString("ko-KR"); }
+  else { d = Math.round(b * 1000) - Math.round(a * 1000); s = (d > 0 ? "+" : "") + (d / 10).toFixed(1) + "%p"; }
+  const bad = (t === "S" && d < 0) || (t === "R" && d > 0);
+  return `${base} <span class="${bad ? "neg" : "muted"}">(${d === 0 ? (t === "S" ? "0" : "0.0%p") : s})</span>`;
+}
+function pzHtml(P, scope, openSet, mk) { const RN = mk === "V" ? "원가율" : "판촉율";
+  openSet = openSet || new Set();
+  const R = P.R; let id = 0; const rows = [], txt = [];
+  const sk = arr => [...arr.values()].sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
+  const f3 = x => fPP3(x);
+  const walk = (node, depth, pid, vis) => {
+    let cum = 0;
+    for (const c of sk(node.kids)) {
+      const my = ++id; cum += c.tot;
+      const hasK = c.kids.size > 0;
+      const cr0 = c.S0 ? c.C0 / c.S0 : null, cr1 = c.S1 ? c.C1 / c.S1 : null;
+      const w0 = R.S0 ? c.S0 / R.S0 : 0, w1 = R.S1 ? c.S1 / R.S1 : 0;
+      const tag = c.st === "end" ? " ⛔" : c.st === "new" ? " 🆕" : "";
+      const isOpen = hasK && vis && openSet.has(c.key), onPath = openSet.has(c.key);
+      rows.push(`<tr data-pz="${my}" data-pp="${pid}" class="pz d${depth}${hasK ? " hk" : ""}${onPath ? " hl" : ""}" ${vis ? "" : 'style="display:none"'}>
+        <td style="padding-left:${8 + depth * 18}px">${hasK ? `<span class="tg">${isOpen ? "▾" : "▸"}</span> ` : '<span class="tg"> </span> '}${esc(c.name)}${tag} <small class="muted">${esc(D.dims[c.k])}</small></td>
+        <td class="n">${pzChg(c.S0, c.S1, "S")}</td><td class="n">${pzChg(w0, w1, "W")}</td><td class="n">${pzChg(cr0, cr1, "R")}</td>
+        <td class="n${c.rate > 0.00005 ? " neg" : ""}">${f3(c.rate)}</td><td class="n${c.mix > 0.00005 ? " neg" : ""}">${f3(c.mix)}</td><td class="n${c.en > 0.00005 ? " neg" : ""}">${Math.abs(c.en) < 1e-9 ? "" : f3(c.en)}</td>
+        <td class="n pzt${c.tot > 0.00005 ? " neg" : ""}"><b>${f3(c.tot)}</b></td>${depth === 0 ? `<td class="n muted">${f3(cum)}</td>` : "<td></td>"}</tr>`);
+      if (depth < 2) txt.push(`${"  ".repeat(depth)}${depth ? "- " : ""}${c.name}${tag}: 기여 ${f3(c.tot)} (${RN}변화 ${f3(c.rate)}, 구성비 ${f3(c.mix)}${Math.abs(c.en) > 1e-9 ? ", 종료·신규 " + f3(c.en) : ""}) | ${RN} ${fP(cr0)}→${fP(cr1)}, 매출 ${fN(c.S0)}→${fN(c.S1)}`);
+      if (hasK) walk(c, depth + 1, my, isOpen);
+    }
+  };
+  walk(P.root, 0, 0, true);
+  const html = `<p>${esc(scope)} ${RN} <b>${fP(R.CR0)} → ${fP(R.CR1)} (${fPP2(R.dCR)})</b> = ① 기존 품목 ${RN} 변화 <b>${fPP2(R.RT)}</b> + ② 구성비 변화 <b>${fPP2(R.MXc)}</b> + ③ 종료·신규 <b>${fPP2(R.END + R.NEW)}</b></p>
+    ${pzFormula(R, RN, mk)}
+    <div class="toolbar" style="margin:6px 0"><span class="muted">행 클릭 = 펼치기/접기 · 모든 단계에서 합계가 위 증감과 맞아요</span><span class="sp"></span><button class="sec" data-pzall="1">모두 펼치기</button><button class="sec" data-pzall="0">모두 접기</button></div>
+    <div class="tw" style="max-height:560px"><table class="ov pzt"><thead><tr><th>항목</th><th>매출</th><th>구성비</th><th>${RN}</th><th>① ${RN} 변화분</th><th>② 구성비 변화분</th><th>③ 종료·신규</th><th>기여 합계</th><th>누적</th></tr></thead><tbody>${rows.join("")}
+    <tr class="tot"><td>합계</td><td class="n">${pzChg(R.S0, R.S1, "S")}</td><td class="n">100%</td><td class="n">${pzChg(R.CR0, R.CR1, "R")}</td><td class="n">${fPP2(R.RT)}</td><td class="n">${fPP2(R.MXc)}</td><td class="n">${fPP2(R.END + R.NEW)}</td><td class="n"><b>${fPP2(R.dCR)}</b></td><td></td></tr></tbody></table></div>`;
+  const x = `[🧩 ${RN} 증감 퍼즐 — ${scope}] ${fP(R.CR0)}→${fP(R.CR1)} (${fPP2(R.dCR)}) = ${RN}변화 ${fPP2(R.RT)} + 구성비 ${fPP2(R.MXc)} + 종료·신규 ${fPP2(R.END + R.NEW)}\n` + txt.join("\n");
+  return { html, x };
+}
+function enItems(R, n) { return R.rows.filter(r => (r.st === "end" || r.st === "new") && Math.abs(r.mix) >= 0.0005).sort((a, b) => Math.abs(b.mix) - Math.abs(a.mix)).slice(0, n); }
+function enLine(r, R, view) { return enLine0(r, R) + `<br><span class="chain">${chainHtml(r.d, view || "FY")}</span>`; }
+function enLine0(r, R) {
+  const name = leafName(r.d);
+  if (r.st === "end") return `⛔ <b>${esc(name)}</b> — ${yl(D.y1)} 판매 없음 (전년 매출 ${fN(r.a.S)}, 판촉율 ${fP(r.cr0)} vs 전체 ${fP(R.CR0)} → 판촉율 ${r.cr0 < R.CR0 ? "낮던" : "높던"} 품목이 빠짐) → 판촉율 <b class="${r.mix > 0 ? "neg" : ""}">${fPP2(r.mix)}</b> 영향`;
+  return `🆕 <b>${esc(name)}</b> — 신규 (매출 ${fN(r.b.S)}, 판촉율 ${fP(r.cr1)} vs 전년 전체 ${fP(R.CR0)}) → 판촉율 <b class="${r.mix > 0 ? "neg" : ""}">${fPP2(r.mix)}</b> 영향`;
+}
+const strip = s => s.replace(/<br>/g, " ").replace(/<[^>]+>/g, "");
+/* 없어진·새로 생긴 SKU 목록 (SKU 단위로 묶음, 많으면 펼쳐보기) */
+function skuIdx() { const i = D.dims.findIndex(d => /제품번호|SKU|Name/i.test(d)); return i >= 0 ? i : D.nd - 1; }
+function enSkuGroups(R, st) {
+  const si = skuIdx(), m = new Map();
+  for (const r of R.rows) {
+    if (r.st !== st) continue;
+    const key = r.d[si];
+    let g = m.get(key); if (!g) { g = { name: r.d[si], rows: [], mix: 0, S0: 0, C0: 0, S1: 0, C1: 0 }; m.set(key, g); }
+    g.rows.push(r); g.mix += r.mix; g.S0 += r.a.S; g.C0 += r.a.C; g.S1 += r.b.S; g.C1 += r.b.C;
+  }
+  return [...m.values()].sort((a, b) => Math.abs(b.mix) - Math.abs(a.mix));
+}
+function enChainGroup(rows, view) {
+  const ds = rows.map(r => r.d); let cp = 0;
+  while (cp < D.nd && ds.every(d => d[cp] === ds[0][cp])) cp++;
+  const parts = [];
+  for (let k = Math.min(cp, D.nd) - 1; k >= -1; k--) {
+    if (k === D.nd - 1) continue;
+    if (k >= 0 && D.mode !== "p" && /제품군/.test(D.dims[k])) continue;
+    if (D.mode === "p" && k > skuIdx()) continue;
+    const R = rdScope(k, ds[0], view); let s = 0, hit = 0;
+    if (Math.abs(R.S0) < 1e-9 || Math.abs(R.S1) < 1e-9) continue;   // 그 단계 전체가 없어진/새로 생긴 경우는 생략
+    for (const d of ds) { const r = R.map.get(d.join("\u0001")); if (r) { s += r.tot; hit++; } }
+    if (!hit) continue;
+    parts.push(`${esc(k < 0 ? "전체" : ds[0][k])} <b>${fPP3(s)}</b> <span class="muted">(${fP(R.CR0)}→${fP(R.CR1)})</span>`);
+  }
+  return parts.length ? `↳ 상위로 가면: ${parts.join(" › ")}` : "";
+}
+function enSkuHtml(R, view, n0) {
+  n0 = n0 || 5;
+  const y1 = yl(D.y1), END = enSkuGroups(R, "end"), NEW = enSkuGroups(R, "new");
+  if (!END.length && !NEW.length) return { h: "", x: "" };
+  const ci = D.dims.findIndex(d => /채널/.test(d)), si = skuIdx();
+  const multiCh = ci >= 0 && new Set(R.rows.map(r => r.d[ci])).size > 1;
+  const where = g => {
+    if (!multiCh) return "";
+    const ch = [...new Set(g.rows.map(r => r.d[ci]))];
+    const still = R.rows.some(r => r.d[si] === g.name && r.st !== "end" && r.b.S > 0);
+    return (ch.length <= 3 ? ch.join("·") : `${ch.slice(0, 3).join("·")} 외 ${ch.length - 3}곳`) + (g.rows[0].st === "end" ? (still ? " · 다른 채널은 판매 중" : " · 전 채널 종료") : "");
+  };
+  const line = (g, st) => {
+    const cr0 = g.S0 ? g.C0 / g.S0 : null, cr1 = g.S1 ? g.C1 / g.S1 : null, w = where(g);
+    const head = st === "end"
+      ? `⛔ <b>${esc(g.name)}</b>${w ? ` <span class="tag">${esc(w)}</span>` : ""} — ${y1} 판매 없음 (전년 매출 ${fN(g.S0)}, 판촉율 ${fP(cr0)} vs 전체 ${fP(R.CR0)} → 판촉율 ${cr0 < R.CR0 ? "낮던" : "높던"} 품목이 빠짐)`
+      : `🆕 <b>${esc(g.name)}</b>${w ? ` <span class="tag">${esc(w)}</span>` : ""} — 신규 (매출 ${fN(g.S1)}, 판촉율 ${fP(cr1)} vs 전년 전체 ${fP(R.CR0)})`;
+    return `${head} → 판촉율 <b class="${g.mix > 0 ? "neg" : ""}">${fPP3(g.mix)}</b> 영향<br><span class="chain">${enChainGroup(g.rows, view)}</span>`;
+  };
+  const block = (arr, st, title) => {
+    if (!arr.length) return { h: "", x: "" };
+    const tot = arr.reduce((s, g) => s + g.mix, 0);
+    const top = arr.slice(0, n0), rest = arr.slice(n0);
+    let h = `<div class="lbl">${title} <b>${arr.length}개</b> → 판촉율 <b class="${tot > 0 ? "neg" : ""}">${fPP3(tot)}</b> 영향 <span class="muted">(영향 큰 순)</span></div><ul>${top.map(g => `<li>${line(g, st)}</li>`).join("")}</ul>`;
+    if (rest.length) h += `<details class="more"><summary>나머지 ${rest.length}개 펼쳐보기</summary><ul>${rest.map(g => `<li>${line(g, st)}</li>`).join("")}</ul></details>`;
+    const x = `· ${title} ${arr.length}개 → 판촉율 ${fPP3(tot)}\n` + arr.slice(0, 15).map(g => "  " + strip(line(g, st))).join("\n") + (arr.length > 15 ? `\n  … 외 ${arr.length - 15}개` : "") + "\n";
+    return { h, x };
+  };
+  const a = block(END, "end", "⛔ 없어진 SKU"), b = block(NEW, "new", "🆕 새로 생긴 SKU");
+  return { h: a.h + b.h, x: a.x + b.x };
+}function leafName(d) { if (D.mode !== "p") return d[d.length - 1]; const si = subIdx(), ti = d.length - 2; return `${d[si]} @ ${d[d.length - 1]}` + (ti > si ? ` (${d[ti]})` : ""); }
+function subIdx() { const i = D.mode === "p" ? D.dims.findIndex(d => /제품번호|SKU|Name/i.test(d)) : D.dims.findIndex(d => /소분류|소카테고리/.test(d)); return i >= 0 ? i : Math.max(0, D.nd - 2); }
+function why(j) {
+  if (j.k === "new") return `신규 (매출 ${fN(j.b.S)}, 판촉율 ${fP(j.cr1)})`;
+  if (j.k === "end") return `계획 매출 없음 (전년 ${fN(j.a.S)})`;
+  if (j.k === "na") return "-";
+  let s;
+  if (j.k === "red") s = `매출 ${fGr(j.dSp)}인데 판촉율 ${fPP(j.dcr)} 상승 → CM ${fD(j.dM)}`;
+  else if (j.k === "warn") s = `매출 ${fGr(j.dSp)} 늘었지만 판촉율 ${fPP(j.dcr)} 상승분이 더 커서 CM ${fD(j.dM)}`;
+  else if (j.k === "up") s = `판촉율 ${fPP(j.dcr)} 상승했지만 매출 ${fGr(j.dSp)} 성장으로 CM ${fD(j.dM)} 유지`;
+  else s = `판촉율 ${fPP(j.dcr)}, 매출 ${fGr(j.dSp)}, CM ${fD(j.dM)}`;
+  if (D.mf.D && D.mf.P && j.a.S && j.b.S && j.dcr != null && j.dcr * 100 > ST.thr) {
+    const dd = j.b.D / j.b.S - j.a.D / j.a.S, dp = j.b.P / j.b.S - j.a.P / j.a.S;
+    s += ` <span class="muted">(차감율 ${fPP(dd)} · 판관비율 ${fPP(dp)} → <b>${dd >= dp ? "차감(행사) 주도" : "판관비 주도"}</b>)</span>`;
+  }
+  return s;
+}
+function insDeep(f) { return Math.max(-1, ...Object.keys(f).filter(k => f[k]).map(Number)); }
+function autoNext(l) { let u = Math.min(D.nd - 1, l + 1); while (u < D.nd - 1 && D.mode !== "p" && /제품군/.test(D.dims[u])) u++; return u; }
+function insUnit() {
+  const dp = insDeep(ST.ins.filt); let u = ST.ins.unit;
+  if (u == null || u <= dp) u = autoNext(dp);
+  return u;
+}
+function buildIns(lvl, f) {
+  ST.curF = f; ST.pzx = [];
+  const V = views();
+  const gs = groups(lvl, f).map(evalG).filter(g => !isSku(lvl) || bigEnough(g));
+  const skus = groups(D.nd - 1, f).map(evalG).filter(bigEnough);
+  const subsG = lvl < subIdx() ? groups(subIdx(), f).map(evalG) : [];
+  const fk = Object.keys(f).filter(k => f[k]).sort((a, b) => a - b);
+  const scope = fk.length ? fk.map(k => lab(f[k])).join(" › ") : "전체";
+  const cards = [];
+  // ① 범위 개요
+  const tot = evalG({ d: [scope], L: gs.flatMap(g => g.L) });
+  const cntBy = v => { const c = {}; gs.forEach(g => c[g.j[v].k] = (c[g.j[v].k] || 0) + 1); return c; };
+  let oh = "<ul>", ox = `[개요] ${scope} / ${D.dims[lvl]} 기준 ${gs.length}개 / 비교 ${yl(D.y0)}→${yl(D.y1)}\n`;
+  for (const v of V) { const j = tot.j[v], c = cntBy(v); oh += `<li><b>${esc(vl(v))}</b> ${jb(j.k)} ${line(j)} <span class="muted">— 🔴${c.red || 0} ⚠️${c.warn || 0} 🟢${c.up || 0} ✅${c.ok || 0}</span></li>`; ox += `· ${vl(v)} ${IC[j.k]}${LB[j.k]}: ${line(j)} (🔴${c.red || 0} ⚠️${c.warn || 0} 🟢${c.up || 0} ✅${c.ok || 0})\n`; }
+  oh += "</ul>";
+  if (tot.j.FY.eS != null) { oh += `<p class="muted">${vl("FY")} CM 분해: ${decomp(tot.j.FY)}</p>${cmFormula(tot.j.FY, scope)}`; ox += `· ${vl("FY")} CM 분해: ${decomp(tot.j.FY)}\n`; }
+  const scopeL = gs.flatMap(g => g.L);
+  const RS = rateDecomp(scopeL, D.nd - 1, "FY");
+  oh += `<p>📐 <b>판촉율 증감 분해</b> (${vl("FY")}, ${LEAF()} 기준): ${rdLine(RS, "기존 " + LEAF())}</p>`;
+  ox += `· 판촉율 증감 분해(${vl("FY")}, ${LEAF()} 기준): ${strip(rdLine(RS, "기존 " + LEAF()))}\n`;
+  { const EN = enSkuHtml(RS, "FY"); oh += EN.h; ox += EN.x; }
+  const RL = rateDecomp(scopeL, lvl, "FY");
+  cards.push({ cls: "b wide", t: `📌 ${esc(scope)} <small>${esc(D.dims[lvl])} 기준 ${gs.length}개</small>`, h: oh, x: ox.trimEnd() });
+  // 🧩 퍼즐
+  {
+    const pv = ST.pzv && views().includes(ST.pzv) ? ST.pzv : "FY";
+    const dpth = insDeep(f), path0 = fk.map(k => lab(f[k]));
+    // 섹터: 현재 범위 → 채널 → 팀 → 전체 (각각 따로)
+    const secs = [{ k: dpth, lvl: Math.min(D.nd - 1, dpth + 1) }];
+    for (const k of (D.mode === "p" ? [subIdx() - 1, 1, -1] : [1, 0, -1])) if (k < dpth && !secs.some(s => s.k === k) && (k < 0 || !/제품군/.test(D.dims[k]))) secs.push({ k, lvl: k + 1 });
+    const openSet = new Set(); const fullPath = []; for (let k = 0; k <= dpth; k++) { fullPath.push(lab(f[k]) || ""); openSet.add(fullPath.join("\u0001")); }
+    const pm = ST.pzm || "both", mks = pm === "both" ? ["C", "V"] : [pm];
+    const bs = "padding:3px 10px;font-size:12px";
+    const po = ST.pzo === "pr" ? "pr" : "ch", hasPo = pzProdStart() > 0 && secs.some(s => s.lvl < pzProdStart());
+    const btns = (hasPo ? `<span class="grp" style="margin-left:auto;display:flex;gap:2px" title="채널별 = 팀→채널→제품 순 · 제품별 = 채널 합쳐서 제품군→대분류→소분류→SKU→채널 순">${[["ch", "채널별"], ["pr", "제품별"]].map(([k, n]) => `<button class="${k === po ? "on" : "sec"}" data-pzo="${k}" style="${bs}">${n}</button>`).join("")}</span>` : "") + `<span class="grp" style="${hasPo ? "margin-left:8px" : "margin-left:auto"};display:flex;gap:2px">${[["C", "판촉율"], ["V", "원가율"], ["both", "둘 다"]].map(([k, n]) => `<button class="${k === pm ? "on" : "sec"}" data-pzm="${k}" style="${bs}">${n}</button>`).join("")}</span><span class="grp" style="display:flex;gap:2px;margin-left:8px">${views().map(v => `<button class="${v === pv ? "on" : "sec"}" data-pzv="${esc(v)}" style="${bs}">${esc(vl(v))}</button>`).join("")}</span>`;
+    let first = true;
+    for (const mk of mks) { const RN = mk === "V" ? "원가율" : "판촉율"; secs.forEach((s, i) => {
+      const pre = [], subF = {}; for (let k = 0; k <= s.k; k++) { pre.push(lab(f[k])); if (f[k]) subF[k] = f[k]; }
+      const Ls = vleaves(subF, true, f);
+      const nmS = s.k < 0 ? "전체" : pre.filter(Boolean).join(" › ");
+      const secLab = s.k < 0 ? "전체 기준" : (s.k === dpth ? `${D.dims[s.k]} 내` : `${D.dims[s.k]} 기준`);
+      const PO = puzzle(Ls, s.lvl, pv, mk, po), reord = PO.levels.some((k, j) => j > 0 && k < PO.levels[j - 1]);
+      const PZ = pzHtml(PO, nmS, i === 0 || reord ? new Set() : openSet, mk); const xi = ST.pzx.length; ST.pzx.push({ P: PO, mk, RN, nmS, secLab, no: "①②③④⑤"[i] || "", view: pv });
+      const note = reord ? `<p class="muted">📦 제품별 보기 — 채널을 합쳐서 제품군→…→SKU로 묶고, SKU 아래에 채널별 몫을 펼쳐요 (합계는 채널별 보기와 같아요)</p>` : i === 0 ? "" : `<p class="muted">노란 줄 = 지금 보고 있는 ${esc(scope)} 경로 (자동으로 펼쳐둠) — 이 조각이 ${esc(nmS)} 전체 ${RN} 증감에 준 몫이에요</p>`;
+      cards.push({ cls: mk === "V" ? "ok wide" : "b wide", t: `🧩 ${RN} 증감 퍼즐 ${"①②③④⑤"[i] || ""} <b>${esc(secLab)}</b> <small>${esc(nmS)} · ${esc(D.dims[PO.levels[0]])} → … → ${esc(reord ? D.dims[PO.levels[PO.levels.length - 1]] : LEAF_END())}</small> ${first ? btns : ""}`, h: `<div class="row" style="margin:0 0 6px;justify-content:flex-end"><button class="sec" data-pzx="${xi}" style="padding:4px 10px;font-size:12px">📥 이 퍼즐 엑셀</button><button class="sec" data-pzt="${xi}" style="padding:4px 10px;font-size:12px">📋 엑셀용 복사</button></div>` + note + PZ.html, x: PZ.x });
+      first = false;
+    }); }
+  }
+  // ② 한눈에 보기 (클릭 → 하위)
+  const srt = gs.slice().sort((a, b) => worst(a) - worst(b) || (a.j.FY.dM || 0) - (b.j.FY.dM || 0));
+  const lim = srt.slice(0, 60);
+  const canDrill = lvl < D.nd - 1;
+  cards.push({
+    cls: "b wide", t: `🧭 ${esc(D.dims[lvl])}별 한눈에 보기 ${canDrill ? `<small>행 클릭 → ${esc(D.dims[autoNext(lvl)])}(으)로 내려가기</small>` : ""}`,
+    h: `<div class="tw" style="max-height:420px"><table class="ov"><thead><tr><th>${esc(D.dims[lvl])}</th>${V.map(v => `<th>${esc(vl(v))}</th>`).join("")}<th>매출 (${esc(vl("FY"))})</th><th>판촉율 (${esc(vl("FY"))})</th><th>CM (${esc(vl("FY"))})</th><th title="이 항목이 범위 전체 판촉율 증감에 준 영향 (합계 = 전체 증감)">판촉율 기여</th><th>판촉율효과</th></tr></thead><tbody>${lim.map((g, i) => { const j = g.j.FY; return `<tr ${canDrill ? `data-drill="${esc(JSON.stringify(g.d))}" class="dr"` : ""}><td><b>${esc(nm(g))}</b>${canDrill ? ' <span class="muted">▸</span>' : ""}</td>${V.map(v => `<td>${IC[g.j[v].k]} <span class="muted">${LB[g.j[v].k]}</span></td>`).join("")}<td class="n">${fN(j.a.S)}→${fN(j.b.S)} <span class="${nc(j.dS)}">(${fGr(j.dSp)})</span></td><td class="n">${fP(j.cr0)}→${fP(j.cr1)} <span class="${j.dcr != null && j.dcr * 100 > ST.thr + 1e-9 ? "neg" : ""}">(${fPP(j.dcr)})</span></td><td class="n">${fN(j.a.M)}→${fN(j.b.M)} <span class="${nc(j.dM)}">(${fD(j.dM)})</span></td><td class="n${(RL.map.get(g.d.join("\u0001")) || {}).tot > 0.00005 ? " neg" : ""}">${fPP2((RL.map.get(g.d.join("\u0001")) || {}).tot)}${(RL.map.get(g.d.join("\u0001")) || {}).st === "end" ? " ⛔" : (RL.map.get(g.d.join("\u0001")) || {}).st === "new" ? " 🆕" : ""}</td><td class="n${nc(j.eC)}">${fD(j.eC)}</td></tr>`; }).join("")}<tr class="tot"><td>합계</td>${V.map(() => "<td></td>").join("")}<td></td><td class="n">${fP(RL.CR0)}→${fP(RL.CR1)}</td><td></td><td class="n">${fPP2(RL.dCR)}</td><td></td></tr></tbody></table></div>${srt.length > lim.length ? `<p class="muted">상위 ${lim.length}개만 표시 (전체 ${srt.length}개는 판정표에서)</p>` : ""}`,
+    x: `[${D.dims[lvl]}별 한눈에]\n` + srt.slice(0, 30).map(g => `${nm(g)}: ` + V.map(v => vl(v) + IC[g.j[v].k]).join(" ") + ` | ${vl("FY")} ${line(g.j.FY)} | 판촉율 기여 ${fPP2((RL.map.get(g.d.join("\u0001")) || {}).tot)}`).join("\n")
+  });
+  // ③ 문제 항목 카드
+  const bad = gs.filter(g => V.some(v => g.j[v].k === "red" || g.j[v].k === "warn")).sort((a, b) => worst(a) - worst(b) || (a.j.FY.dM || 0) - (b.j.FY.dM || 0));
+  for (const g of bad) {
+    const wk = V.map(v => g.j[v].k).sort((a, b) => SEV[a] - SEV[b])[0];
+    let h = "<ul>", x = `[${IC[wk]} ${nm(g)}${path(g) ? " (" + path(g) + ")" : ""}]\n`;
+    for (const v of V) { const j = g.j[v]; h += `<li><b>${esc(vl(v))}</b> ${jb(j.k)} ${line(j)}</li>`; x += `· ${vl(v)} ${IC[j.k]}${LB[j.k]}: ${line(j)}\n`; }
+    h += "</ul>";
+    const fy = g.j.FY;
+    if (fy.eS != null) { h += `<p class="muted">${vl("FY")} CM 분해: ${decomp(fy)}</p>`; x += `· ${vl("FY")} CM 분해: ${decomp(fy)}\n`; }
+    if (!isSku(lvl)) {
+      const vk = V.filter(v => g.j[v].k === "red" || g.j[v].k === "warn");
+      const v0 = vk.includes("FY") ? "FY" : vk[0];
+      const si = subIdx();
+      const pick = (arr, n) => arr.map(s => ({ s, j: s.j[v0] }))
+        .filter(o => o.j.k === "red" || o.j.k === "warn" || (o.j.eC != null && o.j.eC < -0.5))
+        .sort((a, b) => ((a.j.k === "red" || a.j.k === "warn") ? 0 : 1) - ((b.j.k === "red" || b.j.k === "warn") ? 0 : 1) || (a.j.eC || 0) - (b.j.eC || 0)).slice(0, n);
+      const skuHtml = o => `<li><b>${esc(nm(o.s))}</b> ${jb(o.j.k)} — ${why(o.j)}<br><span class="muted">매출 ${fN(o.j.a.S)}→${fN(o.j.b.S)} · 판촉율 ${fP(o.j.cr0)}→${fP(o.j.cr1)} · CM ${fN(o.j.a.M)}→${fN(o.j.b.M)} · 판촉율효과 ${fD(o.j.eC)}</span></li>`;
+      const skuTxt = o => `   - ${nm(o.s)} [${LB[o.j.k]}] ${why(o.j).replace(/<[^>]+>/g, "")} (매출 ${fN(o.j.a.S)}→${fN(o.j.b.S)}, 판촉율 ${fP(o.j.cr0)}→${fP(o.j.cr1)}, CM ${fN(o.j.a.M)}→${fN(o.j.b.M)})`;
+      if (lvl < si) {
+        const subsIn = subsG.filter(s => inScope(s, g.d));
+        const ps = pick(subsIn, 3);
+        if (ps.length) {
+          h += `<div class="lbl">문제 ${esc(D.dims[si])} → ${esc(LEAF_END())} (${esc(vl(v0))})</div>`;
+          x += `· 문제 ${D.dims[si]} → ${LEAF_END()} (${vl(v0)})\n`;
+          for (const p of ps) {
+            const ks = pick(skus.filter(s => inScope(s, p.s.d)), 3);
+            const RP = rateDecomp(p.s.L, D.nd - 1, v0), en = enItems(RP, 3);
+            const enPart = Math.abs(RP.END) + Math.abs(RP.NEW) >= 0.0005;
+            h += `<div class="subc"><b>▸ ${esc(nm(p.s))}</b> ${jb(p.j.k)} — ${why(p.j)}${enPart ? `<br><span class="muted">📐 ${rdLine(RP, "기존 " + LEAF())}</span>` : ""}</div>${ks.length || en.length ? `<ul>${ks.map(skuHtml).join("")}${en.map(r => `<li>${enLine(r, RP, v0)}</li>`).join("")}</ul>` : ""}`;
+            x += `  ▸ ${nm(p.s)} [${LB[p.j.k]}] ${strip(why(p.j))}\n` + (enPart ? `    📐 ${strip(rdLine(RP, "기존 " + LEAF()))}\n` : "") + ks.map(skuTxt).join("\n") + (ks.length ? "\n" : "") + en.map(r => "   - " + strip(enLine(r, RP, v0))).join("\n") + (en.length ? "\n" : "");
+          }
+        }
+      } else {
+        const ks = pick(skus.filter(s => inScope(s, g.d)), 5);
+        const RP = rateDecomp(g.L, D.nd - 1, v0), en = enItems(RP, 3);
+        if (Math.abs(RP.END) + Math.abs(RP.NEW) >= 0.0005) { h += `<p>📐 ${rdLine(RP, "기존 " + LEAF())}</p>`; x += `· 📐 ${strip(rdLine(RP, "기존 " + LEAF()))}\n`; }
+        if (ks.length || en.length) {
+          h += `<div class="lbl">문제 ${esc(LEAF())} (${esc(vl(v0))})</div><ul>${ks.map(skuHtml).join("")}${en.map(r => `<li>${enLine(r, RP, v0)}</li>`).join("")}</ul>`;
+          x += `· 문제 ${LEAF()} (${vl(v0)})\n` + ks.map(skuTxt).join("\n") + (ks.length ? "\n" : "") + en.map(r => "   - " + strip(enLine(r, RP, v0))).join("\n") + (en.length ? "\n" : "");
+        }
+      }
+    }
+    const link = canDrill ? ` <a class="lnk" data-drill="${esc(JSON.stringify(g.d))}">${esc(D.dims[autoNext(lvl)])} 보기 ▸</a>` : "";
+    cards.push({ cls: wk === "red" ? "red" : "warn", t: `${IC[wk]} ${esc(nm(g))} ${path(g) ? `<small>${esc(path(g))}</small>` : ""}${link}`, h, x: x.trimEnd() });
+  }
+  if (!bad.length) cards.push({ cls: "ok", t: "✅ 문제 항목 없음", h: `<p>${esc(scope)} · ${esc(D.dims[lvl])} 기준으로 🔴·⚠️ 항목이 없어요.</p>`, x: `[${scope}: 문제 항목 없음]` });
+  // ④ SKU TOP
+  if (!isSku(lvl)) {
+    const top = skus.filter(s => s.j.FY.k === "red" || s.j.FY.k === "warn").sort((a, b) => a.j.FY.dM - b.j.FY.dM).slice(0, 15);
+    if (top.length) {
+      const sd = D.dims.slice(0, -1).map((d, i) => i).filter(i => i > insDeep(f));
+      cards.push({
+        cls: "b wide", t: `🔎 ${esc(scope)} 문제 ${esc(LEAF())} TOP ${top.length} <small>${vl("FY")}, CM 감소 큰 순</small>`,
+        pre: cmFormula(top[0].j.FY, nm(top[0])),
+        h: `<div class="tw" style="max-height:none"><table><thead><tr><th>판정</th>${sd.map(i => `<th>${esc(D.dims[i])}</th>`).join("")}<th>${esc(LEAF_END())}</th><th>매출</th><th>판촉율</th><th>CM</th><th>판촉율효과</th></tr></thead><tbody>${top.map(s => { const j = s.j.FY; return `<tr><td>${jb(j.k)}</td>${sd.map(i => `<td>${esc(s.d[i])}</td>`).join("")}<td>${esc(nm(s))}</td><td class="n">${fN(j.a.S)}→${fN(j.b.S)}</td><td class="n">${fP(j.cr0)}→${fP(j.cr1)}</td><td class="n">${fN(j.a.M)}→${fN(j.b.M)} <span class="neg">(${fD(j.dM)})</span></td><td class="n neg">${fD(j.eC)}</td></tr>`; }).join("")}</tbody></table></div>`,
+        x: `[${scope} 문제 ${LEAF()} TOP ${top.length} (${vl("FY")})]\n` + top.map(s => { const j = s.j.FY; return `${IC[j.k]} ${s.d.join(" > ")}: 매출 ${fN(j.a.S)}→${fN(j.b.S)}, 판촉율 ${fP(j.cr0)}→${fP(j.cr1)}, CM ${fN(j.a.M)}→${fN(j.b.M)}(${fD(j.dM)}), 판촉율효과 ${fD(j.eC)}`; }).join("\n")
+      });
+    }
+  }
+  return cards;
+}
+function renderIns() {
+  const out = $("#insOut");
+  if (!D) { out.innerHTML = '<div class="empty card wide">1단계에서 자료를 붙여넣어 주세요</div>'; return; }
+  const F = ST.ins.filt;
+  const u = scopeUI(ST.ins, "#insFilts", "#insLvl", "#insCrumb");
+  const cards = buildIns(u, F);
+  out.innerHTML = cards.map(c => `<div class="card ${c.cls}"><h3>${c.t}</h3>${c.pre || ""}${c.h}</div>`).join("");
+  out._txt = cards.map(c => c.x).join("\n\n");
+}
+function scopeUI(S, filtSel, unitSel, crumbSel) {
+  const F = S.filt;
+  let fh = "";
+  for (let k = 0; k < D.nd - 1; k++) {
+    const up = {}; for (let j = 0; j < k; j++) if (F[j]) up[j] = F[j];
+    const opts = [...new Set(D.leaves.filter(L => passF(L, up)).map(L => L.d[k]))];
+    msClean(F, k, opts);
+    fh += msHtml(k, opts, F[k]);
+  }
+  $(filtSel).innerHTML = fh;
+  const dp = insDeep(F);
+  let u = S.unit; if (u == null || u <= dp) u = autoNext(dp);
+  $(unitSel).innerHTML = D.dims.map((d, i) => i > dp ? `<option value="${i}" ${i === u ? "selected" : ""}>${esc(d)}</option>` : "").join("");
+  const fk = Object.keys(F).filter(k => F[k]).map(Number).sort((a, b) => a - b);
+  $(crumbSel).innerHTML = `<span class="muted">보는 범위:</span> <a data-up="-1">전체</a>${fk.map(k => ` › <a data-up="${k}">${esc(lab(F[k]))}</a>`).join("")} <span class="muted">· ${esc(D.dims[u])}별로 보는 중</span>${fk.length ? ` <a data-up="${fk.length > 1 ? fk[fk.length - 2] : -1}">↑ 위로</a>` : ""}`;
+  return u;
+}
+function bindScope(get, filtSel, unitSel, crumbSel, outSel, render) {
+  $(unitSel).onchange = e => { get().unit = +e.target.value; render(); };
+  msBind($(filtSel), () => get().filt, () => { get().unit = null; render(); });
+  $(crumbSel).addEventListener("click", e => { const S = get(), a = e.target.closest("a[data-up]"); if (!a) return; const k = +a.dataset.up; Object.keys(S.filt).forEach(j => { if (+j > k) delete S.filt[j]; }); S.unit = null; render(); });
+  $(outSel).addEventListener("click", e => { const t = e.target.closest("[data-drill]"); if (!t) return; const S = get(); S.filt = drillF(S.filt, JSON.parse(t.dataset.drill)); S.unit = null; render(); window.scrollTo(0, 0); });
+}
+function insDrill(d) { ST.ins.filt = drillF(ST.ins.filt, d); ST.ins.unit = null; renderIns(); window.scrollTo(0, 0); }
+function aiSummary() { const keepX = ST.pzx, keepF = ST.curF; try { return aiSummary0(); } finally { ST.pzx = keepX; ST.curF = keepF; } }
+function aiSummary0() {
+  if (!D) return "";
+  const L = [];
+  L.push(`[판촉비용율 점검 Ver2 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")} / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
+  L.push(`판정: 🔴 판촉율↑(>${ST.thr}%p)+매출↓, ⚠️ 판촉율↑+매출↑+CM↓, 🟢 판촉율↑+CM 동등 이상, ✅ 판촉율 유지·개선`);
+  L.push("");
+  L.push(`■ ${D.dims[0]}별`);
+  for (const g of groups(0, {}).map(evalG)) L.push(`${g.d[0]}: ` + views().map(v => `${vl(v)} ${IC[g.j[v].k]} ${line(g.j[v])}`).join(" | "));
+  const l1 = Math.min(1, D.nd - 1);
+  L.push(""); L.push(`■ ${D.dims[l1]} 기준 문제 항목`);
+  L.push(buildIns(l1, {}).filter((c, i) => i !== 1).slice(1).map(c => c.x).join("\n\n"));
+  if (insDeep(ST.ins.filt) >= 0) {
+    L.push(""); L.push(`■ 지금 보고 있는 범위 상세`);
+    L.push(buildIns(insUnit(), ST.ins.filt).map(c => c.x).join("\n\n"));
+  }
+  return L.join("\n");
+}
+
+/* ---------- 증감 퍼즐 → 엑셀 (+/− 그룹으로 펼치기, 필터 조회) ---------- */
+function pzRowsFlat(P) {
+  const out = [], R = P.R;
+  const sk = m => [...m.values()].sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
+  const walk = (node, depth, path) => {
+    let cum = 0;
+    for (const c of sk(node.kids)) {
+      cum += c.tot;
+      const p2 = path.concat([{ k: c.k, v: c.name }]);
+      out.push({ depth, c, path: p2, cum: depth === 0 ? cum : null, hasK: c.kids.size > 0,
+        cr0: c.S0 ? c.C0 / c.S0 : null, cr1: c.S1 ? c.C1 / c.S1 : null, w0: R.S0 ? c.S0 / R.S0 : 0, w1: R.S1 ? c.S1 / R.S1 : 0 });
+      if (c.kids.size) walk(c, depth + 1, p2);
+    }
+  };
+  walk(P.root, 0, []);
+  return out;
+}
+function pzTable(e) {
+  const P = e.P, R = P.R, y0 = yl(D.y0), y1 = yl(D.y1), RN = e.RN;
+  const dimIdx = P.levels;
+  const head = ["단계", "항목", ...dimIdx.map(k => D.dims[k]), "구분", `매출 ${y0}`, `매출 ${y1}`, `구성비 ${y0}`, `구성비 ${y1}`, `${RN} ${y0}`, `${RN} ${y1}`, `① ${RN} 변화분(%p)`, "② 구성비 변화분(%p)", "③ 종료·신규(%p)", "기여 합계(%p)", "누적(%p)"];
+  const rows = pzRowsFlat(P).map(r => {
+    const dv = dimIdx.map(k => { const q = r.path.find(p => p.k === k); return q ? q.v : ""; });
+    const st = r.c.st === "end" ? "종료" : r.c.st === "new" ? "신규" : (r.hasK ? "" : "기존");
+    return { depth: r.depth, hasK: r.hasK, cells: [D.dims[r.c.k], "    ".repeat(r.depth) + r.c.name, ...dv, st, r.c.S0, r.c.S1, r.w0, r.w1, r.cr0, r.cr1, r.c.rate * 100, r.c.mix * 100, Math.abs(r.c.en) < 1e-12 ? null : r.c.en * 100, r.c.tot * 100, r.cum == null ? null : r.cum * 100] };
+  });
+  const total = ["합계", "", ...dimIdx.map(() => ""), "", R.S0, R.S1, 1, 1, R.CR0, R.CR1, R.RT * 100, R.MXc * 100, (R.END + R.NEW) * 100, R.dCR * 100, null];
+  const fmts = ["t", "t", ...dimIdx.map(() => "t"), "t", "n", "n", "p", "p", "p", "p", "pp", "pp", "pp", "pp", "pp"];
+  const title = `🧩 ${RN} 증감 퍼즐 ${e.no} ${e.secLab} — ${e.nmS} (${y0} → ${y1}, ${vl(e.view)})`;
+  const sub = `${RN} ${(R.CR0 * 100).toFixed(1)}% → ${(R.CR1 * 100).toFixed(1)}% (${fPP2(R.dCR)}) = ① 기존 품목 ${RN} 변화 ${fPP2(R.RT)} + ② 구성비 변화 ${fPP2(R.MXc)} + ③ 종료·신규 ${fPP2(R.END + R.NEW)}`;
+  const f1 = `산식: ① w${y1}×(${RN}${y1}−${RN}${y0}) · ② (w${y1}−w${y0})×(${RN}${y0}−전체${RN}${y0}) · ③ 종료 −w${y0}×(${RN}${y0}−전체${RN}${y0}) / 신규 w${y1}×(${RN}${y1}−전체${RN}${y0}) · w=구성비 · 상위 줄 = 하위 합`;
+  return { head, rows, total, fmts, title, sub, f1, sheet: `${RN}${e.no}${e.secLab}`.replace(/[\\\/\?\*\[\]:]/g, "").slice(0, 31) };
+}
+function pzTSV(e) {
+  const T = pzTable(e), fm = (v, f) => v == null ? "" : f === "p" ? (v * 100).toFixed(1) + "%" : f === "pp" ? v.toFixed(3) : f === "n" ? Math.round(v) : v;
+  return [T.title, T.sub, "", T.head.join("\t"), ...T.rows.map(r => r.cells.map((v, i) => fm(v, T.fmts[i])).join("\t")), T.total.map((v, i) => fm(v, T.fmts[i])).join("\t")].join("\n");
+}
+// --- 최소 xlsx 작성기 (무압축 zip) ---
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u) { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC_T[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files) {
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  const u16 = v => [v & 255, (v >>> 8) & 255], u32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+  for (const f of files) {
+    const name = enc.encode(f.name), data = typeof f.data === "string" ? enc.encode(f.data) : f.data, crc = crc32(data);
+    const lh = new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0)]);
+    parts.push(lh, name, data);
+    cen.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), name);
+    off += lh.length + name.length + data.length;
+  }
+  const cenLen = cen.reduce((s, x) => s + x.length, 0);
+  const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cenLen), ...u32(off), ...u16(0)]);
+  return new Blob([...parts, ...cen, end], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+const xe = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+function colL(i) { let s = ""; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = (i - m - 1) / 26; } return s; }
+function sheetXml(T) {
+  // styles: 0 기본, 1 머리글, 2 #,##0, 3 0.0%, 4 %p, 5 굵게, 6 굵게#,##0, 7 굵게%, 8 굵게%p, 9 제목, 10 회색 설명
+  const sMap = { t: [0, 5], n: [2, 6], p: [3, 7], pp: [4, 8] };
+  const cell = (r, c, v, s) => { if (v == null || v === "" && s === 0) return ""; const ref = colL(c) + r; if (typeof v === "number") return isFinite(v) ? `<c r="${ref}" s="${s}"><v>${v}</v></c>` : ""; return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xe(v)}</t></is></c>`; };
+  const nc = T.head.length, hr = 5, rowsX = [];
+  rowsX.push(`<row r="1">${cell(1, 0, T.title, 9)}</row>`, `<row r="2">${cell(2, 0, T.sub, 5)}</row>`, `<row r="3">${cell(3, 0, T.f1, 10)}</row>`, `<row r="4">${cell(4, 0, "왼쪽 위 1·2·3… 숫자 버튼 또는 +/− 로 펼치기·접기 · 머리글 필터로 팀·채널·대분류·소분류·SKU 조회 · 모든 단계 합 = 합계 줄", 10)}</row>`);
+  rowsX.push(`<row r="${hr}">${T.head.map((h, i) => cell(hr, i, h, 1)).join("")}</row>`);
+  let r = hr, maxD = 0;
+  T.rows.forEach((x, idx) => {
+    r++; maxD = Math.max(maxD, x.depth);
+    const nxt = T.rows[idx + 1], collapsed = x.hasK && nxt && nxt.depth > x.depth && x.depth >= 0 && (nxt.depth > 0);
+    const attrs = (x.depth ? ` outlineLevel="${Math.min(7, x.depth)}"` : "") + (x.depth > 0 ? ` hidden="1"` : "") + (collapsed ? ` collapsed="1"` : "");
+    rowsX.push(`<row r="${r}"${attrs}>${x.cells.map((v, i) => cell(r, i, v, sMap[T.fmts[i]][x.depth === 0 ? 1 : 0])).join("")}</row>`);
+  });
+  r++; rowsX.push(`<row r="${r}">${T.total.map((v, i) => cell(r, i, v, sMap[T.fmts[i]][1])).join("")}</row>`);
+  const widths = T.head.map((h, i) => i === 1 ? 46 : (T.fmts[i] === "t" ? 16 : 13));
+  const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheetPr><outlinePr summaryBelow="0"/></sheetPr><dimension ref="A1:${colL(nc - 1)}${r}"/>
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="${hr}" topLeftCell="A${hr + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="16.5" outlineLevelRow="${Math.min(7, maxD)}"/>
+<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>
+<sheetData>${rowsX.join("")}</sheetData>
+<autoFilter ref="A${hr}:${colL(nc - 1)}${r - 1}"/>
+</worksheet>`;
+  return { xml, filterRef: `$A$${hr}:$${colL(nc - 1)}$${r - 1}` };
+}
+function pzXlsx(list) {
+  const used = new Set(), sheets = list.map(e => { const T = pzTable(e); let n = T.sheet || "퍼즐", k = 2; while (used.has(n)) n = (T.sheet.slice(0, 28) + "_" + k++); used.add(n); const S = sheetXml(T); return { name: n, ...S }; });
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="2"><numFmt numFmtId="164" formatCode="+0.00&quot;%p&quot;;-0.00&quot;%p&quot;;0.00&quot;%p&quot;"/><numFmt numFmtId="165" formatCode="0.0%"/></numFmts>
+<fonts count="4"><font><sz val="10"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="10"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="13"/><color rgb="FF1F3864"/><name val="맑은 고딕"/><family val="3"/></font><font><sz val="9"/><color rgb="FF5B6577"/><name val="맑은 고딕"/><family val="3"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F3864"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF3F6FB"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="11">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+<xf numFmtId="3" fontId="1" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1"/>
+<xf numFmtId="165" fontId="1" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1"/>
+<xf numFmtId="164" fontId="1" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+  // 헤더 행 글자색(흰색)은 머리글 스타일에 별도 폰트 필요 → 폰트1(굵게)에 흰색 사용
+  const stylesFix = styles.replace('<fonts count="4">', '<fonts count="5">').replace('</fonts>', '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/><family val="3"/></font></fonts>').replace('<xf numFmtId="0" fontId="1" fillId="2"', '<xf numFmtId="0" fontId="4" fillId="2"');
+  const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>${sheets.map((s, i) => `<sheet name="${xe(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets>
+<definedNames>${sheets.map((s, i) => `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xe(s.name.replace(/'/g, "''"))}'!${s.filterRef}</definedName>`).join("")}</definedNames>
+</workbook>`;
+  const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  return zipStore([{ name: "[Content_Types].xml", data: ct }, { name: "_rels/.rels", data: rels }, { name: "xl/workbook.xml", data: wb }, { name: "xl/_rels/workbook.xml.rels", data: wbRels }, { name: "xl/styles.xml", data: stylesFix },
+    ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: s.xml }))]);
+}
+function dlBlob(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+function pzFileName(sfx) { return `증감퍼즐_${(ST.mode === "p" ? "제품" : "채널")}_${sfx}_${new Date().toISOString().slice(0, 10)}.xlsx`.replace(/[\\\/:*?"<>|]/g, "_"); }
+/* ---------- 공통 ---------- */
+function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpBar(); } window.scrollTo(0, 0); }
+function renderAll() { renderSum(); renderTbl(); renderIns(); }
+
+$("#modeBar").addEventListener("click", e => {
+  const b = e.target.closest("button[data-cmp]"); if (!b || !DC0) return;
+  ST.cmp = b.dataset.cmp; applyCmp(); ST.view = "FY"; ST.pzv = "FY"; ST.saved = {};
+  renderAll(); setStage(document.body.dataset.stage);
+  toast(ST.cmp === "year" ? "연도 비교로 바꿨어요" : `${yl(ST.cmp)} 상반기 → 하반기 비교로 바꿨어요`);
+});$("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.m) switchMode(b.dataset.m); setStage(b.dataset.s); });
+$("#go").onclick = () => analyze(true);
+$("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true, true); };
+$("#clear").onclick = async () => { if (!confirm("저장된 자료를 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = DC = DP = DC0 = null; ST.saved = {}; ST.cmp = "year"; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
+async function loadBackupText(txt) {
+  const info = $("#bkInfo");
+  txt = (txt || "").replace(/^\uFEFF/, "");
+  if (!/CCHK1~/.test(txt)) { info.innerHTML = '<div class="chips"><span class="chip no">❌ 백업 텍스트가 아니에요 (CCHK1~ 로 시작해야 해요)</span></div>'; return; }
+  try { await readBackup(txt); }
+  catch (e) { info.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; return; }
+  $("#raw").value = txt.slice(txt.indexOf("CCHK1~")); $("#bkIn").value = "";
+  info.innerHTML = '<div class="chips"><span class="chip ok">✅ 불러왔어요</span></div>';
+  await analyze(true);
+}
+$("#bkLoad").onclick = () => loadBackupText($("#bkIn").value);
+$("#bkClip").onclick = async () => { try { const s = await navigator.clipboard.readText(); $("#bkIn").value = s; loadBackupText(s); } catch (e) { $("#bkInfo").innerHTML = '<div class="chips"><span class="chip w">⚠ 클립보드 읽기가 막혀 있어요 → 위 칸에 Ctrl+V 후 「불러오기」</span></div>'; } };
+$("#bkOpen").onclick = () => $("#bkFileIn").click();
+$("#bkFileIn").onchange = e => { const fl = e.target.files[0]; if (!fl) return; const r = new FileReader(); r.onload = () => loadBackupText(String(r.result)); r.onerror = () => { $("#bkInfo").innerHTML = '<div class="chips"><span class="chip no">❌ 파일을 읽지 못했어요 (보안 프로그램이 막았을 수 있어요) → 텍스트 복사로 해주세요</span></div>'; }; r.readAsText(fl, "utf-8"); e.target.value = ""; };$("#bkCopy").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); copyText(b, `백업 텍스트 복사 (${b.split("\n").length}줄, ${Math.round(b.length / 1024)}KB) → 메모장·엑셀 A열·메신저에 붙여넣어 보관/공유`); };
+$("#bkFile").onclick = async () => { if (!D) { toast("먼저 자료를 분석해 주세요"); return; } const b = await makeBackup(); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([b], { type: "text/plain" })); a.download = "판촉비용율점검_백업_" + new Date().toISOString().slice(0, 10) + ".txt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+$("#sample").onclick = () => { $("#raw").value = makeSample(); analyze(false).then(() => { setStage(2); toast("샘플 데이터 (가상 숫자)"); }); };
+bindScope(() => ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb", "#sumOut", () => renderSum());
+$("#insOut").addEventListener("click", e => {
+  const b = e.target.closest("button[data-pzv]"); if (b) { ST.pzv = b.dataset.pzv; renderIns(); return; }
+  const bm = e.target.closest("button[data-pzm]"); if (bm) { ST.pzm = bm.dataset.pzm; renderIns(); return; }
+  const bo = e.target.closest("button[data-pzo]"); if (bo) { ST.pzo = bo.dataset.pzo; renderIns(); return; }
+  const all = e.target.closest("button[data-pzall]");
+  if (all) { const on = all.dataset.pzall === "1"; all.closest(".card").querySelectorAll("tr.pz").forEach(r => { if (!r.classList.contains("d0")) r.style.display = on ? "" : "none"; const t = r.querySelector(".tg"); if (r.classList.contains("hk") && t) t.textContent = on ? "▾" : "▸"; }); return; }
+  const tr = e.target.closest("tr.pz.hk"); if (!tr) return;
+  const tb = tr.parentNode, id = tr.dataset.pz;
+  const kids = [...tb.querySelectorAll(`tr[data-pp="${id}"]`)];
+  const open = kids.some(k => k.style.display !== "none");
+  const hideDesc = pid => tb.querySelectorAll(`tr[data-pp="${pid}"]`).forEach(k => { k.style.display = "none"; const t = k.querySelector(".tg"); if (k.classList.contains("hk") && t) t.textContent = "▸"; hideDesc(k.dataset.pz); });
+  if (open) hideDesc(id); else kids.forEach(k => k.style.display = "");
+  tr.querySelector(".tg").textContent = open ? "▸" : "▾";
+});bindScope(() => ST.ins, "#insFilts", "#insLvl", "#insCrumb", "#insOut", () => renderIns());
+$("#sumCopy").onclick = () => copyText($("#sumOut")._tsv || "", "표를 복사했어요 (엑셀에 붙여넣기)");
+$("#viewBtns").onclick = e => { const b = e.target.closest("button"); if (!b) return; ST.view = b.dataset.v; renderTbl(); };
+$("#lvl").onchange = e => { ST.lvl = +e.target.value; ST.sort = null; renderTbl(); };
+msBind($("#filts"), () => ST.filt, () => renderTbl());
+$("#jf").onchange = e => { ST.jf = e.target.value; renderTbl(); };
+$("#q").oninput = e => { ST.q = e.target.value.trim(); renderTbl(); };
+$("#tblCopy").onclick = () => copyText($("#tblOut")._tsv || "", "표를 복사했어요 (엑셀에 붙여넣기)");
+$("#tblOut").addEventListener("click", e => {
+  const th = e.target.closest("th");
+  if (th) { const i = +th.dataset.i; ST.sort = ST.sort && ST.sort.i === i ? (ST.sort.d > 0 ? { i, d: -1 } : null) : { i, d: 1 }; renderTbl(); return; }
+  const tr = e.target.closest("tr[data-r]"); if (!tr || isSku(ST.lvl)) return;
+  const g = $("#tblOut")._rows[+tr.dataset.r];
+  ST.filt = drillF(ST.filt, g.d); ST.lvl++; ST.sort = null; renderTbl();
+});
+$("#crumb").addEventListener("click", e => {
+  if (e.target.id === "crumbReset") { ST.filt = {}; ST.lvl = Math.min(1, D.nd - 1); }
+  else if (e.target.id === "crumbUp") { const ks = Object.keys(ST.filt).filter(k => ST.filt[k]).map(Number); const mx = Math.max(...ks); delete ST.filt[mx]; ST.lvl = Math.max(0, mx); }
+  else return;
+  ST.sort = null; renderTbl();
+});
+$("#insOut").addEventListener("click", e => {
+  const bx = e.target.closest("button[data-pzx]"), bt = e.target.closest("button[data-pzt]");
+  if (bx) { const x = ST.pzx[+bx.dataset.pzx]; if (x) { dlBlob(pzXlsx([x]), pzFileName(x.RN + x.no + x.secLab)); toast("엑셀 다운로드"); } }
+  if (bt) { const x = ST.pzx[+bt.dataset.pzt]; if (x) copyText(pzTSV(x), "엑셀에 붙여넣기 할 수 있게 복사했어요"); }
+});
+$("#pzAllX").onclick = () => { if (!ST.pzx || !ST.pzx.length) { toast("INSIGHT에 퍼즐이 없어요"); return; } dlBlob(pzXlsx(ST.pzx), pzFileName("전체")); toast(`퍼즐 ${ST.pzx.length}개 시트로 다운로드`); };$("#insCopy").onclick = () => copyText($("#insOut")._txt || "", "INSIGHT를 복사했어요");
+$("#aiCopy").onclick = $("#aiCopy2").onclick = () => copyText(aiSummary(), "요약을 복사했어요 → 디스코드에 붙여넣으면 Claude가 분석해요");
+
+/* ---------- 샘플 (가상 숫자) ---------- */
+function makeSample() {
+  const P = [
+    ["C.Hyper", "C1.이마트", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml", [240, 270, 260, 285], [.345, .303, .36, .348], [.66, .66, .66, .66]],
+    ["C.Hyper", "C1.이마트", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml 2입", [2090, 2140, 1900, 1990], [.372, .332, .378, .361], [.65, .668, .66, .66]],
+    ["C.Hyper", "C2.롯데마트", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml", [500, 520, 530, 560], [.30, .30, .29, .29], [.55, .55, .55, .55]],
+    ["D.SSM", "D1.농협", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml", [3000, 3100, 3300, 3450], [.12, .12, .125, .125], [.55, .55, .55, .55]],
+    ["D.SSM", "D1.농협", "5. 커피", "E.커피", "E01. 컵커피", "샘플커피250ml", [800, 820, 780, 800], [.20, .21, .20, .215], [.45, .45, .45, .45]],
+    ["D.SSM", "D3.롯데슈퍼", "1. 시유", "J.시유GT", "J01. 시유 GT 900", "샘플우유900ml", [600, 650, 640, 690], [.25, .25, .28, .27], [.55, .55, .55, .55]],
+    ["E.CVS", "E1.CU", "5. 커피", "E.커피", "E01. 컵커피", "샘플커피250ml", [1100, 1150, 1180, 1200], [.30, .29, .29, .28], [.45, .45, .45, .45]],
+    ["E.CVS", "E1.CU", "1. 시유", "J.시유기타", "J05. 시유 200", "샘플우유200ml", [400, 420, 380, 390], [.20, .20, .23, .22], [.60, .60, .60, .60]]
+  ];
+  const out = [["", "", "", "", "", "", "", "26년", "", "27년", ""].join("\t"), ["팀", "채널", "Meadow 제품군", "대분류", "소분류", "제품번호 Name", "값", "상반기", "하반기", "상반기", "하반기"].join("\t")];
+  for (const [t, c, m, b, s, n, S, cr, vr] of P) {
+    const C = S.map((x, i) => Math.round(x * cr[i])), Dd = C.map(x => Math.round(x * .6)), Pp = C.map((x, i) => x - Dd[i]), V = S.map((x, i) => Math.round(x * vr[i])), M = S.map((x, i) => x - C[i] - V[i]);
+    const pc = (a) => a.map((x, i) => S[i] ? (x / S[i] * 100).toFixed(1) + "%" : "#DIV/0!");
+    const rows = [["총매출", S.map(x => x.toLocaleString())], ["총매출2", S.map(() => "10.00%")], ["매출차감", Dd], ["판관비", Pp], ["비용", C], ["변동원가", V.map(x => x.toLocaleString())], ["공헌이익(운송비제외)", M], ["차감율", pc(Dd)], ["판관비율", pc(Pp)], ["비용율", pc(C)], ["변동원가율", pc(V)], ["공헌이익율(before)", pc(M)]];
+    for (const [k, v] of rows) out.push([t, c, m, b, s, n, "합계 : " + k, ...v].join("\t"));
+  }
+  return out.join("\n");
+}
+
+/* ---------- 시작 ---------- */
+(async () => {
+  renderAll();
+  const s = await idb.get("in");
+  if (s) { if (s.thr != null) $("#thr").value = s.thr; if (s.minS != null) $("#minS").value = s.minS; }
+  if (s && s.c) { try { setModes(fromCompact(s.c)); await analyze(false); } catch (e) { D = null; } }
+  else if (s && s.raw) { $("#raw").value = s.raw; await analyze(true); }   // 예전 저장분 → 가벼운 형식으로 변환
+})();
+</script>
+</body>
+</html>
