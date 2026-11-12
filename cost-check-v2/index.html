@@ -283,14 +283,19 @@ function halvesD(X) {
   return Object.assign({}, X, { subs, mode: "c", leaves: X.leaves.map(L => { const v = {}; for (const y of [X.y0, X.y1]) { v[y] = {}; H.forEach(([n, ms], i) => v[y][subs[i]] = sum6(L.v[y], ms.map(m => m + "월"))); } return { d: L.d, v }; }) });
 }
 /* 📅 기간 비교: 기준 기간 vs 비교 기간, 금액 = 월평균 (합 ÷ 개월수) · 율은 합계 기준과 동일 */
+/* ST.per = { a: {y, ms:[월…]}, b: {y, ms:[월…]} } — 월을 하나씩 골라서 (떨어진 달도 가능) */
 function perDefault(X) {
-  const a = monthsOf(X, X.y0), b = monthsOf(X, X.y1);
-  const q4 = a.filter(m => m >= 10);
-  return { a: { y: X.y0, m0: q4.length ? q4[0] : (a[0] || 1), m1: a[a.length - 1] || 12 }, b: { y: X.y1, m0: b[0] || 1, m1: b[b.length - 1] || 12 } };
+  const a = monthsOf(X, X.y0), b = monthsOf(X, X.y1), q4 = a.filter(m => m >= 10);
+  return { a: { y: X.y0, ms: q4.length ? q4 : a.slice() }, b: { y: X.y1, ms: b.slice() } };
 }
 function perGet() { if (!ST.per) ST.per = perDefault(DC0); return ST.per; }
-function perMonths(X, p) { return monthsOf(X, p.y).filter(m => m >= p.m0 && m <= p.m1); }
-function perLabel(p, ms) { return `${yl(p.y)} ${p.m0 === p.m1 ? p.m0 + "월" : p.m0 + "~" + p.m1 + "월"}`; }
+function perMonths(X, p) { const s = new Set(p.ms); return monthsOf(X, p.y).filter(m => s.has(m)); }
+function msName(ms) {   // [1,2,3,5,7,8] → "1~3·5·7~8월"
+  const a = [...ms].sort((x, y) => x - y), out = [];
+  for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(j > i ? a[i] + "~" + a[j] : String(a[i])); i = j; }
+  return out.length ? out.join("·") + "월" : "선택 없음";
+}
+function perLabel(p, ms) { return `${yl(p.y)} ${msName(ms)}`; }
 function periodD(X, P) {
   const A = perMonths(X, P.a), B = perMonths(X, P.b);
   let la = perLabel(P.a, A), lb = perLabel(P.b, B); if (la === lb) lb += " ";
@@ -316,11 +321,14 @@ function cmpBar() {
   if (mon && ST.cmp === "per") {
     const P = perGet(), yrs = [DC0.y0, DC0.y1];
     const sel = (w, f, opts2, cur) => `<select data-per="${w}.${f}" style="padding:2px 4px">${opts2.map(([v, n]) => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`;
-    const ms = Array.from({ length: 12 }, (_, i) => [i + 1, (i + 1) + "월"]);
-    const side = (w, t) => { const p = P[w], have = monthsOf(DC0, p.y), n = perMonths(DC0, p).length;
-      return `<b>${t}</b> ${sel(w, "y", yrs.map(y => [y, yl(y)]), p.y)} ${sel(w, "m0", ms, p.m0)}~${sel(w, "m1", ms, p.m1)} <span class="muted">(${n}개월${have.length < 12 ? `, 자료 있는 달 ${have[0]}~${have[have.length - 1]}월` : ""})</span>`; };
+    const side = (w, t) => { const p = P[w], have = new Set(monthsOf(DC0, p.y)), on = new Set(p.ms), n = perMonths(DC0, p).length;
+      const chips = Array.from({ length: 12 }, (_, i) => { const m = i + 1, hv = have.has(m), sl = on.has(m);
+        return `<button class="${sl ? "on" : "sec"}" data-perm="${w}.${m}" title="${hv ? "" : "자료 없는 달"}" style="padding:2px 0;width:40px;font-size:12px;${hv ? "" : "opacity:.4;text-decoration:line-through"}">${m}월</button>`; }).join("");
+      return `<div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;flex-basis:100%"><b style="width:34px">${t}</b>${sel(w, "y", yrs.map(y => [y, yl(y)]), p.y)}<span style="width:6px"></span>${chips}
+        <button class="sec" data-perall="${w}.1" style="padding:2px 6px;font-size:11px">전체</button><button class="sec" data-perall="${w}.0" style="padding:2px 6px;font-size:11px">해제</button>
+        <span class="muted" style="margin-left:6px">→ <b>${esc(perLabel(p, perMonths(DC0, p)))}</b> (${n}개월)</span></div>`; };
     const pre = (k, n) => `<button class="sec" data-perp="${k}" style="padding:2px 8px;font-size:12px">${n}</button>`;
-    h += `<div class="cmpb" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">${side("a", "기준")} <span>→</span> ${side("b", "비교")}
+    h += `<div class="cmpb" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">${side("a", "기준")}${side("b", "비교")}
       <span class="muted">빠른 선택:</span>${pre("q4fy", `${yl(DC0.y0)} 4Q → ${yl(DC0.y1)} 연간`)}${pre("q4q4", `${yl(DC0.y0)} 4Q → ${yl(DC0.y1)} 4Q (같은 계절)`)}${pre("fyfy", "연간 → 연간")}
       <span class="muted" style="flex-basis:100%">💡 매출·판촉비·CM 금액 = <b>월평균</b>(기간 합 ÷ 개월수) · 판촉율·원가율·CM율·구성비·퍼즐은 개월수와 무관하게 그대로</span></div>`;
   }
@@ -1353,17 +1361,27 @@ function renderAll() { renderSum(); renderTbl(); renderIns(); }
 const perApply = msg => { applyCmp(); ST.view = "FY"; ST.pzv = "FY"; ST.saved = {}; renderAll(); setStage(document.body.dataset.stage); if (msg) toast(msg); };
 $("#modeBar").addEventListener("click", e => {
   const pp = e.target.closest("button[data-perp]");
-  if (pp && DC0) { const a = monthsOf(DC0, DC0.y0), b = monthsOf(DC0, DC0.y1), k = pp.dataset.perp, lo = ms => ms[0] || 1, hi = ms => ms[ms.length - 1] || 12;
-    ST.per = k === "q4fy" ? { a: { y: DC0.y0, m0: 10, m1: 12 }, b: { y: DC0.y1, m0: lo(b), m1: hi(b) } } : k === "q4q4" ? { a: { y: DC0.y0, m0: 10, m1: 12 }, b: { y: DC0.y1, m0: 10, m1: 12 } } : { a: { y: DC0.y0, m0: lo(a), m1: hi(a) }, b: { y: DC0.y1, m0: lo(b), m1: hi(b) } };
+  if (pp && DC0) { const a = monthsOf(DC0, DC0.y0), b = monthsOf(DC0, DC0.y1), k = pp.dataset.perp;
+    ST.per = k === "q4fy" ? { a: { y: DC0.y0, ms: [10, 11, 12] }, b: { y: DC0.y1, ms: b.slice() } } : k === "q4q4" ? { a: { y: DC0.y0, ms: [10, 11, 12] }, b: { y: DC0.y1, ms: [10, 11, 12] } } : { a: { y: DC0.y0, ms: a.slice() }, b: { y: DC0.y1, ms: b.slice() } };
     perApply(pp.textContent + " 으로 비교해요"); return; }
+  const pm = e.target.closest("button[data-perm]");
+  if (pm && DC0) { const [w, m] = pm.dataset.perm.split("."), P = perGet(), s = new Set(P[w].ms), n = +m;
+    if (s.has(n)) { if (s.size === 1) { toast("최소 1개월은 골라야 해요"); return; } s.delete(n); } else s.add(n);
+    P[w].ms = [...s].sort((x, y) => x - y);
+    if (!perMonths(DC0, P[w]).length) toast("⚠ 고른 달에 자료가 없어요 — 0으로 계산돼요");
+    perApply(); return; }
+  const pa = e.target.closest("button[data-perall]");
+  if (pa && DC0) { const [w, on] = pa.dataset.perall.split("."), P = perGet();
+    if (on === "1") P[w].ms = Array.from({ length: 12 }, (_, i) => i + 1).filter(m => monthsOf(DC0, P[w].y).includes(m));
+    else { P[w].ms = [P[w].ms[0] || 1]; toast("1개월만 남겼어요 — 원하는 달을 눌러 고르세요"); }
+    perApply(); return; }
   const b = e.target.closest("button[data-cmp]"); if (!b || !DC0) return;
   ST.cmp = b.dataset.cmp; perApply(ST.cmp === "year" ? "연도 비교로 바꿨어요" : ST.cmp === "per" ? `기간 비교(월평균): ${D.y0} → ${D.y1}` : `${yl(ST.cmp)} 상반기 → 하반기 비교로 바꿨어요`);
 });
 $("#modeBar").addEventListener("change", e => {
   const s = e.target.closest("select[data-per]"); if (!s || !DC0) return;
-  const [w, f] = s.dataset.per.split("."), P = perGet(); P[w][f] = f === "y" ? s.value : +s.value;
-  if (P[w].m0 > P[w].m1) { if (f === "m0") P[w].m1 = P[w].m0; else P[w].m0 = P[w].m1; }
-  if (!perMonths(DC0, P[w]).length) toast("⚠ 고른 기간에 자료가 없어요 — 0으로 계산돼요");
+  const [w] = s.dataset.per.split("."), P = perGet(); P[w].y = s.value;
+  if (!perMonths(DC0, P[w]).length) toast("⚠ 고른 달에 자료가 없어요 — 0으로 계산돼요");
   perApply();
 });$("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.m) switchMode(b.dataset.m); setStage(b.dataset.s); });
 $("#go").onclick = () => analyze(true);
