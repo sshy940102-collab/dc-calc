@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>판촉비용율 점검 Ver2</title>
+<title>판촉 손익 분석 Ver2 · Trade Spend Analytics</title>
 <style>
 :root{--navy:#1f3864;--navy2:#2f5597;--bg:#f4f6fa;--card:#fff;--line:#d9dfe8;--txt:#1d2433;--sub:#5b6577;--red:#c00000;--redbg:#fde3e3;--warn:#b26a00;--warnbg:#fff6e5;--ok:#2e7d32;--okbg:#eaf6ec;--pink:#ffc7ce}
 *{box-sizing:border-box}
@@ -135,7 +135,7 @@ body{background:#eef1f6}
 header{margin-left:var(--side);background:#fff;color:var(--ink);padding:18px 28px;border-bottom:1px solid #e2e8f0}
 header h1{font-size:19px;letter-spacing:-.3px}header span{color:var(--slate);opacity:1}
 .stages{position:fixed;left:0;top:0;bottom:0;width:var(--side);flex-direction:column;background:var(--ink);padding:72px 12px 16px;border:0;overflow-x:hidden;overflow-y:auto;z-index:5;gap:2px}
-.stages::before{content:"PROMO ANALYTICS";position:absolute;top:24px;left:22px;color:#38bdf8;font-weight:800;letter-spacing:2px;font-size:13px}
+.stages::before{content:"TRADE SPEND ANALYTICS";position:absolute;top:24px;left:22px;color:#38bdf8;font-weight:800;letter-spacing:2px;font-size:13px}
 .stages button{color:#94a3b8;border:0;border-radius:8px;padding:10px 12px;font-size:13px;width:100%;flex:none}
 .stages button:hover{background:#1e293b;color:#e2e8f0}
 .stages button b{background:#334155}
@@ -167,7 +167,7 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
 </style>
 </head>
 <body data-stage="1">
-<header><h1>판촉비용율 점검 <small style="font-size:.6em;opacity:.8">Ver2</small></h1><span>전년 실적 vs 계획 · 매출 / 판촉비용율 / CM 판정 | 모든 계산은 이 PC 브라우저 안에서만 처리 (외부 전송 없음)</span></header>
+<header><h1>판촉 손익 분석 <small style="font-size:.6em;opacity:.8">Ver2</small></h1><span>기준 vs 비교 기간 · 매출 / 판촉비 / 공헌이익 분석 | 모든 계산은 이 PC 브라우저 안에서만 처리 (외부 전송 없음)</span></header>
 <nav class="stages" id="stages">
   <button data-s="1" class="on"><b>1</b>붙여넣기</button>
   <button data-s="6"><b>2</b>기준·비교 선택</button>
@@ -299,7 +299,7 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
 </section>
 
 </main>
-<footer>판촉비용율 점검 Ver2 · 입력 자료는 이 브라우저(IndexedDB)에만 저장됩니다</footer>
+<footer>판촉 손익 분석 Ver2 (Trade Spend Analytics) · 입력 자료는 이 브라우저(IndexedDB)에만 저장됩니다</footer>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1495,7 +1495,7 @@ function aiSummary() { const keepX = ST.pzx, keepF = ST.curF; try { return aiSum
 function aiSummary0() {
   if (!D) return "";
   const L = [];
-  L.push(`[판촉비용율 점검 Ver2 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")}${D.cmp === "per" ? ` (${D.nA}개월 vs ${D.nB}개월, 금액=${D.agg}, 율=기간 합계 기준)` : ""} / 금액 단위 백만원 / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
+  L.push(`[판촉 손익 분석 Ver2 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")}${D.cmp === "per" ? ` (${D.nA}개월 vs ${D.nB}개월, 금액=${D.agg}, 율=기간 합계 기준)` : ""} / 금액 단위 백만원 / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
   L.push(`판정: 🔴 판촉율↑(>${ST.thr}%p)+매출↓, ⚠️ 판촉율↑+매출↑+CM↓, 🟢 판촉율↑+CM 동등 이상, ✅ 판촉율 유지·개선`);
   L.push("");
   const tops = D.mode === "p" ? [0] : orgIdx().filter(i => i < defLvl()); if (!tops.length) tops.push(0);
