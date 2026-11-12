@@ -160,7 +160,8 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
     <textarea id="raw" spellcheck="false" placeholder="여기에 피벗 또는 백업 텍스트(CCHK1~로 시작) 붙여넣기 (Ctrl+V)"></textarea>
     <div class="row">
       <label class="f">판촉비용율 상승 기준 (%p 초과)<input type="number" id="thr" step="0.1" min="0" value="0.1"></label>
-      <label class="f">SKU 최소 매출 (미만은 SKU 판정 제외)<input type="number" id="minS" step="1" min="0" value="0"></label>
+      <label class="f">SKU 최소 매출 (백만원, 미만은 SKU 판정 제외)<input type="number" id="minS" step="1" min="0" value="0"></label>
+      <label class="f">붙여넣는 자료 단위<select id="unitIn"><option value="won" selected>원 (→ 백만원으로 표시)</option><option value="mil">백만원 (그대로)</option></select></label>
       <button id="go">분석하기</button>
       <button class="sec" id="sample">🧪 샘플 불러오기</button>
       <button class="sec" id="clear">🗑 저장된 자료 지우기</button>
@@ -322,6 +323,7 @@ function cmpBar() {
   const ag = ST.agg === "sum" ? "sum" : "avg";
   let h = mon ? `<span class="cmpb">📅 <b>기간 비교</b> · 금액 기준: ${[["avg", "월평균"], ["sum", "누계"]].map(([k, n]) => `<button class="${k === ag ? "on" : "sec"}" data-agg="${k}">${n}</button>`).join("")}</span>`
     : `<span class="cmpb">비교 기준: ${opts.map(([k, n]) => `<button class="${k === ST.cmp ? "on" : "sec"}" data-cmp="${esc(k)}">${esc(n)}</button>`).join("")}</span>`;
+  h += `<span class="muted" style="margin-left:12px">💰 금액 단위: <b>백만원</b></span>`;
   if (mon && ST.cmp === "per") {
     const P = perGet(), yrs = [DC0.y0, DC0.y1];
     const sel = (w, f, opts2, cur) => `<select data-per="${w}.${f}" style="padding:2px 4px">${opts2.map(([v, n]) => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`;
@@ -640,7 +642,16 @@ async function analyze(save, keepView) {
         const o = await readBackup(txt); setModes(fromCompact(o.c)); ST.saved = {};
         if (o.thr != null) { ST.thr = o.thr; $("#thr").value = o.thr; } if (o.minS != null) { ST.minS = o.minS; $("#minS").value = o.minS; }
         src = "백업 텍스트" + (o.at ? ` (${o.at.replace("T", " ")} 저장)` : "");
-      } else { setModes(parse(rawAll)); ST.saved = {}; src = "붙여넣기"; }
+      } else {
+        const X = parse(rawAll), won = $("#unitIn").value === "won";
+        let tS = 0; for (const L of X.leaves) for (const y of [X.y0, X.y1]) for (const s of X.subs) tS += Math.abs((L.v[y][s] || {}).S || 0);
+        if (won) { for (const L of X.leaves) for (const y of [X.y0, X.y1]) for (const s of X.subs) { const o = L.v[y][s]; if (o) for (const k of MK6) o[k] /= 1e6; } }
+        // 단위 착각 경고: 원으로 골랐는데 총매출이 1천만 미만 / 백만원으로 골랐는데 10억 초과
+        if (won && tS < 1e7) X.W.push(`⚠ 단위를 '원'으로 골랐는데 총매출 합계가 ${Math.round(tS).toLocaleString("ko-KR")}으로 작아요 — 이미 백만원 단위 자료면 '백만원'으로 바꾸고 다시 분석하세요`);
+        if (!won && tS > 1e9) X.W.push(`⚠ 단위를 '백만원'으로 골랐는데 총매출 합계가 ${Math.round(tS).toLocaleString("ko-KR")}으로 커요 — 원 단위 자료면 '원'으로 바꾸고 다시 분석하세요`);
+        X.W.push(`금액 단위: ${won ? "원 자료 → 백만원으로 바꿔서 표시" : "백만원 그대로"} (판촉율 등 비율은 단위와 무관)`);
+        setModes(X); ST.saved = {}; src = "붙여넣기";
+      }
     } catch (e) { box.innerHTML = `<div class="chips"><span class="chip no">❌ ${esc(e.message)}</span></div>`; return; }
   }
   if (save) { await saveStore(); if (txt) $("#raw").value = ""; }
@@ -1318,7 +1329,7 @@ function aiSummary() { const keepX = ST.pzx, keepF = ST.curF; try { return aiSum
 function aiSummary0() {
   if (!D) return "";
   const L = [];
-  L.push(`[판촉비용율 점검 Ver2 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")}${D.cmp === "per" ? ` (${D.nA}개월 vs ${D.nB}개월, 금액=${D.agg}, 율=기간 합계 기준)` : ""} / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
+  L.push(`[판촉비용율 점검 Ver2 요약] ${ST.mode === "p" ? "제품 분석" : "채널 분석"} / 비교 ${yl(D.y0)} → ${yl(D.y1)} / 기간 ${views().map(vl).join("·")}${D.cmp === "per" ? ` (${D.nA}개월 vs ${D.nB}개월, 금액=${D.agg}, 율=기간 합계 기준)` : ""} / 금액 단위 백만원 / 판촉비용=비용(차감+판관), CM=공헌이익(운송비제외)`);
   L.push(`판정: 🔴 판촉율↑(>${ST.thr}%p)+매출↓, ⚠️ 판촉율↑+매출↑+CM↓, 🟢 판촉율↑+CM 동등 이상, ✅ 판촉율 유지·개선`);
   L.push("");
   L.push(`■ ${D.dims[0]}별`);
@@ -1491,6 +1502,8 @@ $("#modeBar").addEventListener("change", e => {
   perApply();
 });$("#stages").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.m) switchMode(b.dataset.m); setStage(b.dataset.s); });
 $("#go").onclick = () => analyze(true);
+try { const u = localStorage.getItem("cc2_unit"); if (u === "won" || u === "mil") $("#unitIn").value = u; } catch (e) {}
+$("#unitIn").onchange = () => { try { localStorage.setItem("cc2_unit", $("#unitIn").value); } catch (e) {} };
 $("#thr").onchange = $("#minS").onchange = () => { if (D) analyze(true, true); };
 $("#clear").onclick = async () => { if (!confirm("저장된 자료를 지울까요?")) return; await idb.del("in"); $("#raw").value = ""; D = DC = DP = DC0 = null; ST.saved = {}; ST.cmp = "year"; $("#pinfo").innerHTML = ""; renderAll(); toast("지웠어요"); };
 async function loadBackupText(txt) {
