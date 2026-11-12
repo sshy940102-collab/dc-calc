@@ -129,6 +129,41 @@ table.pzt td.pzt{background:#f3f6fb}
 .toast.show{opacity:1}
 footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 @media (max-width:600px){main{padding:10px}header{padding:12px 16px}.stages{padding:0 8px}.stages button{padding:10px 12px}}
+/* ===== Ver2 디자인 B: 다크 사이드바 대시보드 ===== */
+:root{--side:232px;--accent:#0ea5e9;--ink:#0f172a;--slate:#64748b}
+body{background:#eef1f6}
+header{margin-left:var(--side);background:#fff;color:var(--ink);padding:18px 28px;border-bottom:1px solid #e2e8f0}
+header h1{font-size:19px;letter-spacing:-.3px}header span{color:var(--slate);opacity:1}
+.stages{position:fixed;left:0;top:0;bottom:0;width:var(--side);flex-direction:column;background:var(--ink);padding:72px 12px 16px;border:0;overflow-x:hidden;overflow-y:auto;z-index:5;gap:2px}
+.stages::before{content:"PROMO ANALYTICS";position:absolute;top:24px;left:22px;color:#38bdf8;font-weight:800;letter-spacing:2px;font-size:13px}
+.stages button{color:#94a3b8;border:0;border-radius:8px;padding:10px 12px;font-size:13px;width:100%;flex:none}
+.stages button:hover{background:#1e293b;color:#e2e8f0}
+.stages button b{background:#334155}
+.stages button.on{background:#1e293b;color:#fff;font-weight:700;border:0}.stages button.on b{background:#38bdf8;color:var(--ink)}
+.stages .ngrp{border:0;margin:18px 0 4px;padding:0 12px;color:#475569;font-size:11px;letter-spacing:1px;align-self:flex-start}
+main{margin-left:var(--side);padding:22px 28px;max-width:none}
+footer{margin-left:var(--side)}
+.card{border:0;border-radius:14px;box-shadow:0 2px 8px rgba(15,23,42,.06);padding:20px 22px}
+.card h2,.card h3{color:var(--ink)}
+.ins .card{border-radius:14px}
+th{background:var(--ink);color:#e2e8f0}
+.tw{border-color:#e2e8f0;border-radius:10px}
+.modebar{border:0;border-radius:12px;background:#fff;box-shadow:0 2px 8px rgba(15,23,42,.06);padding:10px 16px}
+button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;color:var(--ink)}button.on{background:var(--ink)}
+.stages button.on{background:#1e293b}
+#insCrumb,#sumCrumb,#pzCrumb{background:#fff;border:0;border-radius:10px;box-shadow:0 1px 4px rgba(15,23,42,.05);padding:8px 12px}
+/* KPI 카드 */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 14px}
+.kpi{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(15,23,42,.06);border-top:4px solid var(--accent);padding:14px 16px;min-width:0}
+.kn{font-size:12px;color:var(--slate)}.kv{font-size:24px;font-weight:700;margin:4px 0 2px;color:var(--ink);font-variant-numeric:tabular-nums}
+.kd{font-size:12.5px;font-weight:600}.kd.bad{color:#c0392b}.kd.good{color:#1e8e5a}.ks{font-size:11.5px;margin-top:2px;color:var(--slate)}
+.kpic{font-size:11.5px;color:var(--slate);margin:-6px 0 8px}
+@media (max-width:900px){
+  header,main,footer{margin-left:0}
+  .stages{position:static;width:auto;flex-direction:row;padding:0 8px;overflow-x:auto}
+  .stages::before{display:none}.stages button{width:auto}.stages .ngrp{margin:0 4px;align-self:center}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 </style>
 </head>
 <body data-stage="1">
@@ -149,6 +184,7 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
 </nav>
 <main>
 <div id="modeBar" class="modebar" hidden></div>
+<div id="kpiBar" hidden></div>
 
 <section id="stage1" class="stg">
   <div class="card">
@@ -1606,6 +1642,22 @@ function pzFileName(sfx) { return `증감요인분석_${(ST.mode === "p" ? "제�
 /* ---------- 공통 ---------- */
 function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || s == 6 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || s == 6 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpShort(); } if (s == 6) renderPerBox(); window.scrollTo(0, 0); }
 function renderAll() { renderSum(); renderTbl(); renderIns(); renderPz(); }
+/* 상단 KPI 카드: 지금 화면의 필터 범위 기준 (요약표=요약표 필터, 판정표=판정표 필터, 증감 요인·INSIGHT=공유 범위) */
+function updateKpi() {
+  const box = $("#kpiBar"); if (!box) return;
+  const s = document.body.dataset.stage;
+  if (!D || s == 1 || s == 6) { box.hidden = true; return; }
+  const F = s == 2 ? ST.sum.filt : s == 3 ? ST.filt : ST.ins.filt;
+  const fk = Object.keys(F || {}).filter(k => F[k] && !(Array.isArray(F[k]) && !F[k].length)).map(Number).sort((a, b) => a - b);
+  const Ls = D.leaves.filter(L => passF(L, F || {}));
+  const j = judge(sumv(Ls, D.y0, "FY"), sumv(Ls, D.y1, "FY")), u = vl("FY");
+  const tile = (n, v, d, bad, sub) => `<div class="kpi"><div class="kn">${n}</div><div class="kv">${v}</div><div class="kd ${bad ? "bad" : "good"}">${d}</div><div class="ks">${sub}</div></div>`;
+  box.hidden = false;
+  box.innerHTML = `<div class="kpis">${tile(`매출 (${esc(u)})`, fN(j.b.S), `${fD(j.dS)} (${fGr(j.dSp)})`, j.dS < -0.5, `기준 ${fN(j.a.S)}`)}${tile("판촉율", fP(j.cr1), fPP(j.dcr), j.dcr != null && j.dcr * 100 > ST.thr, `기준 ${fP(j.cr0)}`)}${tile(`공헌이익 (${esc(u)})`, fN(j.b.M), fD(j.dM), j.dM < -0.5, `기준 ${fN(j.a.M)}`)}${tile("CM율", fP(j.mr1), fPP(j.dmr), j.dmr != null && j.dmr < -0.0005, `기준 ${fP(j.mr0)}`)}</div>
+    <div class="kpic">범위: <b>${esc(fk.length ? fk.map(k => lab(F[k])).join(" › ") : "전체")}</b> · 기준 ${esc(yl(D.y0))} → 비교 ${esc(yl(D.y1))} · 백만원</div>`;
+}
+{ const wrap = fn => function () { const r = fn.apply(this, arguments); try { updateKpi(); } catch (e) {} return r; };
+  renderSum = wrap(renderSum); renderTbl = wrap(renderTbl); renderIns = wrap(renderIns); renderPz = wrap(renderPz); setStage = wrap(setStage); }
 
 const perApply = msg => { applyCmp(); ST.view = "FY"; ST.pzv = "FY"; ST.saved = {}; renderAll(); setStage(document.body.dataset.stage); if (msg) toast(msg); };
 $("#perBox").addEventListener("click", e => {
