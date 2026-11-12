@@ -280,8 +280,8 @@ function cmpBar() {
   const opts = [["year", `${yl(DC0.y0)} → ${yl(DC0.y1)} (연도 비교)`], ...[DC0.y0, DC0.y1].map(y => [y, `${yl(y)} 상반기 → 하반기`])];
   return `<span class="cmpb">비교 기준: ${opts.map(([k, n]) => `<button class="${k === ST.cmp ? "on" : "sec"}" data-cmp="${esc(k)}">${esc(n)}</button>`).join("")}</span>`;
 }
-const VIEWF = ["lvl", "filt", "sort", "view", "jf", "q", "sum", "ins", "pzv", "pzm"];
-function viewDefaults() { return { lvl: Math.min(1, D.nd - 1), filt: {}, sort: null, view: "FY", jf: "all", q: "", sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null }, pzv: ST.pzv, pzm: ST.pzm }; }
+const VIEWF = ["lvl", "filt", "sort", "view", "jf", "q", "sum", "ins", "pzv", "pzm", "pzo"];
+function viewDefaults() { return { lvl: Math.min(1, D.nd - 1), filt: {}, sort: null, view: "FY", jf: "all", q: "", sum: { filt: {}, unit: null }, ins: { filt: {}, unit: null }, pzv: ST.pzv, pzm: ST.pzm, pzo: ST.pzo }; }
 function switchMode(m) {
   if (m === ST.mode || !DC) { ST.mode = m; return; }
   ST.saved = ST.saved || {}; ST.saved[ST.mode] = {}; VIEWF.forEach(k => ST.saved[ST.mode][k] = ST[k]);
@@ -789,20 +789,26 @@ function chainHtml(d, view) {
   return parts.length ? `↳ 상위로 가면: ${parts.join(" › ")}` : "";
 }
 /* 🧩 판촉율 증감 퍼즐: 범위 Δ판촉율 = Σ 하위 기여 (단계별로 펼쳐서 합이 맞음) */
-function puzzle(Ls, lvl, view, mk) { mk = mk || "C";
+function pzProdStart() { if (D.mode === "p") return -1; const i = D.dims.findIndex(n => /제품군/.test(n)); return i > 0 ? i : -1; }
+function puzzle(Ls, lvl, view, mk, ord) { mk = mk || "C";
   const R = rateDecomp(Ls, D.nd - 1, view, mk);
-  const levels = []; for (let k = lvl; k < D.nd; k++) levels.push(k);   // 제품군 포함 전 단계
+  let levels = []; for (let k = lvl; k < D.nd; k++) levels.push(k);   // 제품군 포함 전 단계
+  // 제품별 보기: 팀·채널 단계를 뒤로 (제품군→대분류→소분류→SKU→채널) — 같은 SKU×채널 기여를 묶는 순서만 바뀜, 합계 동일
+  const ps = pzProdStart();
+  if (ord === "pr" && ps > lvl) levels = [...levels.filter(k => k >= ps), ...levels.filter(k => k < ps)];
+  const last = levels[levels.length - 1];
   const root = { kids: new Map() };
   for (const r of R.rows) {
-    let node = root;
+    let node = root; const vp = [];
     for (const k of levels) {
-      const key = r.d.slice(0, k + 1).join("\u0001");
+      vp.push(r.d[k]);
+      const key = levels[0] === lvl && levels.every((x, i) => i === 0 || x === levels[i - 1] + 1) ? r.d.slice(0, k + 1).join("\u0001") : "pr\u0002" + vp.join("\u0001");
       let c = node.kids.get(key);
-      if (!c) { c = { key, name: r.d[k], k, kids: new Map(), S0: 0, S1: 0, C0: 0, C1: 0, rate: 0, mix: 0, en: 0, tot: 0, st: null, n: 0 }; node.kids.set(key, c); }
+      if (!c) { c = { key, name: r.d[k], k, kids: new Map(), S0: 0, S1: 0, C0: 0, C1: 0, rate: 0, mix: 0, en: 0, tot: 0, st: null, sts: new Set(), n: 0 }; node.kids.set(key, c); }
       c.S0 += r.a.S; c.S1 += r.b.S; c.C0 += r.a[mk]; c.C1 += r.b[mk];
       c.rate += r.rate; if (r.st === "end" || r.st === "new") c.en += r.mix; else c.mix += r.mix;
       c.tot += r.tot; c.n++;
-      if (k === D.nd - 1) c.st = r.st;
+      if (k === D.nd - 1 || k === last) { c.sts.add(r.st); c.st = c.sts.size === 1 ? r.st : null; }   // SKU가 여러 채널이면 전부 종료/신규일 때만 표시
       node = c;
     }
   }
@@ -1005,16 +1011,18 @@ function buildIns(lvl, f) {
     const openSet = new Set(); const fullPath = []; for (let k = 0; k <= dpth; k++) { fullPath.push(lab(f[k]) || ""); openSet.add(fullPath.join("\u0001")); }
     const pm = ST.pzm || "both", mks = pm === "both" ? ["C", "V"] : [pm];
     const bs = "padding:3px 10px;font-size:12px";
-    const btns = `<span class="grp" style="margin-left:auto;display:flex;gap:2px">${[["C", "판촉율"], ["V", "원가율"], ["both", "둘 다"]].map(([k, n]) => `<button class="${k === pm ? "on" : "sec"}" data-pzm="${k}" style="${bs}">${n}</button>`).join("")}</span><span class="grp" style="display:flex;gap:2px;margin-left:8px">${views().map(v => `<button class="${v === pv ? "on" : "sec"}" data-pzv="${esc(v)}" style="${bs}">${esc(vl(v))}</button>`).join("")}</span>`;
+    const po = ST.pzo === "pr" ? "pr" : "ch", hasPo = pzProdStart() > 0 && secs.some(s => s.lvl < pzProdStart());
+    const btns = (hasPo ? `<span class="grp" style="margin-left:auto;display:flex;gap:2px" title="채널별 = 팀→채널→제품 순 · 제품별 = 채널 합쳐서 제품군→대분류→소분류→SKU→채널 순">${[["ch", "채널별"], ["pr", "제품별"]].map(([k, n]) => `<button class="${k === po ? "on" : "sec"}" data-pzo="${k}" style="${bs}">${n}</button>`).join("")}</span>` : "") + `<span class="grp" style="${hasPo ? "margin-left:8px" : "margin-left:auto"};display:flex;gap:2px">${[["C", "판촉율"], ["V", "원가율"], ["both", "둘 다"]].map(([k, n]) => `<button class="${k === pm ? "on" : "sec"}" data-pzm="${k}" style="${bs}">${n}</button>`).join("")}</span><span class="grp" style="display:flex;gap:2px;margin-left:8px">${views().map(v => `<button class="${v === pv ? "on" : "sec"}" data-pzv="${esc(v)}" style="${bs}">${esc(vl(v))}</button>`).join("")}</span>`;
     let first = true;
     for (const mk of mks) { const RN = mk === "V" ? "원가율" : "판촉율"; secs.forEach((s, i) => {
       const pre = [], subF = {}; for (let k = 0; k <= s.k; k++) { pre.push(lab(f[k])); if (f[k]) subF[k] = f[k]; }
       const Ls = vleaves(subF, true, f);
       const nmS = s.k < 0 ? "전체" : pre.filter(Boolean).join(" › ");
       const secLab = s.k < 0 ? "전체 기준" : (s.k === dpth ? `${D.dims[s.k]} 내` : `${D.dims[s.k]} 기준`);
-      const PO = puzzle(Ls, s.lvl, pv, mk), PZ = pzHtml(PO, nmS, i === 0 ? new Set() : openSet, mk); const xi = ST.pzx.length; ST.pzx.push({ P: PO, mk, RN, nmS, secLab, no: "①②③④⑤"[i] || "", view: pv });
-      const note = i === 0 ? "" : `<p class="muted">노란 줄 = 지금 보고 있는 ${esc(scope)} 경로 (자동으로 펼쳐둠) — 이 조각이 ${esc(nmS)} 전체 ${RN} 증감에 준 몫이에요</p>`;
-      cards.push({ cls: mk === "V" ? "ok wide" : "b wide", t: `🧩 ${RN} 증감 퍼즐 ${"①②③④⑤"[i] || ""} <b>${esc(secLab)}</b> <small>${esc(nmS)} · ${esc(D.dims[s.lvl])} → … → ${esc(LEAF_END())}</small> ${first ? btns : ""}`, h: `<div class="row" style="margin:0 0 6px;justify-content:flex-end"><button class="sec" data-pzx="${xi}" style="padding:4px 10px;font-size:12px">📥 이 퍼즐 엑셀</button><button class="sec" data-pzt="${xi}" style="padding:4px 10px;font-size:12px">📋 엑셀용 복사</button></div>` + note + PZ.html, x: PZ.x });
+      const PO = puzzle(Ls, s.lvl, pv, mk, po), reord = PO.levels.some((k, j) => j > 0 && k < PO.levels[j - 1]);
+      const PZ = pzHtml(PO, nmS, i === 0 || reord ? new Set() : openSet, mk); const xi = ST.pzx.length; ST.pzx.push({ P: PO, mk, RN, nmS, secLab, no: "①②③④⑤"[i] || "", view: pv });
+      const note = reord ? `<p class="muted">📦 제품별 보기 — 채널을 합쳐서 제품군→…→SKU로 묶고, SKU 아래에 채널별 몫을 펼쳐요 (합계는 채널별 보기와 같아요)</p>` : i === 0 ? "" : `<p class="muted">노란 줄 = 지금 보고 있는 ${esc(scope)} 경로 (자동으로 펼쳐둠) — 이 조각이 ${esc(nmS)} 전체 ${RN} 증감에 준 몫이에요</p>`;
+      cards.push({ cls: mk === "V" ? "ok wide" : "b wide", t: `🧩 ${RN} 증감 퍼즐 ${"①②③④⑤"[i] || ""} <b>${esc(secLab)}</b> <small>${esc(nmS)} · ${esc(D.dims[PO.levels[0]])} → … → ${esc(reord ? D.dims[PO.levels[PO.levels.length - 1]] : LEAF_END())}</small> ${first ? btns : ""}`, h: `<div class="row" style="margin:0 0 6px;justify-content:flex-end"><button class="sec" data-pzx="${xi}" style="padding:4px 10px;font-size:12px">📥 이 퍼즐 엑셀</button><button class="sec" data-pzt="${xi}" style="padding:4px 10px;font-size:12px">📋 엑셀용 복사</button></div>` + note + PZ.html, x: PZ.x });
       first = false;
     }); }
   }
@@ -1298,6 +1306,7 @@ bindScope(() => ST.sum, "#sumFilts", "#sumUnit", "#sumCrumb", "#sumOut", () => r
 $("#insOut").addEventListener("click", e => {
   const b = e.target.closest("button[data-pzv]"); if (b) { ST.pzv = b.dataset.pzv; renderIns(); return; }
   const bm = e.target.closest("button[data-pzm]"); if (bm) { ST.pzm = bm.dataset.pzm; renderIns(); return; }
+  const bo = e.target.closest("button[data-pzo]"); if (bo) { ST.pzo = bo.dataset.pzo; renderIns(); return; }
   const all = e.target.closest("button[data-pzall]");
   if (all) { const on = all.dataset.pzall === "1"; all.closest(".card").querySelectorAll("tr.pz").forEach(r => { if (!r.classList.contains("d0")) r.style.display = on ? "" : "none"; const t = r.querySelector(".tg"); if (r.classList.contains("hk") && t) t.textContent = on ? "▾" : "▸"; }); return; }
   const tr = e.target.closest("tr.pz.hk"); if (!tr) return;
