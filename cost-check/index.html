@@ -839,7 +839,18 @@ function pzFormula(R, RN, mk) {
         <tr><td>검산</td><td>Σ 기여 합계 = R<sub>${y1}</sub> − R<sub>${y0}</sub></td><td class="muted">${p(R.CR1)} − ${p(R.CR0)} = ${fPP2(R.dCR)} (반올림 차이 외 정확히 일치)</td></tr>
       </tbody></table>${exH}
     </div></details>`;
-}function pzHtml(P, scope, openSet, mk) { const RN = mk === "V" ? "원가율" : "판촉율";
+}
+/* 퍼즐 증감 표시: a→b (Δ) · t = "S" 매출(음수 빨강) / "W" 구성비(색 없음) / "R" 판촉·원가율(양수 빨강) */
+function pzChg(a, b, t) {
+  const base = t === "S" ? `${fN(a)}→${fN(b)}` : `${fP(a)}→${fP(b)}`;
+  if (a == null || b == null || !isFinite(a) || !isFinite(b)) return base;
+  let d, s;
+  if (t === "S") { d = Math.round(b) - Math.round(a); s = (d > 0 ? "+" : "") + d.toLocaleString("ko-KR"); }
+  else { d = Math.round(b * 1000) - Math.round(a * 1000); s = (d > 0 ? "+" : "") + (d / 10).toFixed(1) + "%p"; }
+  const bad = (t === "S" && d < 0) || (t === "R" && d > 0);
+  return `${base} <span class="${bad ? "neg" : "muted"}">(${d === 0 ? (t === "S" ? "0" : "0.0%p") : s})</span>`;
+}
+function pzHtml(P, scope, openSet, mk) { const RN = mk === "V" ? "원가율" : "판촉율";
   openSet = openSet || new Set();
   const R = P.R; let id = 0; const rows = [], txt = [];
   const sk = arr => [...arr.values()].sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
@@ -855,7 +866,7 @@ function pzFormula(R, RN, mk) {
       const isOpen = hasK && vis && openSet.has(c.key), onPath = openSet.has(c.key);
       rows.push(`<tr data-pz="${my}" data-pp="${pid}" class="pz d${depth}${hasK ? " hk" : ""}${onPath ? " hl" : ""}" ${vis ? "" : 'style="display:none"'}>
         <td style="padding-left:${8 + depth * 18}px">${hasK ? `<span class="tg">${isOpen ? "▾" : "▸"}</span> ` : '<span class="tg"> </span> '}${esc(c.name)}${tag} <small class="muted">${esc(D.dims[c.k])}</small></td>
-        <td class="n">${fN(c.S0)}→${fN(c.S1)}</td><td class="n">${fP(w0)}→${fP(w1)}</td><td class="n">${fP(cr0)}→${fP(cr1)}</td>
+        <td class="n">${pzChg(c.S0, c.S1, "S")}</td><td class="n">${pzChg(w0, w1, "W")}</td><td class="n">${pzChg(cr0, cr1, "R")}</td>
         <td class="n${c.rate > 0.00005 ? " neg" : ""}">${f3(c.rate)}</td><td class="n${c.mix > 0.00005 ? " neg" : ""}">${f3(c.mix)}</td><td class="n${c.en > 0.00005 ? " neg" : ""}">${Math.abs(c.en) < 1e-9 ? "" : f3(c.en)}</td>
         <td class="n pzt${c.tot > 0.00005 ? " neg" : ""}"><b>${f3(c.tot)}</b></td>${depth === 0 ? `<td class="n muted">${f3(cum)}</td>` : "<td></td>"}</tr>`);
       if (depth < 2) txt.push(`${"  ".repeat(depth)}${depth ? "- " : ""}${c.name}${tag}: 기여 ${f3(c.tot)} (${RN}변화 ${f3(c.rate)}, 구성비 ${f3(c.mix)}${Math.abs(c.en) > 1e-9 ? ", 종료·신규 " + f3(c.en) : ""}) | ${RN} ${fP(cr0)}→${fP(cr1)}, 매출 ${fN(c.S0)}→${fN(c.S1)}`);
@@ -867,7 +878,7 @@ function pzFormula(R, RN, mk) {
     ${pzFormula(R, RN, mk)}
     <div class="toolbar" style="margin:6px 0"><span class="muted">행 클릭 = 펼치기/접기 · 모든 단계에서 합계가 위 증감과 맞아요</span><span class="sp"></span><button class="sec" data-pzall="1">모두 펼치기</button><button class="sec" data-pzall="0">모두 접기</button></div>
     <div class="tw" style="max-height:560px"><table class="ov pzt"><thead><tr><th>항목</th><th>매출</th><th>구성비</th><th>${RN}</th><th>① ${RN} 변화분</th><th>② 구성비 변화분</th><th>③ 종료·신규</th><th>기여 합계</th><th>누적</th></tr></thead><tbody>${rows.join("")}
-    <tr class="tot"><td>합계</td><td class="n">${fN(R.S0)}→${fN(R.S1)}</td><td class="n">100%</td><td class="n">${fP(R.CR0)}→${fP(R.CR1)}</td><td class="n">${fPP2(R.RT)}</td><td class="n">${fPP2(R.MXc)}</td><td class="n">${fPP2(R.END + R.NEW)}</td><td class="n"><b>${fPP2(R.dCR)}</b></td><td></td></tr></tbody></table></div>`;
+    <tr class="tot"><td>합계</td><td class="n">${pzChg(R.S0, R.S1, "S")}</td><td class="n">100%</td><td class="n">${pzChg(R.CR0, R.CR1, "R")}</td><td class="n">${fPP2(R.RT)}</td><td class="n">${fPP2(R.MXc)}</td><td class="n">${fPP2(R.END + R.NEW)}</td><td class="n"><b>${fPP2(R.dCR)}</b></td><td></td></tr></tbody></table></div>`;
   const x = `[🧩 ${RN} 증감 퍼즐 — ${scope}] ${fP(R.CR0)}→${fP(R.CR1)} (${fPP2(R.dCR)}) = ${RN}변화 ${fPP2(R.RT)} + 구성비 ${fPP2(R.MXc)} + 종료·신규 ${fPP2(R.END + R.NEW)}\n` + txt.join("\n");
   return { html, x };
 }
