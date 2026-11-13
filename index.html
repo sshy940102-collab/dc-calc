@@ -59,6 +59,7 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 tr:hover td{background:#f6f9ff}
 tr.tot td{font-weight:700;background:#f0f3f8;position:sticky;bottom:0}
 .neg{color:var(--red)}
+.pos{color:#2f5597}
 .flag{color:var(--warn);font-weight:700}
 .muted{color:var(--sub)}
 .empty{padding:40px;text-align:center;color:var(--sub)}
@@ -750,11 +751,36 @@ function lineChart(pts) {
   return `<div class="lnw">` + s + `</svg><div class="lntip" style="display:none"></div></div><div class="lg"><span><b style="background:${CLR.sales}"></b>총매출</span><span><b style="background:${CLR.cm}"></b>공헌이익</span><span class="muted">단위 백만 · 날짜를 클릭하면 그날 숫자 표시 (다시 클릭하면 닫힘)</span></div>`;
 }
 let LNPTS = [];
+// 전일 대비 대카테고리 증감: 직전 매출일(매출 있는 전날, 휴일 건너뜀)과 비교
+let DDROWS = [], DDAYS = [], DDSEL = null;
+function ddHtml() {
+  const d = DDSEL, i = DDAYS.indexOf(d);
+  const opts = DDAYS.slice(1).map(x => `<option value="${x}" ${x === d ? "selected" : ""}>${x}일</option>`).join("");
+  const head = `<h2>전일 대비 대카테고리 증감 <small>총매출 · 백만원 · 위 차트에서 날짜 클릭해도 바뀜</small></h2>
+    <div class="toolbar" style="margin:0 0 8px"><label class="f" style="flex-direction:row;align-items:center;gap:6px">기준일 <select id="ddSel">${opts}</select></label></div>`;
+  if (i < 1) return head + `<div class="empty">첫 매출일이라 비교할 전일이 없어요 — 다음 날짜를 골라주세요</div>`;
+  const p = DDAYS[i - 1], M = new Map();
+  for (const r of DDROWS) { if (r.day !== d && r.day !== p) continue; const k = catOf(r.big); const o = M.get(k) || { k, a: 0, b: 0, ca: 0, cb: 0 }; if (r.day === p) { o.a += r.sales || 0; o.ca += r.cm || 0; } else { o.b += r.sales || 0; o.cb += r.cm || 0; } M.set(k, o); }
+  const L = [...M.values()].map(o => ({ ...o, df: o.b - o.a, dc: o.cb - o.ca })).sort((x, y) => y.df - x.df);
+  const T = L.reduce((t, o) => ({ a: t.a + o.a, b: t.b + o.b, ca: t.ca + o.ca, cb: t.cb + o.cb }), { a: 0, b: 0, ca: 0, cb: 0 });
+  const rr = (b, a) => a ? (b - a) / Math.abs(a) : null, sg = v => (v > 0 ? "+" : "") + mil1(v), cl = v => v < 0 ? "neg" : v > 0 ? "pos" : "";
+  const up = L.filter(o => o.df > 0), dn = L.filter(o => o.df < 0).reverse();
+  const txt = (o) => `<b>${esc(o.k)}</b> ${sg(o.df)}${rr(o.b, o.a) != null ? ` (${(rr(o.b, o.a) > 0 ? "+" : "") + pct(rr(o.b, o.a))})` : " (신규)"}`;
+  return head + `<div class="muted" style="margin-bottom:8px">${d}일 vs ${p}일${d - p > 1 ? ` <span class="muted">(${p + 1}~${d - 1}일 매출 없음 → 직전 매출일과 비교)</span>` : ""} · 총매출 ${mil1(T.a)} → <b>${mil1(T.b)}</b> <span class="${cl(T.b - T.a)}">${sg(T.b - T.a)}${rr(T.b, T.a) != null ? ` (${(rr(T.b, T.a) > 0 ? "+" : "") + pct(rr(T.b, T.a))})` : ""}</span></div>
+    <div style="margin-bottom:8px">📈 증가: ${up.slice(0, 3).map(txt).join(" · ") || "없음"}<br>📉 감소: ${dn.slice(0, 3).map(txt).join(" · ") || "없음"}</div>
+    ${hbars(L.filter(o => o.df).map(o => ({ label: o.k, v: o.df, c: CLR.sales, txt: `${sg(o.df)} <em>${rr(o.b, o.a) != null ? pct(rr(o.b, o.a)) : "신규"}</em>` })))}
+    <div class="tw" style="margin-top:10px"><table><thead><tr><th>대카테고리</th><th>${p}일 매출</th><th>${d}일 매출</th><th>증감</th><th>증감률</th><th>${p}일 CM</th><th>${d}일 CM</th><th>CM 증감</th></tr></thead><tbody>
+    ${L.map(o => `<tr><td>${esc(o.k)}</td><td class="n">${mil1(o.a)}</td><td class="n">${mil1(o.b)}</td><td class="n ${cl(o.df)}">${sg(o.df)}</td><td class="n ${cl(o.df)}">${rr(o.b, o.a) != null ? pct(rr(o.b, o.a)) : "신규"}</td><td class="n">${mil1(o.ca)}</td><td class="n">${mil1(o.cb)}</td><td class="n ${cl(o.dc)}">${sg(o.dc)}</td></tr>`).join("")}
+    <tr class="tot"><td>합계</td><td class="n">${mil1(T.a)}</td><td class="n">${mil1(T.b)}</td><td class="n ${cl(T.b - T.a)}">${sg(T.b - T.a)}</td><td class="n">${rr(T.b, T.a) != null ? pct(rr(T.b, T.a)) : "-"}</td><td class="n">${mil1(T.ca)}</td><td class="n">${mil1(T.cb)}</td><td class="n ${cl(T.cb - T.ca)}">${sg(T.cb - T.ca)}</td></tr></tbody></table></div>`;
+}
+const ddSet = d => { DDSEL = d; const c = document.getElementById("ddCard"); if (c) c.innerHTML = ddHtml(); };
+document.addEventListener("change", e => { if (e.target && e.target.id === "ddSel") ddSet(+e.target.value); });
 document.addEventListener("click", e => {
   const w = e.target.closest && e.target.closest(".lnw"); if (!w) { document.querySelectorAll(".lntip").forEach(x => x.style.display = "none"); document.querySelectorAll(".lnmk").forEach(x => x.style.display = "none"); return; }
   const hit = e.target.closest(".lnhit"), tip = w.querySelector(".lntip"), mk = w.querySelector(".lnmk");
   if (!hit || tip.dataset.i === hit.dataset.i && tip.style.display !== "none") { tip.style.display = "none"; mk.style.display = "none"; tip.dataset.i = ""; return; }
   const p = LNPTS[+hit.dataset.i]; if (!p) return; const d = p.d || {};
+  if (DDAYS.indexOf(p.x) > 0 && document.getElementById("ddCard")) ddSet(p.x);
   const ln = (l, v, r, c) => `<div><b style="background:${c}"></b>${l}<span>${mil1(v)}${r != null ? ` <em>${pct(r)}</em>` : ""}</span></div>`;
   tip.innerHTML = `<h4>${p.x}일</h4>${ln("총매출", p.a, null, CLR.sales)}${d.dc != null ? ln("DC", d.dc, d.dcR, CLR.dc) + ln("장려금", d.jTot, p.s ? d.jTot / p.s : null, CLR.j) + ln("판관비", d.pTot, p.s ? d.pTot / p.s : null, CLR.p) + ln("원가+운송비", d.vc + d.tr, p.s ? (d.vc + d.tr) / p.s : null, CLR.vc) : ""}${ln("공헌이익", p.b, p.s ? p.b / p.s : null, CLR.cm)}`;
   const x = +hit.dataset.x, svg = w.querySelector("svg"), sc = svg.getBoundingClientRect().width / 1100;
@@ -804,6 +830,10 @@ function dash(rows, R) {
   // ② 일자별 추이
   const dy = agg(R.days ? filt(R.days) : rows.filter(r => r.day != null), r => r.day, r => ({ day: r.day })).sort((a, b) => a.day - b.day);
   h += `<section class="card wide"><h2>일자별 매출 추이 <small>총매출 · 공헌이익</small></h2>${lineChart(dy.map(a => ({ x: a.day, a: a.sales, b: a.cm, s: a.sales, d: a })))}</section>`;
+  // ②-1 전일 대비 대카테고리 증감 (차트에서 날짜 클릭 또는 선택 → 그날 vs 직전 매출일)
+  DDROWS = R.days ? filt(R.days) : rows.filter(r => r.day != null); DDAYS = dy.filter(a => a.sales).map(a => a.day);
+  if (DDSEL == null || !DDAYS.includes(DDSEL)) DDSEL = DDAYS[DDAYS.length - 1] ?? null;
+  if (DDAYS.length >= 2) h += `<section class="card wide" id="ddCard">${ddHtml()}</section>`;
   // ③ 제품 TOP / BOTTOM
   const pr = agg(rows, r => r.code, r => ({ code: r.code, name: r.name }));
   const lab = a => `${a.name ?? ""} (${a.code})`;
