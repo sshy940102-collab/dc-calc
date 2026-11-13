@@ -890,6 +890,26 @@ function parseGoal(g) {
     const sal = fA(/매출/), cr = f(/비용[율률]/), cm = fA(/^CM|공헌이익/i);
     const mcols = h.map((v, c) => [c, /^(\d{1,2})월/.exec(v)]).filter(([, m]) => m && +m[1] >= 1 && +m[1] <= 12).map(([c, m]) => [c, +m[1]]);
     const met = f(/^(지표|구분|항목|계정)$/);
+    // SKU형: 연도 · 월 · 채널 · SKU코드 · SKU명 · 총매출 · DC · 장려금 · 판관비 · 변동원가 · 운송비 (금액) → 분류는 제품분류로 대입 (goalData에서)
+    const sku = f(/^(SKU코드|SKU|제품코드|제품CODE|제품번호|자재코드|자재)$/i), dcI = f(/^DC(금액)?(\(.*\))?$/i), jI = f(/^장려금/), pI = f(/^판관비/), vI = f(/^변동원가/), tI = f(/^(운송비|물류비)/);
+    if (sku >= 0 && sal >= 0 && mon >= 0 && (dcI >= 0 || jI >= 0 || pI >= 0)) {
+      out.layout = "sku"; out.unit = unitOf(h[sal]); const nmI = f(/^(SKU명|제품명|품명|자재명)$/);
+      const M = new Map(), N = c => c >= 0 ? num(rr0[c]) ?? 0 : 0; let rr0;
+      for (let j = i + 1; j < g.length; j++) {
+        const rr = g[j]; if (!rr) continue; rr0 = rr; const cd = code(rr[sku]); if (!cd || SUB.test(norm(cd))) continue;
+        const sv = num(rr[sal]); if (sv == null && [dcI, jI, pI, vI, tI].every(c => c < 0 || num(rr[c]) == null)) continue;
+        const mo = goalMonth(rr[mon]); if (!mo) { out.bad++; continue; }
+        const y = (yr >= 0 ? yearV(rr[yr]) : null) ?? mo.y, ch = ix.ch >= 0 ? canonCh(gTxt(rr[ix.ch])) : "";
+        const k = [gk(ch), cd, y ?? "", mo.m].join("\u0001");
+        let e = M.get(k); if (!e) M.set(k, e = { ch, code: cd, name: nmI >= 0 ? gTxt(rr[nmI]) : "", y, m: mo.m, u: out.unit, s: 0, dc: 0, j: 0, p: 0, vc: 0, tr: 0 });
+        e.s += sv ?? 0; e.dc += N(dcI); e.j += N(jI); e.p += N(pI); e.vc += N(vI); e.tr += N(tI);
+      }
+      // 비용 = DC+장려금+판관비 (계산기와 동일), CM = 총매출 − 비용 − 변동원가 − 운송비
+      out.rows = [...M.values()].map(e => { const cost = e.dc + e.j + e.p; return { ...e, cost, c: e.s ? cost / e.s : null, cm: e.s - cost - e.vc - e.tr }; });
+      out.hasCost = dcI >= 0 && jI >= 0 && pI >= 0; out.hasCM = out.hasCost && vI >= 0 && tI >= 0;
+      if (!out.hasCM) out.rows.forEach(e => { e.cm = null; if (!out.hasCost) e.c = null; });
+      return out;
+    }
     const wide = mon < 0 && mcols.length >= 1 && met >= 0;
     if (!(mon >= 0 && (sal >= 0 || cr >= 0 || cm >= 0)) && !wide) continue;
     out.layout = wide ? "wide" : "long";
@@ -930,8 +950,21 @@ function parseGoal(g) {
 let GC = { t: null, v: null };
 function goalData() {   // 붙여넣은 목표 우선, 없으면 기준 파일의 '목표' 시트
   const t = (typeof PT !== "undefined" && PT.goal) || "";
-  if (t.trim()) { if (GC.t !== t) GC = { t, v: parseGoal(parseTSV(t).map(r => r.map(pVal))) }; return GC.v; }
-  return ST.ref && ST.ref.goal || null;
+  let GD = null;
+  if (t.trim()) { if (GC.t !== t) GC = { t, v: parseGoal(parseTSV(t).map(r => r.map(pVal))) }; GD = GC.v; }
+  else GD = ST.ref && ST.ref.goal || null;
+  return GD && GD.layout === "sku" ? skuCls(GD) : GD;
+}
+// SKU형 목표: 제품코드 → 대·소카테고리·세분류 (계산기와 같은 규칙: 제품분류 → 점검 수기입력). 못 찾으면 (미분류)로 둬서 실적 (미분류)와 매칭
+function skuCls(GD) {
+  const ref = ST.ref || {}, FP = (ST.fix && ST.fix.prod) || {}, miss = new Map();
+  for (const g of GD.rows) {
+    const pj = ref.prodJ && ref.prodJ[g.code], fp = FP[g.code] || {};
+    const big = pj && !blank0(pj.L) ? pj.L : fp.big, small = pj && !blank0(pj.M) ? pj.M : fp.small, evt = ref.prodA && !blank0(ref.prodA[g.code]) ? ref.prodA[g.code] : fp.evt;
+    g.big = blank0(big) ? NOCAT : String(big); g.small = blank0(small) ? NOCAT : String(small); g.evt = blank0(evt) ? NOCAT : String(evt);
+    if (blank0(big) || blank0(small) || blank0(evt)) { const o = miss.get(g.code) || { name: g.name, s: 0 }; o.s += (g.s || 0) * (g.u || 1); miss.set(g.code, o); }
+  }
+  GD.noCls = miss; return GD;
 }
 const gUnit = () => +(ls.get("dc_gunit") || 0);   // 0 = 자동(머리글 단위)
 function goalsOf(GD, Y, M, chF) {
@@ -1046,6 +1079,7 @@ function renderGoal() {
     <code>채널 | 대카테고리 | 소카테고리 | 세분류 | 연도 | 월 | 총매출 목표 | 비용율 목표 | CM 목표</code><br>
     · 세분류까지 없으면 아는 단계까지만 (빈 칸 = 그 단계 전체) · 연도 없으면 기준월 연도 · 월은 1~12 / 3월 / 2026-03 다 됨<br>
     · 금액 단위는 머리글에 (원)/(천원)/(백만원) 적으면 자동 인식 · 비용율은 25% 또는 25 · 합계·소계 행은 자동 제외<br>
+    · <b>SKU형</b>도 인식: <code>연도 | 월 | 채널 | SKU코드 | SKU명 | 총매출 | DC | 장려금 | 판관비 | 변동원가 | 운송비</code> → 분류는 제품분류로 자동 대입, 비용율 = (DC+장려금+판관비)/총매출, CM = 총매출−비용−변동원가−운송비<br>
     · 가로형(지표 열에 총매출/비용율/CM + 1월~12월 열)도 인식 · 지난 달 실적은 📦 보관함에 저장된 달만 잡혀요</div>`;
   if (!GD || !GD.rows.length) {
     el.innerHTML = `<div class="card"><h2>🎯 목표 진척</h2>${GD && GD.err ? `<div class="warnbox">⚠️ ${esc(GD.err)}</div>` : `<div class="empty" style="padding:16px">아직 목표가 없어요 → 1단계 「📋 붙여넣기」의 <b>🎯 목표</b> 칸에 목표 시트를 붙여넣고 「붙여넣은 내용으로 계산」<br>(또는 기준 파일에 <b>'목표'</b> 시트를 넣어 올리기)</div>`}
@@ -1075,6 +1109,7 @@ function renderGoal() {
   // 경고
   const wn = [];
   if (GD.bad) wn.push(`월을 못 읽은 목표 ${GD.bad}행 (빠짐)`);
+  if (GD.noCls && GD.noCls.size) wn.push(`제품분류에 없는 SKU 목표 ${GD.noCls.size}개 (총매출 ${mil1([...GD.noCls.values()].reduce((s, o) => s + o.s, 0))}백만) → (미분류)로 잡힘: ${[...GD.noCls].slice(0, 5).map(([c, o]) => esc(c + " " + (o.name || ""))).join(", ")}${GD.noCls.size > 5 ? " 외" : ""} — 제품분류 보완하면 자동 반영`);
   if (!c.src) wn.push(`${gym} 실적 없음 — ${gym === baseYm ? "1단계에서 계산하면 나와요" : "📦 보관함에 이 달이 없어요"}`);
   if (T.miss.length) wn.push(`보관함 없는 지난 달: ${T.miss.map(m => m + "월").join(", ")} → YTD 비교(실적·목표 둘 다)에서 빠지고, 연말 예상엔 목표로 대체 (그 달 결과를 보관함에 저장하면 반영)`);
   if (c.src && c.unS > 0 && x.sales > 0) wn.push(`목표 없는 분류의 실적 ${mil1(c.unS)}백만 (진척률 계산에서 제외)`);
@@ -1123,7 +1158,7 @@ function renderGoal() {
     <div class="tw gt" style="margin-top:8px"><table><thead><tr><th>월</th><th>목표 총매출</th><th>실적 / 예상</th><th>달성률</th><th>비용율 목표</th><th>비용율 실적</th><th>CM 목표</th><th>CM 실적 / 예상</th><th>CM 달성률</th><th>비고</th></tr></thead><tbody>${yr}
     <tr class="tot"><td>연간</td>${td(mil1(T.S))}${td(mil1(T.fS) + " <span class='muted'>(예상)</span>")}${td(`<b style="color:${gClr(T.aS)}">${pct(T.aS)}</b>`)}${td(pct(T.crT))}${td(pct(T.cr))}${td(T.CM ? mil1(T.CM) : "-")}${td(mil1(T.fCM))}${td(pct(T.aCM))}<td class="muted">YTD 실적 ${mil1(T.ytdA)} · 연간 진척 ${pct(T.pS)}</td></tr></tbody></table></div>
     <div class="help" style="margin-top:6px">YTD 진척 막대 세로선 = 지금까지 목표가 연간 목표에서 차지하는 비중 · 연말 예상 = 지난 달 실적(보관함) + 이번 달 월말 예상 + 남은 달 목표 · 보관함 없는 지난 달은 목표로 대체 · 매달 마감 후 📦 보관함 저장을 꼭 해주세요</div></section>`;
-  h += `<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b>목표 양식 안내</b> <span class="muted">읽은 목표 ${GD.rows.length.toLocaleString()}건 · ${GD.layout === "wide" ? "가로형" : "세로형"}</span></summary>${fmtHelp}</details>`;
+  h += `<details class="card" style="margin-top:12px"><summary style="cursor:pointer"><b>목표 양식 안내</b> <span class="muted">읽은 목표 ${GD.rows.length.toLocaleString()}건 · ${GD.layout === "wide" ? "가로형" : GD.layout === "sku" ? "SKU형 (분류는 제품분류로 대입)" : "세로형"}</span></summary>${fmtHelp}</details>`;
   el.innerHTML = h;
   $("#gY").onchange = e => { ST.gym = `${e.target.value}-${gym.slice(5)}`; renderGoal(); };
   $("#gM").onchange = e => { ST.gym = e.target.value; renderGoal(); };
