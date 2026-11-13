@@ -1602,7 +1602,9 @@ function rawBook() {
     const MH = w0.metaH, key = h => norm(h);
     const pick = r => r.metaH === MH ? r.meta : MH.map(h => { const j = r.metaH.findIndex(x => key(x) === key(h)); return j >= 0 ? r.meta[j] : ""; });
     H.splice(0, H.length, ...MH, "일자", "EDI수량", "전환수량", "매입금액");
-    rows.splice(0, rows.length, ...ST.raw.map(r => [...pick(r), r.dayRaw ?? r.day, r.ediq ?? "", r.qty, r.amt]));
+    // 일자 = YYYY-MM-DD (연월 열 없으면 화면 기준월로 채움)
+    const dOf = r => r.ym ? r.dayRaw : (ymSel && r.day ? `${ymSel}-${String(r.day).padStart(2, "0")}` : (r.dayRaw ?? r.day));
+    rows.splice(0, rows.length, ...ST.raw.map(r => [...pick(r), dOf(r), r.ediq ?? "", r.qty, r.amt]));
   }
   const wb = XLSX.utils.book_new(), S = (aoa, w) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = w.map(x => ({ wch: x })); return ws; };
   XLSX.utils.book_append_sheet(wb, S([H, ...rows], [9, 14, 12, 16, 15, 30, 9, 10, 12, 10, 32, 10, 10, 14, 20]), "변환로우");
