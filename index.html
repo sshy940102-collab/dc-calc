@@ -415,9 +415,18 @@ function parseRaw(wb, fname) {
     ch: idx("채널"), day: idx("일자"), edi: idx("EDI관리코드명"), bar: idx("EDI상품코드"), ediName: idx("EDI상품명"),
     oq: idx("EDI발주총수량"), oa: idx("EDI발주총금액"), ty: idx("전환유형"), tyn: idx("전환유형명"), catn: idx("카테고리명"),
     code: idx("제품코드"), name: idx("제품명"), fac: conv.length > 1 ? conv[0] : -1, qty: conv.length ? conv[conv.length - 1] : -1,
-    ediq: idx("EDI수량"), amt: idx("매입금액")
+    ediq: idx("EDI수량"), amt: idx("매입금액"),
+    ymc: H.findIndex(v => /^(연월|년월|기준월|기준연월|연도월|년도월)$/.test(v)), yr: H.findIndex(v => /^(연도|년도|년)$/.test(v)), mo: H.findIndex(v => /^월$/.test(v))
   };
+  // 앞에 붙인 연월(2026-11 · 202611 · 2026.11 · 엑셀 날짜) 또는 연도+월 열 → 기준월
+  const ymOf = r => { const p2 = n => String(n).padStart(2, "0"); let y = null, m = null;
+    if (ix.ymc >= 0 && r[ix.ymc] != null && r[ix.ymc] !== "") { const v = r[ix.ymc]; let x;
+      if (typeof v === "number") { if (v >= 190001 && v <= 210012) { y = Math.floor(v / 100); m = v % 100; } else if (v > 31) { const o = XLSX.SSF.parse_date_code(v); if (o) { y = o.y; m = o.m; } } }
+      else if ((x = String(v).match(/(\d{4})\D{0,3}(\d{1,2})/))) { y = +x[1]; m = +x[2]; } else if ((x = String(v).trim().match(/^(\d{2})[.\-/](\d{1,2})$/))) { y = 2000 + +x[1]; m = +x[2]; } }
+    else if (ix.yr >= 0 && ix.mo >= 0) { y = parseInt(String(r[ix.yr] ?? "").replace(/\D/g, "")) || null; m = parseInt(String(r[ix.mo] ?? "").replace(/\D/g, "")) || null; if (y && y < 100) y += 2000; }
+    return y && m >= 1 && m <= 12 ? `${y}-${p2(m)}` : null; };
   const rows = [];
+  const skip = (r, amt) => { RAW_SKIP.n++; RAW_SKIP.amt += amt || 0; };
   // 가로형(EDI 일자별 다운로드 원본): "01 일 EDI납품수량 / 01 일 납품수량 / 01 일 납품금액" 열이 일자마다 → 일자별 한 줄로 펼침
   const dayCols = re => { const m = {}; H.forEach((v, i) => { const x = re.exec(v); if (x) m[+x[1]] = i; }); return m; };
   const wE = dayCols(/^(\d{1,2})일EDI납품수량$/), wQ = dayCols(/^(\d{1,2})일납품수량$/), wA = dayCols(/^(\d{1,2})일납품금액$/);
@@ -426,13 +435,14 @@ function parseRaw(wb, fname) {
     const facI = conv.length ? conv[0] : -1;   // 가로형의 '전환수량' = 환산계수 (1개뿐)
     for (let i = hr + 1; i < g.length; i++) {
       const r = g[i]; if (!r) continue;
-      const cd = code(r[ix.code]); if (!cd) continue;   // 제품코드 없는 행(미매핑)은 기존과 같이 제외
+      const cd = code(r[ix.code]); if (!cd) { if (r.some(v => v != null && v !== "")) skip(r, Object.values(wA).reduce((s, c) => s + (num(r[c]) || 0), 0)); continue; }   // 제품코드 없는 행 = 어떤 제품인지 몰라 제외 (나중에 매핑되면 다시 받을 때 생김)
       const get = k => ix[k] >= 0 ? r[ix[k]] : null, fac = (facI >= 0 ? num(r[facI]) : null) || 1;
       for (const d of wDays) {
         const ediq = wE[d] != null ? num(r[wE[d]]) ?? 0 : null, q0 = wQ[d] != null ? num(r[wQ[d]]) : null, amt = num(r[wA[d]]) ?? 0;
         const qty = q0 ?? (ediq != null ? ediq * fac : 0);
         if (!ediq && !qty && !amt) continue;   // 납품 없는 날은 행 안 만듦
-        rows.push({ ch: get("ch") != null ? canonCh(get("ch")) : "", day: d, ym: null, dayRaw: d + "일",
+        const ym = ymOf(r);
+        rows.push({ ch: get("ch") != null ? canonCh(get("ch")) : "", day: d, ym, dayRaw: ym ? `${ym}-${String(d).padStart(2, "0")}` : d + "일",
           edi: get("edi"), bar: get("bar") != null ? code(get("bar")) : "", ediName: get("ediName"),
           ty: get("ty"), tyn: get("tyn") != null ? String(get("tyn")).trim() : "", catn: get("catn"),
           code: cd, name: get("name"), ediq, qty, amt, file: fname, wide: true });
@@ -442,7 +452,7 @@ function parseRaw(wb, fname) {
   }
   for (let i = hr + 1; i < g.length; i++) {
     const r = g[i]; if (!r) continue;
-    const cd = code(r[ix.code]); if (!cd) continue;
+    const cd = code(r[ix.code]); if (!cd) { if (r.some(v => v != null && v !== "")) skip(r, ix.amt >= 0 ? num(r[ix.amt]) : 0); continue; }
     const get = k => ix[k] >= 0 ? r[ix[k]] : null;
     const ediq = num(get("ediq"));
     const fac = num(get("fac")) ?? 1;
@@ -450,7 +460,7 @@ function parseRaw(wb, fname) {
     let amt = num(get("amt"));
     if (amt == null && ediq != null && num(get("oq"))) amt = ediq * (num(get("oa")) / num(get("oq")));
     rows.push({
-      ch: get("ch") != null ? canonCh(get("ch")) : "", ...(o => ({ day: o.d, ym: o.ym, dayRaw: o.txt }))(parseDate(get("day"))),
+      ch: get("ch") != null ? canonCh(get("ch")) : "", ...(o => ({ day: o.d, ym: o.ym || ymOf(r), dayRaw: o.txt }))(parseDate(get("day"))),
       edi: get("edi"), bar: get("bar") != null ? code(get("bar")) : "", ediName: get("ediName"),
       ty: get("ty"), tyn: get("tyn") != null ? String(get("tyn")).trim() : "", catn: get("catn"),
       code: cd, name: get("name"), ediq, qty: qty ?? 0, amt: amt ?? 0, file: fname
@@ -477,7 +487,10 @@ function parseDate(v) {
 }
 const parseDay = v => parseDate(v).d;
 // 로우 날짜에서 기준월 자동 설정 (한 달만 있을 때). 여러 달이면 경고
+// 제품코드 없어 제외된 행 (parseRaw가 쌓고, autoYm이 ST.rawSkip으로 옮김 — 로우를 새로 읽을 때마다 autoYm이 불림)
+let RAW_SKIP = { n: 0, amt: 0 };
 function autoYm() {
+  ST.rawSkip = RAW_SKIP; RAW_SKIP = { n: 0, amt: 0 };
   const yms = [...new Set(ST.raw.map(r => r.ym).filter(Boolean))].sort();
   ST.yms = yms;
   if (yms.length === 1 && $("#ym").value !== yms[0]) { $("#ym").value = yms[0]; ls.set("dc_ym", yms[0]); }
@@ -1569,7 +1582,7 @@ $("#btnSample").onclick = () => {
 function rawChips() {
   const defCh = canonCh(($("#defCh").value || "").trim());
   const chs = [...new Set(ST.raw.map(r => r.ch || defCh || "(채널없음)"))];
-  chips("#rawChips", [[`${ST.raw.length.toLocaleString()}행`, "ok"], [`채널: ${chs.join(", ")}`], ...((ST.yms || []).length ? [[`월: ${ST.yms.join(", ")}`, ST.yms.length > 1 ? "no" : "ok"]] : []), ...ST.rawFiles.map(f => [f])]);
+  chips("#rawChips", [[`${ST.raw.length.toLocaleString()}행`, "ok"], ...(ST.rawSkip && ST.rawSkip.n ? [[`제품코드 없음 ${ST.rawSkip.n}행 제외 (매입 ${Math.round(ST.rawSkip.amt).toLocaleString()}원)`]] : []), [`채널: ${chs.join(", ")}`], ...((ST.yms || []).length ? [[`월: ${ST.yms.join(", ")}`, ST.yms.length > 1 ? "no" : "ok"]] : []), ...ST.rawFiles.map(f => [f])]);
 }
 setupDrop("#dropRaw", "#fRaw", async files => {
   try {
