@@ -301,7 +301,7 @@ const ST = { ref: null, raw: [], rawFiles: [], res: null, fix: { base: {}, prod:
 
 /* ================= 기준 파일 파싱 ================= */
 function parseRef(wb) {
-  const ref = { found: {}, cost: {}, costCh: {}, costChs: new Set(), baseCh: {}, baseChs: new Set(), baseAny: {}, prodA: {}, prodJ: {}, prodName: {}, tax: {}, base: {}, rate: [], dist: [], sku: [], channels: new Set() };
+  const ref = { found: {}, cost: {}, costCh: {}, costChs: new Set(), baseCh: {}, baseChs: new Set(), baseAny: {}, prodA: {}, prodJ: {}, prodName: {}, tax: {}, taxB: {}, base: {}, rate: [], dist: [], sku: [], channels: new Set() };
   // 비용배부분류: C 제품코드, E 장려금분배구분, F 판매비분배구분
   let n = findSheet(wb, s => s.replace(/\s/g, "").includes("비용배부분류"));
   ref.found["비용배부분류"] = n || null;
@@ -358,11 +358,13 @@ function parseRef(wb) {
     for (let i = 0; i < Math.min(g.length, 10); i++) {
       const h = (g[i] || []).map(norm), f = re => h.findIndex(v => re.test(v));
       const cd = f(/^(제품CODE|제품코드|제품번호|자재|자재코드|자재번호)$/i), out = f(/출고가|공장도가/), vc = f(/변동/), tr = f(/운송비|물류비/);
-      if (cd >= 0 && out >= 0 && vc >= 0 && tr >= 0) { ix = { ch: f(/^채널$/), cd, out, vc, tr }; st = i + 1; break; }
+      if (cd >= 0 && out >= 0 && vc >= 0 && tr >= 0) { ix = { ch: f(/^채널$/), cd, out, vc, tr, tax: f(/^(면과세|면과|과세구분|과면세|면세구분)$/) }; st = i + 1; break; }
     }
     for (let i = st; i < g.length; i++) {
       const r = g[i]; if (!r) continue; const k = code(r[ix.cd]); if (!k || !/\d/.test(k)) continue;
       const v = { out: num(r[ix.out]), vc: num(r[ix.vc]), tr: num(r[ix.tr]) }, ch = ix.ch >= 0 ? norm(canonCh(r[ix.ch])) : "";
+      // 면과세: 기준정보에 있으면 제품분류보다 우선 (제품 속성이라 코드 단위, 첫 값 사용)
+      if (ix.tax >= 0) { const t = String(r[ix.tax] ?? "").trim(); if (/^(과세|면세)$/.test(t)) ref.taxB[k] ??= t; }
       // 채널 전체 이름("D1.농협")과 코드 뗀 이름("농협") 둘 다 등록 → 로우가 어느 쪽으로 써도 매칭 (조회는 전체 이름 우선)
       if (ch) { for (const c of new Set([ch, chKey(ch)])) { ref.baseCh[c + "|" + k] ??= v; ref.baseChs.add(c); } ref.baseAny[k] ??= {}; for (const f of ["out", "vc"]) if (v[f] != null) ref.baseAny[k][f] ??= v[f]; }
       else ref.base[k] ??= v;
@@ -547,7 +549,7 @@ function compute() {
       if (miss("cls", "*", r, info)) W.cls.set(r.code, `${r.name ?? ""} → ${info}`);
     }
     // 농협 전용: 물류비가 부가세 포함 구조 → 과세 제품은 ×1.1 (물류비, 우유 장려금_분배기준(%))
-    r.nh = isNH(r.ch); r.tax = ref.tax[r.code] ?? fp.tax ?? null;
+    r.nh = isNH(r.ch); r.tax = ref.taxB?.[r.code] ?? ref.tax[r.code] ?? fp.tax ?? null;
     r.taxF = r.nh && norm(r.tax) === "과세" ? 1.1 : 1;
     if (r.nh && blank(r.tax) && miss("tax", "*", r)) W.tax.set(r.code, r.name);
     r.inPrice = String(r.big ?? "") === "단산" ? 0 : (r.qty ? r.amt / r.qty : 0);
@@ -1287,7 +1289,7 @@ const FXT = {
   tr: { t: "운송비 없음", s: "기준정보 (채널별)", why: "운송비 0 → CM 과대", f: [["tr", "운송비(EA)", "n"]] },
   cost: { t: "비용배부 분류 없음", s: "비용배부분류", why: "장려금·판관비 배분 안 됨", f: [["j", "장려금분류", "t"], ["p", "판관비분류", "t"]] },
   cls: { t: "제품분류 누락", s: "제품분류", why: "필터·집계에서 (미분류)", f: [["big", "대카테고리", "t"], ["small", "소카테고리", "t"], ["evt", "세분류", "t"]] },
-  tax: { t: "면과세 없음 (농협)", s: "제품분류 면과세", why: "×1.1 미적용 → CM 과대", f: [["tax", "면과세", "s"]] }
+  tax: { t: "면과세 없음 (농협)", s: "기준정보/제품분류 면과세", why: "×1.1 미적용 → CM 과대", f: [["tax", "면과세", "s"]] }
 };
 const saveFix = async () => { await DB.set("fix", ST.fix); run(); };
 function fixSlot(it) {   // 점검 항목 → ST.fix 저장 위치
@@ -1463,7 +1465,7 @@ function renderWarn(R) {
   list(W.tr, "운송비 없음", "기준정보에 해당 채널(또는 공통) 운송비 없음/공란/#N/A → 운송비 0 (CM 과대 가능) · [ ] = 해당 채널");
   list(W.vc, "변동원가 없음", "기준정보 변동/봉 공란 → 변동원가 0 (CM 과대 가능)");
   list(W.cls, "제품분류 누락", "대·소카테고리·세분류 중 빈 칸 → 필터·집계에서 '(미분류)'로 표시 (금액 계산엔 영향 없음)");
-  if (W.tax) list(W.tax, "면과세 없음 (농협)", "제품분류 면과세 칸 공란 → 과세 ×1.1 미적용 (물류비·우유 장려금이 덜 잡혀 CM 과대 가능)");
+  if (W.tax) list(W.tax, "면과세 없음 (농협)", "기준정보·제품분류 면과세 칸 공란 → 과세 ×1.1 미적용 (물류비·우유 장려금이 덜 잡혀 CM 과대 가능)");
   list(W.cost, "비용배부 분류 없음", "비용배부분류에도 없고 로우 카테고리명도 공란 → 장려금·판관비 배분 안 됨");
   if (W.chstd && W.chstd.size) items.push(`<div><b>표준 채널명 아님</b>: ${[...W.chstd].map(c => esc(c) + (chSuggest(c) ? ` → ${esc(chSuggest(c))}?` : "")).join(", ")} — 매입자료 A열·거래조건·비용배부분류·기준정보·목표를 같은 표준 이름(예: D1.농협)으로 맞춰주세요</div>`);
   if (W.chbase && W.chbase.size) items.push(`<div><b>기준정보에 없는 채널</b>: ${[...W.chbase].map(esc).join(", ")} — 공장도가·변동원가는 공통/다른 채널 값, 운송비는 공통 행만 사용 (기준정보 채널명 확인: 'D1.농협'처럼 앞 코드는 자동 무시)</div>`);
