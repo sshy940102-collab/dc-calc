@@ -849,21 +849,38 @@ function dash(rows, R) {
   const negR = prR.filter(a => a.cmR < 0).length;
   h += `<section class="card"><h2>공헌이익율 TOP 10 <small>제품별 · 율 높은 순</small></h2>${hbars(topR.map(a => ({ label: lab(a), v: a.cmR, c: CLR.cm, txt: `${pct(a.cmR)} <em>${mil1(a.cm)}</em>` })))}</section>`;
   h += `<section class="card"><h2>공헌이익율 하위 10 <small>${negR ? `<span class="neg">마이너스 ${negR}개 제품</span>` : "마이너스 제품 없음"}</small></h2>${hbars(botR.map(a => ({ label: lab(a), v: a.cmR, c: "#9aa3b2", txt: `${pct(a.cmR)} <em>${mil1(a.cm)}</em>` })))}</section>`;
-  // ④ 세분류별 DC율 · 장려금율 · 판관비율 · 비용율 · 공헌이익율
-  const ev = agg(rows, r => r.evt ?? "(미분류)", r => ({ evt: r.evt ?? "(미분류)" })).sort((a, b) => b.sales - a.sales);
-  ev.forEach(a => { a.jR = a.sales ? a.jTot / a.sales : null; a.pR = a.sales ? a.pTot / a.sales : null; });
-  const EC = [["dcR", "DC율", CLR.dc], ["jR", "장려금율", CLR.j], ["pR", "판관비율", CLR.p], ["costR", "비용율", "#c0504d"], ["cm", "공헌이익액", CLR.cm, 1], ["cmR", "공헌이익율", CLR.cm]];
-  const em = Math.max(1e-9, ...ev.flatMap(a => EC.filter(c => !c[3]).map(([k]) => Math.abs(a[k] || 0))));
-  const emA = Math.max(1e-9, ...ev.map(a => Math.abs(a.cm || 0)));
-  const eb = (v, c, amt) => `<div class="evb"><span class="hbt"><i style="width:${Math.min(100, Math.abs(v || 0) / (amt ? emA : em) * 100).toFixed(1)}%;background:${v < 0 ? "var(--red)" : c}"></i></span><span class="${v < 0 ? "neg" : ""}">${amt ? mil1(v) : pct(v)}</span></div>`;
-  const evT = total(rows); evT.jR = evT.sales ? evT.jTot / evT.sales : null; evT.pR = evT.sales ? evT.pTot / evT.sales : null;
-  h += `<section class="card wide"><h2>세분류별 <small>매출 큰 순 · 비용율 = DC+장려금+판관비</small></h2><div class="evwrap"><div class="evr ev6 hd"><span>세분류 (매출)</span>${EC.map(c => `<span>${c[1]}</span>`).join("")}</div>${ev.map(a => `<div class="evr ev6"><span class="hbl" title="${esc(a.evt)}">${esc(a.evt)} <span class="muted">${mil1(a.sales)}</span></span>${EC.map(([k, , c, m]) => eb(a[k], c, m)).join("")}</div>`).join("")}<div class="evr ev6 tot"><span><b>전체</b> <span class="muted">${mil1(evT.sales)}</span></span>${EC.map(([k, , c, m]) => eb(evT[k], c, m)).join("")}</div></div></section>`;
+  // ④ 분류별 DC율 · 장려금율 · 판관비율 · 비용율 · 공헌이익율 (보는 단계·대/소카테고리 드롭다운으로 조회)
+  EVROWS = rows; h += `<section class="card wide" id="evCard">${evHtml()}</section>`;
   // ⑤ 고정비 스프레드 영향 품목: 율이 아니라 월 고정금액(장려금_분배기준·SKU금액, 판관비_분배·SKU)을 매입비중으로 나눠 받아 CM율이 깎이는 제품
   h += fixedSpread(rows, t);
   const fl = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체");
   return h + `</div><div class="help" style="margin-top:8px">금액 단위 백만원 · 율은 모두 <b>총매출(출고가 기준)</b> 대비 · 필터: <b>${fl.length ? fl.map(esc).join(" / ") : "전체"}</b> (장려금·판관비 배분은 전체 기준으로 계산 후 필터)</div>`;
 }
 
+// 대시보드 분류별 율 표: 보는 단계(대/소/세분류) + 대카테고리·소카테고리 조회
+let EVROWS = [], EVS = { lv: "evt", big: "전체", small: "전체" };
+function evHtml() {
+  const LV = { big: "대카테고리", small: "소카테고리", evt: "세분류" };
+  const all = EVROWS, bigs = [...new Set(all.map(r => catOf(r.big)))].sort();
+  if (EVS.big !== "전체" && !bigs.includes(EVS.big)) EVS.big = "전체";
+  const r1 = EVS.big === "전체" ? all : all.filter(r => catOf(r.big) === EVS.big);
+  const smalls = [...new Set(r1.map(r => catOf(r.small)))].sort();
+  if (EVS.small !== "전체" && !smalls.includes(EVS.small)) EVS.small = "전체";
+  const rows = EVS.small === "전체" ? r1 : r1.filter(r => catOf(r.small) === EVS.small);
+  const sl = (id, lab, list, v) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lab} <select data-ev="${id}">${list.map(([k, l]) => `<option value="${esc(k)}" ${k === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
+  const bar = `<div class="toolbar" style="margin:0 0 8px">${sl("lv", "보는 단계", Object.entries(LV), EVS.lv)}${sl("big", "대카테고리", [["전체", "전체"], ...bigs.map(x => [x, x])], EVS.big)}${sl("small", "소카테고리", [["전체", "전체"], ...smalls.map(x => [x, x])], EVS.small)}</div>`;
+  const ev = agg(rows, r => catOf(r[EVS.lv]), r => ({ evt: catOf(r[EVS.lv]), up: EVS.lv === "small" ? catOf(r.big) : EVS.lv === "evt" ? catOf(r.small) : "" })).sort((a, b) => b.sales - a.sales);
+  ev.forEach(a => { a.jR = a.sales ? a.jTot / a.sales : null; a.pR = a.sales ? a.pTot / a.sales : null; });
+  const EC = [["dcR", "DC율", CLR.dc], ["jR", "장려금율", CLR.j], ["pR", "판관비율", CLR.p], ["costR", "비용율", "#c0504d"], ["cm", "공헌이익액", CLR.cm, 1], ["cmR", "공헌이익율", CLR.cm]];
+  const em = Math.max(1e-9, ...ev.flatMap(a => EC.filter(c => !c[3]).map(([k]) => Math.abs(a[k] || 0))));
+  const emA = Math.max(1e-9, ...ev.map(a => Math.abs(a.cm || 0)));
+  const eb = (v, c, amt) => `<div class="evb"><span class="hbt"><i style="width:${Math.min(100, Math.abs(v || 0) / (amt ? emA : em) * 100).toFixed(1)}%;background:${v < 0 ? "var(--red)" : c}"></i></span><span class="${v < 0 ? "neg" : ""}">${amt ? mil1(v) : pct(v)}</span></div>`;
+  const evT = total(rows); evT.jR = evT.sales ? evT.jTot / evT.sales : null; evT.pR = evT.sales ? evT.pTot / evT.sales : null;
+  const scope = [EVS.big, EVS.small].filter(x => x !== "전체").join(" / ");
+  return `<h2>${LV[EVS.lv]}별 <small>매출 큰 순 · 비용율 = DC+장려금+판관비${scope ? ` · ${esc(scope)}` : ""}</small></h2>${bar}${!ev.length ? `<div class="empty">데이터 없음</div>` : `<div class="evwrap"><div class="evr ev6 hd"><span>${LV[EVS.lv]} (매출)</span>${EC.map(c => `<span>${c[1]}</span>`).join("")}</div>${ev.map(a => `<div class="evr ev6"><span class="hbl" title="${esc((a.up ? a.up + " › " : "") + a.evt)}">${esc(a.evt)} <span class="muted">${mil1(a.sales)}</span></span>${EC.map(([k, , c, m]) => eb(a[k], c, m)).join("")}</div>`).join("")}<div class="evr ev6 tot"><span><b>${scope ? "합계" : "전체"}</b> <span class="muted">${mil1(evT.sales)}</span></span>${EC.map(([k, , c, m]) => eb(evT[k], c, m)).join("")}</div></div>`}`;
+}
+document.addEventListener("change", e => { const k = e.target && e.target.dataset && e.target.dataset.ev; if (!k) return; EVS[k] = e.target.value; if (k === "big") EVS.small = "전체"; try { localStorage.setItem("dc_evs", JSON.stringify(EVS)); } catch (x) { } const c = document.getElementById("evCard"); if (c) c.innerHTML = evHtml(); });
+try { const s = JSON.parse(localStorage.getItem("dc_evs") || "null"); if (s && s.lv) EVS = { ...EVS, ...s }; } catch (x) { }
 // 고정비 스프레드 = 월 고정금액을 매입비중으로 나눠 받은 비용 (장려금_분배기준 금액 + 장려금_SKU기준(금액) + 판관비_분배 + 판관비_SKU). 율(%) 비용은 제외
 const fixOf = a => (a.jAmt || 0) + (a.sAmt || 0) + (a.pDist || 0) + (a.pSku || 0);
 function fixedSpread(rows, t) {
