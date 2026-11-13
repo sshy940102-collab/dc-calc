@@ -207,8 +207,10 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
       <button type="button" id="arcSave">💾 현재 결과 보관함에 저장</button>
       <button type="button" class="sec" id="arcExp">📤 백업 복사 (텍스트)</button>
       <button type="button" class="sec" id="arcImp">📥 백업 불러오기</button>
+      <button type="button" class="sec" id="arcRnBtn">🔁 채널명 변경</button>
       <label class="f" style="flex-direction:row;align-items:center;gap:6px;margin-left:auto">채널 <select id="arcCh"></select></label>
     </div>
+    <div id="arcRn" style="display:none;margin-top:8px;padding:10px;border:1px solid #b8c9e8;border-radius:8px;background:#f6f9fe"></div>
     <div class="help" style="margin-top:6px">보관함은 이 PC 브라우저에만 저장돼요 (다른 사람 링크엔 안 보임). 브라우저 기록 삭제 등으로 날아갈 수 있으니 <b>저장할 때마다 「백업 복사」→ 엑셀 빈 시트 A1에 붙여넣어 평소 쓰는 폴더에 저장</b>하세요 (메모장도 가능). 복구는 그 A열을 통째로 복사해서 「백업 불러오기」에 붙여넣으면 끝.</div>
     <div id="arcBk" style="display:none;margin-top:8px">
       <textarea id="arcTxt" spellcheck="false" style="height:110px"></textarea>
@@ -258,6 +260,17 @@ const C = l => XLSX.utils.decode_col(l);           // 열 문자 → index
 const norm = v => v == null ? "" : String(v).replace(/\s+/g, "").replace(/代/g, "대");
 // 기준정보 채널명: 회사 코드 접두어 제거 ("D1.농협" → "농협", "E7.C기타" → "C기타") → 로우 채널명과 매칭
 const chKey = v => norm(v).replace(/^[A-Za-z]{1,3}\d{1,3}[.\-_)]/, "");
+// 표준 채널명 (2026-11-13 사용자 확정) + 옛 이름 → 표준 이름 기본 짝
+const STD_CH = ["C1.이마트", "C2.롯데마트", "C3.홈플러스", "C4.H기타 메가", "C4.H기타 킴스",
+  "D1.농협", "D2.GS슈퍼", "D3.롯데슈퍼", "D4.이마트에브리", "D5.익스프레스", "D6.코스트코", "D7.트레이더스", "D8.VIC", "D9.서원유통", "D12.다이소",
+  "E1.CU", "E2.GS", "E3.세븐", "E4.이마트24", "E5.코레일", "E6.C-Space"];
+const STD_N = new Set(STD_CH.map(norm));
+const CH_OLD = { "EM": "C1.이마트", "이마트": "C1.이마트", "킴스클럽": "C4.H기타 킴스", "킴스": "C4.H기타 킴스", "메가마트": "C4.H기타 메가", "메가": "C4.H기타 메가",
+  "트레이더스": "D7.트레이더스", "에브리데이": "D4.이마트에브리", "EV": "D4.이마트에브리", "이마트에브리데이": "D4.이마트에브리", "농협": "D1.농협",
+  "서원유통": "D9.서원유통", "다이소": "D12.다이소", "코스트코": "D6.코스트코", "롯데맥스": "D8.VIC", "VIC": "D8.VIC" };
+const chSuggest = c => CH_OLD[norm(c)] || STD_CH.find(s => chKey(s) === norm(c)) || "";
+// 어떤 채널 이름이 와도 표준 이름으로 (옛 이름 'EM'·'농협' 자료도 그대로 돌아가게). 모르는 이름은 그대로
+const canonCh = c => { if (c == null) return c; const s = String(c).trim(); if (!s) return s; const n = norm(s); return STD_CH.find(x => norm(x) === n) || chSuggest(s) || s; };
 const code = v => { if (v == null) return ""; let s = String(v).trim(); if (/^\d+\.0+$/.test(s)) s = s.split(".")[0]; return s; };
 const num = v => (typeof v === "number" && isFinite(v)) ? v : (typeof v === "string" && v.trim() !== "" && isFinite(+v.replace(/,/g, ""))) ? +v.replace(/,/g, "") : null;
 const fmt = (v, d = 0) => v == null || !isFinite(v) ? "-" : v.toLocaleString("ko-KR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -302,7 +315,7 @@ function parseRef(wb) {
     }
     for (let i = st; i < g.length; i++) {
       const r = g[i]; if (!r) continue; const k = code(r[ix.cd]); if (!k || !/\d/.test(k)) continue;
-      const ch = ix.ch >= 0 ? norm(r[ix.ch]) : "";
+      const ch = ix.ch >= 0 ? norm(canonCh(r[ix.ch])) : "";
       if (ch) { ref.costCh[ch + "|" + k] ??= { j: r[ix.j], p: r[ix.p] }; ref.costChs.add(ch); }
       else ref.cost[k] ??= { j: r[ix.j], p: r[ix.p] };
     }
@@ -349,7 +362,7 @@ function parseRef(wb) {
     }
     for (let i = st; i < g.length; i++) {
       const r = g[i]; if (!r) continue; const k = code(r[ix.cd]); if (!k || !/\d/.test(k)) continue;
-      const v = { out: num(r[ix.out]), vc: num(r[ix.vc]), tr: num(r[ix.tr]) }, ch = ix.ch >= 0 ? norm(r[ix.ch]) : "";
+      const v = { out: num(r[ix.out]), vc: num(r[ix.vc]), tr: num(r[ix.tr]) }, ch = ix.ch >= 0 ? norm(canonCh(r[ix.ch])) : "";
       // 채널 전체 이름("D1.농협")과 코드 뗀 이름("농협") 둘 다 등록 → 로우가 어느 쪽으로 써도 매칭 (조회는 전체 이름 우선)
       if (ch) { for (const c of new Set([ch, chKey(ch)])) { ref.baseCh[c + "|" + k] ??= v; ref.baseChs.add(c); } ref.baseAny[k] ??= {}; for (const f of ["out", "vc"]) if (v[f] != null) ref.baseAny[k][f] ??= v[f]; }
       else ref.base[k] ??= v;
@@ -365,18 +378,18 @@ function parseRef(wb) {
       // ① 율: B 채널, D 카테고리명, E 항목, F 구분자, G 율
       const fk = r[C("F")] ?? ((r[C("D")] != null && r[C("E")] != null) ? String(r[C("D")]) + r[C("E")] : null);
       const gv = num(r[C("G")]);
-      if (fk != null && gv != null) { ref.rate.push({ ch: norm(r[C("B")]), key: norm(fk), v: gv }); if (r[C("B")]) ref.channels.add(String(r[C("B")]).trim()); }
+      if (fk != null && gv != null) { ref.rate.push({ ch: norm(canonCh(r[C("B")])), key: norm(fk), v: gv }); if (r[C("B")]) ref.channels.add(canonCh(r[C("B")])); }
       // ② 분배: M 채널, O 카테고리명, Q 시트적용, R 구분자, S 금액(영업일수)/율, W 금액(월)
       const rk = r[C("R")] ?? ((r[C("O")] != null && r[C("Q")] != null) ? String(r[C("O")]) + r[C("Q")] : null);
       if (rk != null && norm(rk) !== "구분자") {
         const s = num(r[C("S")]), w = num(r[C("W")]);
-        if (s != null || w != null) { ref.dist.push({ ch: norm(r[C("M")]), key: norm(rk), s, w, item: r[C("P")] }); if (r[C("M")]) ref.channels.add(String(r[C("M")]).trim()); }
+        if (s != null || w != null) { ref.dist.push({ ch: norm(canonCh(r[C("M")])), key: norm(rk), s, w, item: r[C("P")] }); if (r[C("M")]) ref.channels.add(canonCh(r[C("M")])); }
       }
       // ③ SKU: Z 채널, AA SKU, AD 시트적용, AE 구분자, AF 금액(영업일수)/율, AJ 금액(월)
       const ak = r[C("AE")] ?? ((r[C("AA")] != null && r[C("AD")] != null) ? code(r[C("AA")]) + r[C("AD")] : null);
       if (ak != null && norm(ak) !== "구분자") {
         const s = num(r[C("AF")]), w = num(r[C("AJ")]);
-        if (s != null || w != null) { ref.sku.push({ ch: norm(r[C("Z")]), key: norm(ak), s, w, item: r[C("AC")] }); if (r[C("Z")]) ref.channels.add(String(r[C("Z")]).trim()); }
+        if (s != null || w != null) { ref.sku.push({ ch: norm(canonCh(r[C("Z")])), key: norm(ak), s, w, item: r[C("AC")] }); if (r[C("Z")]) ref.channels.add(canonCh(r[C("Z")])); }
       }
     }
   }
@@ -415,7 +428,7 @@ function parseRaw(wb, fname) {
     let amt = num(get("amt"));
     if (amt == null && ediq != null && num(get("oq"))) amt = ediq * (num(get("oa")) / num(get("oq")));
     rows.push({
-      ch: get("ch") != null ? String(get("ch")).trim() : "", ...(o => ({ day: o.d, ym: o.ym, dayRaw: o.txt }))(parseDate(get("day"))),
+      ch: get("ch") != null ? canonCh(get("ch")) : "", ...(o => ({ day: o.d, ym: o.ym, dayRaw: o.txt }))(parseDate(get("day"))),
       edi: get("edi"), bar: get("bar") != null ? code(get("bar")) : "", ediName: get("ediName"),
       ty: get("ty"), tyn: get("tyn") != null ? String(get("tyn")).trim() : "", catn: get("catn"),
       code: cd, name: get("name"), ediq, qty: qty ?? 0, amt: amt ?? 0, file: fname
@@ -458,13 +471,14 @@ function compute() {
   const mdays = (Y && Mo) ? new Date(Y, Mo, 0).getDate() : 31;
   const defCh = ($("#defCh").value || "").trim();
   const W = { out: new Map(), vc: new Map(), tr: new Map(), cls: new Map(), cost: new Map(), neg: new Map(), tax: new Map(), chref: new Set(), noMonth: new Set(), noDay: 0 };
-  const rows = raw.map(r => ({ ...r, ch: r.ch || defCh || "(채널없음)" }));
+  const rows = raw.map(r => ({ ...r, ch: canonCh(r.ch || defCh) || "(채널없음)" }));
   const chs = [...new Set(rows.map(r => r.ch))];
   const prorate = {};
   for (const ch of chs) { const el = $(`#d_${CSS.escape(ch)}`); const d = el ? +el.value : Math.max(0, ...rows.filter(r => r.ch === ch).map(r => r.day || 0)); prorate[ch] = d > 0 ? d / mdays : 1; }
   if (rows.some(r => r.day == null)) W.noDay = rows.filter(r => r.day == null).length;
   const refCh = new Set(ref.channels.map(norm));
   for (const ch of chs) if (refCh.size && !refCh.has(norm(ch))) W.chref.add(ch);
+  W.chstd = new Set(chs.filter(ch => !STD_N.has(norm(ch))));
   W.chbase = new Set(); for (const ch of chs) if (ref.baseChs.size && !ref.baseChs.has(norm(ch)) && !ref.baseChs.has(chKey(ch))) W.chbase.add(ch);
 
   // 거래조건 조회 (채널 일치 또는 채널 공란 = 공통)
@@ -834,7 +848,7 @@ function parseGoal(g) {
     if (!(mon >= 0 && (sal >= 0 || cr >= 0 || cm >= 0)) && !wide) continue;
     out.layout = wide ? "wide" : "long";
     const M = new Map();
-    const lab = rr => { const o = {}; GLV.forEach(([k]) => o[k] = ix[k] >= 0 ? gTxt(rr[ix[k]]) : ""); return o; };
+    const lab = rr => { const o = {}; GLV.forEach(([k]) => o[k] = ix[k] >= 0 ? gTxt(rr[ix[k]]) : ""); if (o.ch) o.ch = canonCh(o.ch); return o; };
     const slot = (o, y, m, u) => { const k = [...GLV.map(([kk]) => gk(o[kk])), y ?? "", m, u].join("\u0001"); let e = M.get(k); if (!e) { e = { ...o, y, m, u, s: null, c: null, cm: null }; M.set(k, e); } return e; };
     const addv = (e, f2, v) => { if (v == null) return; e[f2] = f2 === "c" ? v : (e[f2] ?? 0) + v; };
     if (!wide) {
@@ -1416,6 +1430,7 @@ function renderWarn(R) {
   list(W.cls, "제품분류 누락", "대·소카테고리·세분류 중 빈 칸 → 필터·집계에서 '(미분류)'로 표시 (금액 계산엔 영향 없음)");
   if (W.tax) list(W.tax, "면과세 없음 (농협)", "제품분류 면과세 칸 공란 → 과세 ×1.1 미적용 (물류비·우유 장려금이 덜 잡혀 CM 과대 가능)");
   list(W.cost, "비용배부 분류 없음", "비용배부분류에도 없고 로우 카테고리명도 공란 → 장려금·판관비 배분 안 됨");
+  if (W.chstd && W.chstd.size) items.push(`<div><b>표준 채널명 아님</b>: ${[...W.chstd].map(c => esc(c) + (chSuggest(c) ? ` → ${esc(chSuggest(c))}?` : "")).join(", ")} — 매입자료 A열·거래조건·비용배부분류·기준정보·목표를 같은 표준 이름(예: D1.농협)으로 맞춰주세요</div>`);
   if (W.chbase && W.chbase.size) items.push(`<div><b>기준정보에 없는 채널</b>: ${[...W.chbase].map(esc).join(", ")} — 공장도가·변동원가는 공통/다른 채널 값, 운송비는 공통 행만 사용 (기준정보 채널명 확인: 'D1.농협'처럼 앞 코드는 자동 무시)</div>`);
   if (W.chref.size) items.push(`<div><b>거래조건에 없는 채널</b>: ${[...W.chref].map(esc).join(", ")} — 채널 공란인 공통조건만 적용됨 (이름 띄어쓰기 확인)</div>`);
   if (W.noMonth.size) items.push(`<details><summary><b>금액(월) 없음</b> ${W.noMonth.size}개 — 거래조건 S/AF 금액을 일할 없이 그대로 사용</summary><ul>${[...W.noMonth].map(k => `<li>${esc(k)}</li>`).join("")}</ul></details>`);
@@ -1483,7 +1498,7 @@ function refChips() {
 }
 
 function rebuildDays() {
-  const defCh = ($("#defCh").value || "").trim();
+  const defCh = canonCh(($("#defCh").value || "").trim());
   const chs = [...new Set(ST.raw.map(r => r.ch || defCh || "(채널없음)"))];
   const prev = {}; document.querySelectorAll("#days input").forEach(i => prev[i.dataset.ch] = i.value);
   $("#days").innerHTML = chs.map(ch => { const auto = Math.max(0, ...ST.raw.filter(r => (r.ch || defCh || "(채널없음)") === ch).map(r => r.day || 0)); const v = prev[ch] ?? auto; return `<div><b>${esc(ch)}</b>경과일 <input type="number" min="1" max="31" id="d_${esc(ch)}" data-ch="${esc(ch)}" value="${v}"> <span class="muted">(자동 ${auto})</span></div>`; }).join("");
@@ -1530,7 +1545,7 @@ $("#btnSample").onclick = () => {
   try { loadSample(); DB.set("refSrc", { type: "sample" }); DB.set("rawSrc", { type: "fromRef" }); } catch (e) { alert("샘플 불러오기 실패: " + e.message); }
 };
 function rawChips() {
-  const defCh = ($("#defCh").value || "").trim();
+  const defCh = canonCh(($("#defCh").value || "").trim());
   const chs = [...new Set(ST.raw.map(r => r.ch || defCh || "(채널없음)"))];
   chips("#rawChips", [[`${ST.raw.length.toLocaleString()}행`, "ok"], [`채널: ${chs.join(", ")}`], ...((ST.yms || []).length ? [[`월: ${ST.yms.join(", ")}`, ST.yms.length > 1 ? "no" : "ok"]] : []), ...ST.rawFiles.map(f => [f])]);
 }
@@ -1626,7 +1641,7 @@ $("#pTxt").value = PT[pCur]; pTabs();
 
 // 새로고침 시 마지막 입력 복원
 async function restore() {
-  const fx = await DB.get("fix"); if (fx) ST.fix = { base: {}, prod: {}, cost: {}, pass: {}, ...fx };
+  const fx = await DB.get("fix"); if (fx) { ST.fix = { base: {}, prod: {}, cost: {}, pass: {}, ...fx }; if (fixCanon(ST.fix)) await DB.set("fix", ST.fix); }
   const [pt, refSrc, rawSrc] = [await DB.get("pt"), await DB.get("refSrc"), await DB.get("rawSrc")];
   if (pt) { PS.forEach(p => { if (typeof pt[p.k] === "string") PT[p.k] = pt[p.k]; }); $("#pTxt").value = PT[pCur]; pTabs(); }
   if (!refSrc && !rawSrc && !PS.some(p => isRefP(p) && PT[p.k])) { if (PT.goal) render(); return; }
@@ -1682,6 +1697,55 @@ function arcRender() {
   $("#arcList").querySelectorAll("[data-ad]").forEach(b => b.onclick = async () => { const y = b.dataset.ad; if (!confirm(`${y} 보관 결과를 삭제할까요? (백업 텍스트가 있으면 다시 불러올 수 있어요)`)) return; delete ARC[y]; await DB.set("archive", ARC); if (ST.res && ST.res.archived === y) run(); arcRender(); });
 }
 $("#arcCh").onchange = arcRender;
+
+/* ---- 보관함 채널명 변경 (옛 이름 → 표준 채널명) ---- */
+function arcRnOpen() {
+  const box = $("#arcRn"), all = [...new Set(Object.values(ARC).flatMap(s => s.chs))];
+  const old = all.filter(c => !STD_N.has(norm(c)));
+  if (box.style.display !== "none") { box.style.display = "none"; return; }
+  box.style.display = "";
+  if (!all.length) { box.innerHTML = `<div class="help">보관함이 비어있어요.</div>`; return; }
+  if (!old.length) { box.innerHTML = `<div class="help">✅ 보관함 채널명이 모두 표준 이름이에요 (${all.map(esc).join(", ")})</div>`; return; }
+  box.innerHTML = `<b>옛 채널명 → 표준 채널명</b> <span class="muted">(빈칸 = 그대로 둠 · 기준정보 점검 보완값·패스도 같이 변경)</span>
+    <datalist id="stdChL">${STD_CH.map(s => `<option value="${esc(s)}">`).join("")}</datalist>
+    <table style="margin-top:6px"><tbody>${old.map((c, i) => `<tr><td style="padding:3px 10px 3px 0"><b>${esc(c)}</b></td><td>→</td><td><input data-rn="${i}" list="stdChL" value="${esc(chSuggest(c))}" style="width:180px"></td></tr>`).join("")}</tbody></table>
+    <div class="row" style="margin-top:8px"><button type="button" id="arcRnGo">변경 실행</button><button type="button" class="sec" id="arcRnX">닫기</button><span class="muted">실행 전 「📤 백업 복사」 해두면 되돌릴 수 있어요</span></div>`;
+  $("#arcRnX").onclick = () => box.style.display = "none";
+  $("#arcRnGo").onclick = async () => {
+    const mp = {}; old.forEach((c, i) => { const v = box.querySelector(`[data-rn="${i}"]`).value.trim(); if (v && v !== c) mp[c] = v; });
+    const pairs = Object.entries(mp); if (!pairs.length) { alert("바꿀 이름이 없어요"); return; }
+    const bad = pairs.filter(([, v]) => !STD_N.has(norm(v)));
+    if (!confirm(`${pairs.map(([a, b]) => `${a} → ${b}`).join("\n")}${bad.length ? `\n\n⚠ 표준 목록에 없는 이름: ${bad.map(x => x[1]).join(", ")}` : ""}\n\n보관함 전체 월에 적용할까요?`)) return;
+    const { n, merged } = arcRename(mp); await DB.set("archive", ARC); await DB.set("fix", ST.fix);
+    box.style.display = "none"; arcRender(); if (ST.res && ST.res.archived) { ST.res = snapRes(ARC[ST.res.archived]); render(); }
+    alert(`채널명 변경 완료 ✅ (${n}개월)${merged.length ? `\n같은 월에 이미 새 이름이 있어 합친 곳: ${merged.join(", ")}` : ""}\n「📤 백업 복사」로 새 백업도 저장해 두세요.`);
+  };
+}
+// 보관함 + 기준정보 점검 보완값의 채널명 일괄 변경. 같은 월에 새 이름이 이미 있으면 같은 제품/일자끼리 합산
+function arcRename(mp, arcOnly) {
+  const to = c => mp[c] ?? c, toN = c => { const k = Object.keys(mp).find(o => norm(o) === c); return k ? norm(mp[k]) : c; };
+  let n = 0; const merged = [];
+  for (const [ym, s] of Object.entries(ARC)) {
+    if (!s.chs.some(c => c in mp)) continue; n++;
+    const chs = s.chs.map(to); if (new Set(chs).size < chs.length) merged.push(ym);
+    const mergeBy = (list, key) => { const m = new Map(); for (const r0 of list) { const r = { ...r0, ch: to(r0.ch) }, k = key(r), p = m.get(k); if (!p) m.set(k, r); else NUMK.forEach(f => p[f] = (p[f] || 0) + (r[f] || 0)); } return [...m.values()]; };
+    s.rows = mergeBy(s.rows, r => r.ch + "|" + r.code);
+    s.days = mergeBy(s.days, r => [r.ch, r.big, r.small, r.evt, r.day].join("|"));
+    const pr = {}; for (const [c, v] of Object.entries(s.prorate || {})) pr[to(c)] ??= v; s.prorate = pr;
+    s.chs = [...new Set(chs)];
+  }
+  if (arcOnly) return { n, merged };
+  const F = ST.fix, reKey = (o, sep, idx, f) => { const r = {}; for (const [k, v] of Object.entries(o || {})) { const p = k.split(sep); p[idx] = f(p[idx]); r[p.join(sep)] ??= v; } return r; };
+  F.base = reKey(F.base, "|", 0, toN); F.cost = reKey(F.cost, "|", 0, toN); F.pass = reKey(F.pass, "|", 1, to);
+  return { n, merged };
+}
+// 기준정보 점검 보완값·패스의 채널 부분을 표준 이름으로 (바뀐 게 있으면 true)
+function fixCanon(F) {
+  let ch = false; const cN = c => c === "*" ? c : norm(canonCh(c)), cR = c => c === "*" ? c : canonCh(c);
+  const reKey = (o, idx, f) => { const r = {}; for (const [k, v] of Object.entries(o || {})) { const p = k.split("|"); const q = f(p[idx]); if (q !== p[idx]) ch = true; p[idx] = q; r[p.join("|")] ??= v; } return r; };
+  F.base = reKey(F.base, 0, cN); F.cost = reKey(F.cost, 0, cN); F.pass = reKey(F.pass, 1, cR); return ch;
+}
+$("#arcRnBtn").onclick = arcRnOpen;
 $("#arcSave").onclick = async () => {
   const R = ST.res; if (!R || R.archived) return;
   const ym = $("#ym").value; if (!ym) { alert("기준월을 먼저 정해주세요"); return; }
@@ -1765,7 +1829,11 @@ $("#arcGo").onclick = async () => {
   } catch (e) { $("#arcMsg").textContent = "❌ " + e.message; }
 };
 document.addEventListener("click", e => { if (e.target && e.target.id === "arcBack") { run(); arcRender(); } });
-DB.get("archive").then(a => { ARC = a || {}; arcRender(); });
+DB.get("archive").then(async a => { ARC = a || {};
+  // 옛 채널명으로 저장된 달은 열 때 자동으로 표준 이름으로 변경 (EM → C1.이마트 등)
+  const mp = {}; Object.values(ARC).forEach(s => s.chs.forEach(c => { const n = canonCh(c); if (n !== c) mp[c] = n; }));
+  if (Object.keys(mp).length) { arcRename(mp, true); await DB.set("archive", ARC); }
+  arcRender(); });
 
 $("#btnForget").onclick = async () => {
   if (!confirm("이 PC에 저장된 입력(기준·로우·붙여넣기)을 모두 지울까요?\n(📦 월별 보관함은 그대로 유지)")) return;
