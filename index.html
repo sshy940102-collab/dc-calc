@@ -173,6 +173,7 @@ footer{text-align:center;color:var(--sub);font-size:11px;padding:20px}
       <label class="drop" id="dropRaw"><input type="file" id="fRaw" accept=".xlsx,.xlsb,.xls,.xlsm,.csv" multiple>
         <div>여기로 끌어놓거나 클릭 (여러 파일 가능)<br><span class="muted" style="font-size:11.5px">맨 앞 [채널] 열 + 기존 로우 양식 (머리글: 일자, 제품코드, 전환유형명, EDI수량, 전환수량, 매입금액 …)</span></div></label>
       <div class="chips" id="rawChips"></div>
+      <button type="button" id="btnRawDl" style="display:none;margin-top:8px;padding:6px 12px;border-radius:6px;border:1px solid var(--line,#ccc);background:transparent;color:inherit;cursor:pointer;font-size:12.5px">📥 변환된 로우 엑셀 받기 (비교 검증용)</button>
     </section>
     <section class="card">
       <h2><span class="step">3</span>기간 설정</h2>
@@ -428,7 +429,7 @@ function parseRaw(wb, fname) {
     else if (ix.yr >= 0 && ix.mo >= 0) { y = parseInt(String(r[ix.yr] ?? "").replace(/\D/g, "")) || null; m = parseInt(String(r[ix.mo] ?? "").replace(/\D/g, "")) || null; if (y && y < 100) y += 2000; }
     return y && m >= 1 && m <= 12 ? `${y}-${p2(m)}` : null; };
   const rows = [];
-  const skip = (r, amt) => { RAW_SKIP.n++; RAW_SKIP.amt += amt || 0; };
+  const skip = (r, amt) => { RAW_SKIP.n++; RAW_SKIP.amt += amt || 0; RAW_SKIP.rows.push({ H: g[hr], r, file: fname }); };
   // 가로형(EDI 일자별 다운로드 원본): "01 일 EDI납품수량 / 01 일 납품수량 / 01 일 납품금액" 열이 일자마다 → 일자별 한 줄로 펼침
   const dayCols = re => { const m = {}; H.forEach((v, i) => { const x = re.exec(v); if (x) m[+x[1]] = i; }); return m; };
   const wE = dayCols(/^(\d{1,2})일EDI납품수량$/), wQ = dayCols(/^(\d{1,2})일납품수량$/), wA = dayCols(/^(\d{1,2})일납품금액$/);
@@ -490,9 +491,9 @@ function parseDate(v) {
 const parseDay = v => parseDate(v).d;
 // 로우 날짜에서 기준월 자동 설정 (한 달만 있을 때). 여러 달이면 경고
 // 제품코드 없어 제외된 행 (parseRaw가 쌓고, autoYm이 ST.rawSkip으로 옮김 — 로우를 새로 읽을 때마다 autoYm이 불림)
-let RAW_SKIP = { n: 0, amt: 0 };
+let RAW_SKIP = { n: 0, amt: 0, rows: [] };
 function autoYm() {
-  ST.rawSkip = RAW_SKIP; RAW_SKIP = { n: 0, amt: 0 };
+  ST.rawSkip = RAW_SKIP; RAW_SKIP = { n: 0, amt: 0, rows: [] };
   const yms = [...new Set(ST.raw.map(r => r.ym).filter(Boolean))].sort();
   ST.yms = yms;
   if (yms.length === 1 && $("#ym").value !== yms[0]) { $("#ym").value = yms[0]; ls.set("dc_ym", yms[0]); }
@@ -1581,9 +1582,27 @@ function loadSample() {
 $("#btnSample").onclick = () => {
   try { loadSample(); DB.set("refSrc", { type: "sample" }); DB.set("rawSrc", { type: "fromRef" }); } catch (e) { alert("샘플 불러오기 실패: " + e.message); }
 };
+// 변환된 로우(세로형) 엑셀: 변환로우 / 일자별 합계 / 제외행(제품코드 없음) — 사용자가 직접 만든 엑셀과 대조용
+function rawBook() {
+  const defCh = canonCh(($("#defCh").value || "").trim()), ymSel = $("#ym").value || "";
+  const H = ["연월", "채널", "일자", "EDI관리코드명", "EDI상품코드", "EDI상품명", "전환유형", "전환유형명", "카테고리명", "제품코드", "제품명", "EDI수량", "전환수량", "매입금액", "파일"];
+  const yOf = r => r.ym || ymSel;
+  const rows = ST.raw.map(r => [yOf(r), r.ch || defCh, r.dayRaw ?? r.day, r.edi ?? "", r.bar ?? "", r.ediName ?? "", r.ty ?? "", r.tyn ?? "", r.catn ?? "", r.code, r.name ?? "", r.ediq ?? "", r.qty, r.amt, r.file ?? ""]);
+  const wb = XLSX.utils.book_new(), S = (aoa, w) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = w.map(x => ({ wch: x })); return ws; };
+  XLSX.utils.book_append_sheet(wb, S([H, ...rows], [9, 14, 12, 16, 15, 30, 9, 10, 12, 10, 32, 10, 10, 14, 20]), "변환로우");
+  const agg = new Map(); ST.raw.forEach(r => { const k = (r.ch || defCh) + "\t" + (r.day ?? ""); const o = agg.get(k) || { ch: r.ch || defCh, d: r.day, n: 0, e: 0, q: 0, a: 0 }; o.n++; o.e += r.ediq || 0; o.q += r.qty || 0; o.a += r.amt || 0; agg.set(k, o); });
+  const ag = [...agg.values()].sort((a, b) => String(a.ch).localeCompare(b.ch) || (a.d ?? 99) - (b.d ?? 99));
+  const T = ag.reduce((t, o) => ({ n: t.n + o.n, e: t.e + o.e, q: t.q + o.q, a: t.a + o.a }), { n: 0, e: 0, q: 0, a: 0 });
+  XLSX.utils.book_append_sheet(wb, S([["채널", "일자", "행수", "EDI수량", "전환수량", "매입금액"], ...ag.map(o => [o.ch, o.d ?? "", o.n, o.e, o.q, o.a]), ["합계", "", T.n, T.e, T.q, T.a]], [14, 8, 8, 12, 12, 16]), "일자별합계");
+  const sk = (ST.rawSkip && ST.rawSkip.rows) || [];
+  if (sk.length) { const h = sk[0].H; XLSX.utils.book_append_sheet(wb, S([["파일", ...h], ...sk.map(x => [x.file, ...h.map((_, i) => x.r[i] ?? "")])], [16, ...h.map(() => 11)]), "제외_제품코드없음"); }
+  return { wb, name: `매입로우_변환_${ymSel || "기준월없음"}_${[...new Set(ST.raw.map(r => r.ch || defCh))].join("_") || "채널없음"}.xlsx`.replace(/[\\/:*?"<>|]/g, ""), T };
+}
+$("#btnRawDl").onclick = () => { if (!ST.raw.length) return; const { wb, name } = rawBook(); XLSX.writeFile(wb, name); };
 function rawChips() {
   const defCh = canonCh(($("#defCh").value || "").trim());
   const chs = [...new Set(ST.raw.map(r => r.ch || defCh || "(채널없음)"))];
+  $("#btnRawDl").style.display = ST.raw.length ? "" : "none";
   chips("#rawChips", [[`${ST.raw.length.toLocaleString()}행`, "ok"], ...(ST.rawSkip && ST.rawSkip.n ? [[`제품코드 없음 ${ST.rawSkip.n}행 제외 (매입 ${Math.round(ST.rawSkip.amt).toLocaleString()}원)`]] : []), [`채널: ${chs.join(", ")}`], ...((ST.yms || []).length ? [[`월: ${ST.yms.join(", ")}`, ST.yms.length > 1 ? "no" : "ok"]] : []), ...ST.rawFiles.map(f => [f])]);
 }
 setupDrop("#dropRaw", "#fRaw", async files => {
