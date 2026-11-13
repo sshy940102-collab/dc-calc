@@ -441,6 +441,9 @@ function parseRaw(wb, fname) {
   const wDays = [...new Set([...Object.keys(wE), ...Object.keys(wQ), ...Object.keys(wA)].map(Number))].sort((a, b) => a - b);
   if (wDays.length && Object.keys(wA).length) {
     const facI = conv.length ? conv[0] : -1;   // 가로형의 '전환수량' = 환산계수 (1개뿐)
+    // 원본 틀(일자 열 뺀 나머지 열) 그대로 보관 → 복사 시 원본 열 + 일자·EDI수량·전환수량·매입금액
+    const dset = new Set([...Object.values(wE), ...Object.values(wQ), ...Object.values(wA)]);
+    const mI = g[hr].map((_, i) => i).filter(i => !dset.has(i)), metaH = mI.map(i => g[hr][i] ?? "");
     for (let i = hr + 1; i < g.length; i++) {
       const r = g[i]; if (!r) continue;
       const cd = code(r[ix.code]); if (!cd) { if (r.some(v => v != null && v !== "")) skip(r, Object.values(wA).reduce((s, c) => s + (num(r[c]) || 0), 0)); continue; }   // 제품코드 없는 행 = 어떤 제품인지 몰라 제외 (나중에 매핑되면 다시 받을 때 생김)
@@ -453,7 +456,7 @@ function parseRaw(wb, fname) {
         rows.push({ ch: get("ch") != null ? canonCh(get("ch")) : "", day: d, ym, dayRaw: ym ? `${ym}-${String(d).padStart(2, "0")}` : d + "일",
           edi: get("edi"), bar: get("bar") != null ? code(get("bar")) : "", ediName: get("ediName"),
           ty: get("ty"), tyn: get("tyn") != null ? String(get("tyn")).trim() : "", catn: get("catn"),
-          code: cd, name: get("name"), ediq, qty, amt, file: fname, wide: true });
+          code: cd, name: get("name"), ediq, qty, amt, file: fname, wide: true, metaH, meta: mI.map(i => r[i] ?? "") });
       }
     }
     return rows;
@@ -1593,6 +1596,14 @@ function rawBook() {
   const H = ["연월", "채널", "일자", "EDI관리코드명", "EDI상품코드", "EDI상품명", "전환유형", "전환유형명", "카테고리명", "제품코드", "제품명", "EDI수량", "전환수량", "매입금액", "파일"];
   const yOf = r => r.ym || ymSel;
   const rows = ST.raw.map(r => [yOf(r), r.ch || defCh, r.dayRaw ?? r.day, r.edi ?? "", r.bar ?? "", r.ediName ?? "", r.ty ?? "", r.tyn ?? "", r.catn ?? "", r.code, r.name ?? "", r.ediq ?? "", r.qty, r.amt, r.file ?? ""]);
+  // 가로형 원본에서 온 로우면: 원본 틀(연월·구분·…·전환수량·단위) 그대로 + 일자 · EDI수량 · 전환수량 · 매입금액
+  const w0 = ST.raw.find(r => r.metaH);
+  if (w0 && ST.raw.every(r => r.metaH)) {
+    const MH = w0.metaH, key = h => norm(h);
+    const pick = r => r.metaH === MH ? r.meta : MH.map(h => { const j = r.metaH.findIndex(x => key(x) === key(h)); return j >= 0 ? r.meta[j] : ""; });
+    H.splice(0, H.length, ...MH, "일자", "EDI수량", "전환수량", "매입금액");
+    rows.splice(0, rows.length, ...ST.raw.map(r => [...pick(r), r.dayRaw ?? r.day, r.ediq ?? "", r.qty, r.amt]));
+  }
   const wb = XLSX.utils.book_new(), S = (aoa, w) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = w.map(x => ({ wch: x })); return ws; };
   XLSX.utils.book_append_sheet(wb, S([H, ...rows], [9, 14, 12, 16, 15, 30, 9, 10, 12, 10, 32, 10, 10, 14, 20]), "변환로우");
   const agg = new Map(); ST.raw.forEach(r => { const k = (r.ch || defCh) + "\t" + (r.day ?? ""); const o = agg.get(k) || { ch: r.ch || defCh, d: r.day, n: 0, e: 0, q: 0, a: 0 }; o.n++; o.e += r.ediq || 0; o.q += r.qty || 0; o.a += r.amt || 0; agg.set(k, o); });
