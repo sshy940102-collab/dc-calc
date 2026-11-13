@@ -349,8 +349,9 @@ function parseRef(wb) {
     }
     for (let i = st; i < g.length; i++) {
       const r = g[i]; if (!r) continue; const k = code(r[ix.cd]); if (!k || !/\d/.test(k)) continue;
-      const v = { out: num(r[ix.out]), vc: num(r[ix.vc]), tr: num(r[ix.tr]) }, ch = ix.ch >= 0 ? chKey(r[ix.ch]) : "";
-      if (ch) { ref.baseCh[ch + "|" + k] ??= v; ref.baseChs.add(ch); ref.baseAny[k] ??= {}; for (const f of ["out", "vc"]) if (v[f] != null) ref.baseAny[k][f] ??= v[f]; }
+      const v = { out: num(r[ix.out]), vc: num(r[ix.vc]), tr: num(r[ix.tr]) }, ch = ix.ch >= 0 ? norm(r[ix.ch]) : "";
+      // 채널 전체 이름("D1.농협")과 코드 뗀 이름("농협") 둘 다 등록 → 로우가 어느 쪽으로 써도 매칭 (조회는 전체 이름 우선)
+      if (ch) { for (const c of new Set([ch, chKey(ch)])) { ref.baseCh[c + "|" + k] ??= v; ref.baseChs.add(c); } ref.baseAny[k] ??= {}; for (const f of ["out", "vc"]) if (v[f] != null) ref.baseAny[k][f] ??= v[f]; }
       else ref.base[k] ??= v;
     }
   }
@@ -464,7 +465,7 @@ function compute() {
   if (rows.some(r => r.day == null)) W.noDay = rows.filter(r => r.day == null).length;
   const refCh = new Set(ref.channels.map(norm));
   for (const ch of chs) if (refCh.size && !refCh.has(norm(ch))) W.chref.add(ch);
-  W.chbase = new Set(); for (const ch of chs) if (ref.baseChs.size && !ref.baseChs.has(chKey(ch))) W.chbase.add(ch);
+  W.chbase = new Set(); for (const ch of chs) if (ref.baseChs.size && !ref.baseChs.has(norm(ch)) && !ref.baseChs.has(chKey(ch))) W.chbase.add(ch);
 
   // 거래조건 조회 (채널 일치 또는 채널 공란 = 공통)
   const chOk = (e, ch) => !e.ch || e.ch === norm(ch);
@@ -502,7 +503,7 @@ function compute() {
     if (r.nh && blank(r.tax) && miss("tax", "*", r)) W.tax.set(r.code, r.name);
     r.inPrice = String(r.big ?? "") === "단산" ? 0 : (r.qty ? r.amt / r.qty : 0);
     // 기준정보: 출고가·변동원가 = 채널행 → 공통행 → 수기보완 → 다른 채널행(전 채널 동일) / 운송비 = 채널행 → 공통행 → 수기보완(그 채널)
-    const bc = ref.baseCh[chKey(r.ch) + "|" + r.code] || {}, bb = ref.base[r.code] || {}, ba = ref.baseAny[r.code] || {}, fb = FX.base["*|" + r.code] || {}, fc = FX.base[cK] || {};
+    const bc = ref.baseCh[norm(r.ch) + "|" + r.code] || ref.baseCh[chKey(r.ch) + "|" + r.code] || {}, bb = ref.base[r.code] || {}, ba = ref.baseAny[r.code] || {}, fb = FX.base["*|" + r.code] || {}, fc = FX.base[cK] || {};
     r.outPrice = bc.out ?? bb.out ?? fb.out ?? ba.out ?? null; r.vcU = bc.vc ?? bb.vc ?? fb.vc ?? ba.vc ?? null; r.trU = bc.tr ?? bb.tr ?? fc.tr ?? null;
     const wAdd = (m) => { const p = m.get(r.code); if (!p) m.set(r.code, `${r.name ?? ""} [${r.ch}]`); else if (!p.includes(`[${r.ch}]`) && !p.includes(`, ${r.ch}]`)) m.set(r.code, p.replace(/\]$/, `, ${r.ch}]`)); };
     if (r.outPrice == null && miss("out", "*", r)) wAdd(W.out);
