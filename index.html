@@ -418,6 +418,28 @@ function parseRaw(wb, fname) {
     ediq: idx("EDI수량"), amt: idx("매입금액")
   };
   const rows = [];
+  // 가로형(EDI 일자별 다운로드 원본): "01 일 EDI납품수량 / 01 일 납품수량 / 01 일 납품금액" 열이 일자마다 → 일자별 한 줄로 펼침
+  const dayCols = re => { const m = {}; H.forEach((v, i) => { const x = re.exec(v); if (x) m[+x[1]] = i; }); return m; };
+  const wE = dayCols(/^(\d{1,2})일EDI납품수량$/), wQ = dayCols(/^(\d{1,2})일납품수량$/), wA = dayCols(/^(\d{1,2})일납품금액$/);
+  const wDays = [...new Set([...Object.keys(wE), ...Object.keys(wQ), ...Object.keys(wA)].map(Number))].sort((a, b) => a - b);
+  if (wDays.length && Object.keys(wA).length) {
+    const facI = conv.length ? conv[0] : -1;   // 가로형의 '전환수량' = 환산계수 (1개뿐)
+    for (let i = hr + 1; i < g.length; i++) {
+      const r = g[i]; if (!r) continue;
+      const cd = code(r[ix.code]); if (!cd) continue;   // 제품코드 없는 행(미매핑)은 기존과 같이 제외
+      const get = k => ix[k] >= 0 ? r[ix[k]] : null, fac = (facI >= 0 ? num(r[facI]) : null) || 1;
+      for (const d of wDays) {
+        const ediq = wE[d] != null ? num(r[wE[d]]) ?? 0 : null, q0 = wQ[d] != null ? num(r[wQ[d]]) : null, amt = num(r[wA[d]]) ?? 0;
+        const qty = q0 ?? (ediq != null ? ediq * fac : 0);
+        if (!ediq && !qty && !amt) continue;   // 납품 없는 날은 행 안 만듦
+        rows.push({ ch: get("ch") != null ? canonCh(get("ch")) : "", day: d, ym: null, dayRaw: d + "일",
+          edi: get("edi"), bar: get("bar") != null ? code(get("bar")) : "", ediName: get("ediName"),
+          ty: get("ty"), tyn: get("tyn") != null ? String(get("tyn")).trim() : "", catn: get("catn"),
+          code: cd, name: get("name"), ediq, qty, amt, file: fname, wide: true });
+      }
+    }
+    return rows;
+  }
   for (let i = hr + 1; i < g.length; i++) {
     const r = g[i]; if (!r) continue;
     const cd = code(r[ix.code]); if (!cd) continue;
