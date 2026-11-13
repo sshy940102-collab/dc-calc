@@ -1813,6 +1813,7 @@ $("#arcGo").onclick = async () => {
     const add = Object.keys(b.archive || {}), dup = add.filter(y => ARC[y]);
     let over = true; if (dup.length) over = confirm(`이미 있는 월 ${dup.join(", ")} — 백업 내용으로 덮어쓸까요?\n(취소 = 없는 월만 추가)`);
     add.forEach(y => { if (!ARC[y] || over) ARC[y] = b.archive[y]; });
+    { const mp = {}; Object.values(ARC).forEach(s => s.chs.forEach(c => { const n = canonCh(c); if (n !== c) mp[c] = n; })); if (Object.keys(mp).length) arcRename(mp, true); }   // 옛 채널명 백업도 표준 이름으로
     await DB.set("archive", ARC);
     const refKeys = Object.keys(b.ref || {});
     let refMsg = "";
@@ -1822,7 +1823,7 @@ $("#arcGo").onclick = async () => {
     }
     if (b.fix) {   // 기준정보 점검 수기 보완·패스: 합치기 (같은 키는 백업 값)
       const F = ST.fix; for (const g of ["base", "prod", "cost", "pass"]) F[g] = { ...F[g], ...(b.fix[g] || {}) };
-      await DB.set("fix", F); refMsg += " · 기준정보 점검 보완값 복원"; run();
+      fixCanon(F); await DB.set("fix", F); refMsg += " · 기준정보 점검 보완값 복원"; run();
     }
     arcRender();
     $("#arcMsg").textContent = `✅ 보관함 ${add.length}개월 불러옴${refMsg}`;
