@@ -834,6 +834,8 @@ function dash(rows, R) {
   DDROWS = R.days ? filt(R.days) : rows.filter(r => r.day != null); DDAYS = dy.filter(a => a.sales).map(a => a.day);
   if (DDSEL == null || !DDAYS.includes(DDSEL)) DDSEL = DDAYS[DDAYS.length - 1] ?? null;
   if (DDAYS.length >= 2) h += `<section class="card wide" id="ddCard">${ddHtml()}</section>`;
+  // ②-2 전월 동기간 비교 (보관함에 전월이 있을 때)
+  MOMR = R; const mh = momHtml(); if (mh) h += `<section class="card wide" id="momCard">${mh}</section>`;
   // ③ 제품 TOP / BOTTOM
   const pr = agg(rows, r => r.code, r => ({ code: r.code, name: r.name }));
   const lab = a => `${a.name ?? ""} (${a.code})`;
@@ -856,6 +858,107 @@ function dash(rows, R) {
   const fl = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체");
   return h + `</div><div class="help" style="margin-top:8px">금액 단위 백만원 · 율은 모두 <b>총매출(출고가 기준)</b> 대비 · 필터: <b>${fl.length ? fl.map(esc).join(" / ") : "전체"}</b> (장려금·판관비 배분은 전체 기준으로 계산 후 필터)</div>`;
 }
+
+// 전월 동기간 비교: 이번 달 1~N일 vs 전월 같은 기간 (동일요일 = 요일 맞춰 밀기 / 같은 일자)
+// · 비교 채널 = 이번 달에 있는 채널만, N = 채널별 경과일
+// · 고정금액(장려금_분배기준·SKU금액, 판관비_분배·SKU) 일할 맞춤: 채널×항목별로 (월 금액 × 기간일수 ÷ 월일수)가 되게 기간 안 행을 같은 비율로 조정
+const HOLI = { "2026-01-01": "신정", "2026-02-16": "설날", "2026-02-17": "설날", "2026-02-18": "설날", "2026-03-01": "삼일절", "2026-03-02": "대체공휴일", "2026-05-05": "어린이날", "2026-05-24": "부처님오신날", "2026-05-25": "대체공휴일", "2026-06-03": "지방선거", "2026-06-06": "현충일", "2026-08-15": "광복절", "2026-08-17": "대체공휴일", "2026-09-24": "추석", "2026-09-25": "추석", "2026-09-26": "추석", "2026-10-03": "개천절", "2026-10-05": "대체공휴일", "2026-10-09": "한글날", "2026-12-25": "성탄절" };
+const FIXK = ["jAmt", "sAmt", "pDist", "pSku"];
+let MOMR = null, MOM = { mode: "dow", fix: true, lv: "big" };
+try { const s = JSON.parse(localStorage.getItem("dc_mom") || "null"); if (s) MOM = { ...MOM, ...s }; } catch (x) { }
+function momScale(all, win, pr, md, Lc) {
+  const tot = {}, ws = {};
+  for (const r of all) for (const k of FIXK) { const q = r.ch + "|" + k; tot[q] = (tot[q] || 0) + (r[k] || 0); }
+  for (const r of win) for (const k of FIXK) { const q = r.ch + "|" + k; ws[q] = (ws[q] || 0) + (r[k] || 0); }
+  return win.map(r => {
+    const o = { ...r }; let dj = 0, dp = 0;
+    for (const k of FIXK) { const q = r.ch + "|" + k; if (!ws[q] || !r[k]) continue; const f = tot[q] / (pr[r.ch] || 1) * Lc[r.ch] / md / ws[q]; const d = r[k] * f - r[k]; o[k] = r[k] + d; if (k[0] === "j" || k[0] === "s") dj += d; else dp += d; }
+    o.jTot = (r.jTot || 0) + dj; o.pTot = (r.pTot || 0) + dp; o.cost = (r.cost || 0) + dj + dp; o.cm = (r.cm || 0) - dj - dp; return o;
+  });
+}
+function momCalc(R) {
+  const ym = R.archived || $("#ym").value, pv = prevYm(ym), P = pv && ARC[pv];
+  if (!P || !P.days || !P.days.length) return null;
+  const curAll = R.days || R.rows.filter(r => r.day != null); if (!curAll.length) return null;
+  const [y, m] = ym.split("-").map(Number), [py, pm] = pv.split("-").map(Number);
+  const mdC = R.mdays || new Date(y, m, 0).getDate(), mdP = P.mdays || new Date(py, pm, 0).getDate();
+  const off = MOM.mode === "dow" ? (new Date(y, m - 1, 1).getDay() - new Date(py, pm - 1, 1).getDay() + 7) % 7 : 0;
+  const chs = [...new Set(curAll.map(r => r.ch))].filter(ch => P.days.some(r => r.ch === ch));
+  if (!chs.length) return null;
+  const N = {}, L = {}; let cut = false;
+  for (const ch of chs) { const pr = R.prorate && R.prorate[ch]; N[ch] = pr ? Math.round(pr * mdC) : Math.max(...curAll.filter(r => r.ch === ch).map(r => r.day)); L[ch] = Math.min(N[ch], mdP - off); if (L[ch] < N[ch]) cut = true; }
+  const inC = new Set(chs);
+  const pAll = P.days.filter(r => inC.has(r.ch)), cAll = curAll.filter(r => inC.has(r.ch));
+  let cWin = cAll.filter(r => r.day >= 1 && r.day <= L[r.ch]), pWin = pAll.filter(r => r.day >= 1 + off && r.day <= L[r.ch] + off);
+  const fixRaw = { c: fixOf(total(cWin)), p: fixOf(total(pWin)) };
+  if (MOM.fix) { cWin = momScale(cAll, cWin, R.prorate || {}, mdC, L); pWin = momScale(pAll, pWin, P.prorate || {}, mdP, L); }
+  const fixAdj = { c: fixOf(total(cWin)), p: fixOf(total(pWin)) };
+  return { ym, pv, y, m, py, pm, off, chs, N, L, cut, mdC, mdP, cur: filt(cWin), prv: filt(pWin), fixRaw, fixAdj };
+}
+function momHtml() {
+  const R = MOMR; if (!R) return "";
+  const C = momCalc(R); if (!C) return "";
+  const { m, pm, py, y, off } = C, Ls = [...new Set(C.chs.map(c => C.L[c]))], Lx = Math.max(...Ls);
+  const ds = (yy, mm, d) => `${yy}-${String(mm).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const WK = "일월화수목금토", wd = (yy, mm, d) => WK[new Date(yy, mm - 1, d).getDay()];
+  const rng = (yy, mm, a, b) => `${mm}/${a}(${wd(yy, mm, a)}) ~ ${mm}/${b}(${wd(yy, mm, b)})`;
+  const hol = (yy, mm, a, b) => { const o = []; for (let d = a; d <= b; d++) { const k = ds(yy, mm, d); if (HOLI[k] && !/[토일]/.test(wd(yy, mm, d))) o.push(`${mm}/${d}(${wd(yy, mm, d)}) ${HOLI[k]}`); } return o; };
+  const wkend = (yy, mm, a, b) => { let s = 0, u = 0; for (let d = a; d <= b; d++) { const w = new Date(yy, mm - 1, d).getDay(); if (w === 6) s++; if (w === 0) u++; } return `토${s}·일${u}`; };
+  const pL = `${pm}월`, cL = `${m}월`;
+  const sl = (k, lab, list) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lab} <select data-mom="${k}">${list.map(([v, l]) => `<option value="${v}" ${String(MOM[k]) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
+  const bar = `<div class="toolbar" style="margin:0 0 8px">${sl("mode", "기준", [["dow", "동일요일 (요일 맞춤)"], ["date", "같은 일자"]])}${sl("fix", "고정비", [["true", "일할 맞춤 (기간일수÷월일수)"], ["false", "저장값 그대로"]])}${sl("lv", "보는 단계", [["ch", "채널"], ["big", "대카테고리"], ["small", "소카테고리"], ["evt", "세분류"]])}</div>`;
+  // 기간 설명
+  let per;
+  if (Ls.length === 1) {
+    const Lv = Ls[0], hp = hol(py, pm, 1 + off, Lv + off), hc = hol(y, m, 1, Lv);
+    per = `<b>${rng(y, m, 1, Lv)}</b> vs <b>${rng(py, pm, 1 + off, Lv + off)}</b> · ${Lv}일 · 요일 ${cL} ${wkend(y, m, 1, Lv)} / ${pL} ${wkend(py, pm, 1 + off, Lv + off)}`
+      + `<br>공휴일(평일): ${cL} ${hc.length ? hc.join(", ") : "없음"} / ${pL} ${hp.length ? `<span class="neg">${hp.join(", ")}</span>` : "없음"}`;
+  } else per = C.chs.map(c => `${esc(c)} ${m}/1~${C.L[c]} vs ${pm}/${1 + off}~${C.L[c] + off}`).join(" · ");
+  if (C.cut) per += `<br><span class="neg">⚠ ${pL}이 ${C.mdP}일까지라 동일요일로는 ${cL} 1~${Math.min(...Object.values(C.L))}일까지만 비교돼요 → 나머지는 '같은 일자' 기준으로 보세요</span>`;
+  const ft = MOM.fix ? `고정비 일할 맞춤: ${pL} ${mil1(C.fixRaw.p)} → ${mil1(C.fixAdj.p)} · ${cL} ${mil1(C.fixRaw.c)} → ${mil1(C.fixAdj.c)} (월 금액 × ${Lx}/${C.mdP} · ${Lx}/${C.mdC})` : `고정비 = 저장된 값 그대로 (${pL} 기간 ${mil1(C.fixRaw.p)} · ${cL} ${mil1(C.fixRaw.c)})`;
+  const head = `<h2>전월 동기간 비교 <small>백만원 · 비교 채널 = ${cL}에 있는 채널(${C.chs.map(esc).join(", ")})</small></h2>${bar}<div class="muted" style="margin-bottom:8px">${per}<br>${ft}</div>`;
+  const a = total(C.prv), b = total(C.cur);
+  if (!a.sales && !b.sales) return head + `<div class="empty">이 필터에는 두 기간 모두 매출이 없어요</div>`;
+  const rr = (x, w) => w ? (x - w) / Math.abs(w) : null, sg = v => (v > 0 ? "+" : "") + mil1(v), cl = v => v < 0 ? "neg" : v > 0 ? "pos" : "";
+  const sh = (t, k) => t.sales ? t[k] / t.sales : null;
+  const AM = [["sales", "총매출"], ["dc", "DC"], ["jTot", "장려금"], ["pTot", "판관비"], ["cost", "비용계"], ["vc", "변동원가"], ["tr", "운송비"], ["cm", "공헌이익(CM)"]];
+  const RT = [["dc", "DC율"], ["jTot", "장려금율"], ["pTot", "판관비율"], ["cost", "비용율"], ["cm", "CM율"]];
+  // 비용은 늘면 나쁨(빨강), 매출·CM은 늘면 좋음
+  const good = k => k === "sales" || k === "cm";
+  const cc = (k, v) => !v ? "" : (good(k) ? v > 0 : v < 0) ? "pos" : "neg";
+  let t = `<div class="tw"><table><thead><tr><th>지표</th><th>${pL} 기간</th><th>${cL} 기간</th><th>증감</th><th>증감률 / %p</th></tr></thead><tbody>`;
+  t += AM.map(([k, l]) => `<tr${k === "cm" ? ' class="tot"' : ""}><td>${l}</td><td class="n">${mil1(a[k])}</td><td class="n">${mil1(b[k])}</td><td class="n ${cc(k, b[k] - a[k])}">${sg(b[k] - a[k])}</td><td class="n ${cc(k, b[k] - a[k])}">${rr(b[k], a[k]) != null ? (rr(b[k], a[k]) > 0 ? "+" : "") + pct(rr(b[k], a[k])) : "-"}</td></tr>`).join("");
+  t += RT.map(([k, l]) => { const d = sh(b, k) - sh(a, k); return `<tr${k === "cm" ? ' class="tot"' : ""}><td>${l}</td><td class="n">${pct(sh(a, k))}</td><td class="n">${pct(sh(b, k))}</td><td></td><td class="n ${a.sales && b.sales ? cc(k, d) : ""}">${a.sales && b.sales ? dpp(d) : "-"}</td></tr>`; }).join("");
+  t += `</tbody></table></div>`;
+  // 분류별
+  const LV = { ch: "채널", big: "대카테고리", small: "소카테고리", evt: "세분류" }, kf = r => catOf(r[MOM.lv]);
+  const pa = new Map(agg(C.prv, kf, r => ({})).map(o => [o.key, o])), ca = new Map(agg(C.cur, kf, r => ({})).map(o => [o.key, o]));
+  const keys = [...new Set([...pa.keys(), ...ca.keys()])].map(k => { const p = pa.get(k) || fin({ sales: 0, cost: 0, cm: 0 }), c = ca.get(k) || fin({ sales: 0, cost: 0, cm: 0 }); return { k, p, c, df: c.sales - p.sales }; }).sort((x, z) => z.c.sales - x.c.sales || z.p.sales - x.p.sales);
+  const up = keys.filter(o => o.df > 0).sort((x, z) => z.df - x.df), dn = keys.filter(o => o.df < 0).sort((x, z) => x.df - z.df);
+  const tx = o => `<b>${esc(o.k)}</b> ${sg(o.df)}${rr(o.c.sales, o.p.sales) != null ? ` (${(rr(o.c.sales, o.p.sales) > 0 ? "+" : "") + pct(rr(o.c.sales, o.p.sales))})` : " (신규)"}`;
+  const top = `<div style="margin:10px 0 8px">📈 매출 증가: ${up.slice(0, 3).map(tx).join(" · ") || "없음"}<br>📉 매출 감소: ${dn.slice(0, 3).map(tx).join(" · ") || "없음"}</div>`;
+  const pp = (o, k) => o.p.sales && o.c.sales ? dpp(o.c[k] / o.c.sales - o.p[k] / o.p.sales) : "-";
+  const ppc = (o, k) => o.p.sales && o.c.sales ? cc(k, o.c[k] / o.c.sales - o.p[k] / o.p.sales) : "";
+  let t2 = `<div class="tw"><table><thead><tr><th>${LV[MOM.lv]}</th><th>${pL} 매출</th><th>${cL} 매출</th><th>증감</th><th>증감률</th><th>${pL} 비용율</th><th>${cL} 비용율</th><th>%p</th><th>${pL} CM율</th><th>${cL} CM율</th><th>%p</th><th>CM 증감</th></tr></thead><tbody>`;
+  const rowH = (lab, o, cls) => `<tr${cls}><td>${lab}</td><td class="n">${mil1(o.p.sales)}</td><td class="n">${mil1(o.c.sales)}</td><td class="n ${cc("sales", o.df)}">${sg(o.df)}</td><td class="n ${cc("sales", o.df)}">${rr(o.c.sales, o.p.sales) != null ? pct(rr(o.c.sales, o.p.sales)) : "신규"}</td><td class="n">${pct(o.p.costR)}</td><td class="n">${pct(o.c.costR)}</td><td class="n ${ppc(o, "cost")}">${pp(o, "cost")}</td><td class="n">${pct(o.p.cmR)}</td><td class="n">${pct(o.c.cmR)}</td><td class="n ${ppc(o, "cm")}">${pp(o, "cm")}</td><td class="n ${cc("cm", o.c.cm - o.p.cm)}">${sg(o.c.cm - o.p.cm)}</td></tr>`;
+  t2 += keys.map(o => rowH(esc(o.k), o, "")).join("") + rowH("합계", { p: a, c: b, df: b.sales - a.sales }, ' class="tot"') + `</tbody></table></div>`;
+  // 누적 총매출 (기간 n일째 기준)
+  const cum = (rows, sh0) => { const v = Array(Lx).fill(0); for (const r of rows) { const i = r.day - 1 - sh0; if (i >= 0 && i < Lx) v[i] += r.sales || 0; } for (let i = 1; i < Lx; i++) v[i] += v[i - 1]; return v; };
+  const va = cum(C.prv, off), vb = cum(C.cur, 0);
+  let ch = "";
+  if (Lx >= 2) {
+    const Wd = 1100, H = 220, Lm = 50, Rm = 14, T = 14, B = 30, mx = Math.max(1, ...va, ...vb);
+    const X = i => Lm + (Wd - Lm - Rm) * i / (Lx - 1), Y = v => T + (H - T - B) * (1 - v / mx);
+    ch = `<svg class="ln" viewBox="0 0 ${Wd} ${H}" role="img" aria-label="누적 총매출 비교">`;
+    for (let k = 0; k <= 4; k++) { const v = mx * k / 4; ch += `<line x1="${Lm}" x2="${Wd - Rm}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#e6e9ef"/><text x="${Lm - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${mil1(v)}</text>`; }
+    const step = Math.ceil(Lx / 12);
+    for (let i = 0; i < Lx; i++) if (i % step === 0 || i === Lx - 1) ch += `<text x="${X(i).toFixed(1)}" y="${H - 16}" text-anchor="middle">${m}/${i + 1}</text><text x="${X(i).toFixed(1)}" y="${H - 3}" text-anchor="middle" style="opacity:.6">${pm}/${i + 1 + off}</text>`;
+    for (const [v, c, dsh] of [[va, "#9aa3b2", ' stroke-dasharray="5 4"'], [vb, CLR.sales, ""]]) ch += `<path d="${v.map((q, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(q).toFixed(1)}`).join("")}" fill="none" stroke="${c}" stroke-width="2.2"${dsh}/>`;
+    ch += `</svg><div class="lg"><span><b style="background:${CLR.sales}"></b>${cL} 누적 ${mil1(vb[Lx - 1])}</span><span><b style="background:#9aa3b2"></b>${pL} 누적 ${mil1(va[Lx - 1])}</span><span class="muted">기간 n일째까지 누적 총매출</span></div>`;
+  }
+  return head + t + top + t2 + (ch ? `<h3 style="margin:14px 0 6px;font-size:14px">누적 총매출</h3>${ch}` : "");
+}
+document.addEventListener("change", e => { const k = e.target && e.target.dataset && e.target.dataset.mom; if (!k) return; MOM[k] = k === "fix" ? e.target.value === "true" : e.target.value; try { localStorage.setItem("dc_mom", JSON.stringify(MOM)); } catch (x) { } const c = document.getElementById("momCard"); if (c) c.innerHTML = momHtml(); });
 
 // 대시보드 분류별 율 표: 보는 단계(대/소/세분류) + 대카테고리·소카테고리 조회
 let EVROWS = [], EVS = { lv: "evt", big: "전체", small: "전체" };
