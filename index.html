@@ -274,7 +274,8 @@ const STD_CH = ["C1.이마트", "C2.롯데마트", "C3.홈플러스", "C4.H기�
 const STD_N = new Set(STD_CH.map(norm));
 const CH_OLD = { "EM": "C1.이마트", "이마트": "C1.이마트", "킴스클럽": "C4.H기타 킴스", "킴스": "C4.H기타 킴스", "메가마트": "C4.H기타 메가", "메가": "C4.H기타 메가",
   "트레이더스": "D7.트레이더스", "에브리데이": "D4.이마트에브리", "EV": "D4.이마트에브리", "이마트에브리데이": "D4.이마트에브리", "농협": "D1.농협",
-  "서원유통": "D9.서원유통", "다이소": "D12.다이소", "코스트코": "D6.코스트코", "롯데맥스": "D8.VIC", "VIC": "D8.VIC" };
+  "서원유통": "D9.서원유통", "다이소": "D12.다이소", "코스트코": "D6.코스트코", "롯데맥스": "D8.VIC", "VIC": "D8.VIC",
+  "GS25": "E2.GS", "지에스25": "E2.GS", "세븐일레븐": "E3.세븐", "7-11": "E3.세븐", "7-ELEVEN": "E3.세븐", "7eleven": "E3.세븐", "코리아세븐": "E3.세븐", "씨유": "E1.CU", "BGF": "E1.CU" };
 const chSuggest = c => CH_OLD[norm(c)] || STD_CH.find(s => chKey(s) === norm(c)) || "";
 // 어떤 채널 이름이 와도 표준 이름으로 (옛 이름 'EM'·'농협' 자료도 그대로 돌아가게). 모르는 이름은 그대로
 const canonCh = c => { if (c == null) return c; const s = String(c).trim(); if (!s) return s; const n = norm(s); return STD_CH.find(x => norm(x) === n) || chSuggest(s) || s; };
@@ -511,6 +512,8 @@ function autoYm() {
 
 /* ================= 계산 ================= */
 const isNH = ch => norm(ch).includes("농협");   // 농협 전용 규칙 대상 채널
+const CVS_CH = new Set(["E1.CU", "E2.GS", "E3.세븐", "E4.이마트24"].map(norm));
+const isCVS = ch => CVS_CH.has(norm(canonCh(ch)));   // 편의점: 물류비 전 행 적용
 function compute() {
   const ref = ST.ref, raw = ST.raw;
   if (!ref || !raw.length) return null;
@@ -559,7 +562,7 @@ function compute() {
       if (miss("cls", "*", r, info)) W.cls.set(r.code, `${r.name ?? ""} → ${info}`);
     }
     // 농협 전용: 물류비가 부가세 포함 구조 → 과세 제품은 ×1.1 (물류비, 우유 장려금_분배기준(%))
-    r.nh = isNH(r.ch); r.tax = ref.taxB?.[r.code] ?? ref.tax[r.code] ?? fp.tax ?? null;
+    r.nh = isNH(r.ch); r.cvs = isCVS(r.ch); r.tax = ref.taxB?.[r.code] ?? ref.tax[r.code] ?? fp.tax ?? null;
     r.taxF = r.nh && norm(r.tax) === "과세" ? 1.1 : 1;
     if (r.nh && blank(r.tax) && miss("tax", "*", r)) W.tax.set(r.code, r.name);
     r.inPrice = String(r.big ?? "") === "단산" ? 0 : (r.qty ? r.amt / r.qty : 0);
@@ -590,6 +593,8 @@ function compute() {
     // 물류비: EM 등 = 직납 행만 / 농협 = 전 행(代수수료와 동시), 판관비분류로 없으면 카테고리명으로 대체, 과세 ×1.1
     // 엑셀 IFERROR(XLOOKUP(V…),XLOOKUP(M…)) 그대로: 판관비분류 행이 '없을 때만' 카테고리명으로 (율 0인 행이 있으면 0 그대로)
     if (r.nh) { const has = k => ref.rate.some(x => x.key === k && chOk(x, r.ch)); const k1 = pc + norm(K.log), k2 = norm(r.catn) + norm(K.log); r.log = (has(k1) ? rateOf(ref.rate, r.ch, k1) : r.catn ? rateOf(ref.rate, r.ch, k2) : 0) * r.amt * r.taxF; }
+    // 편의점(CU·GS25·세븐·이마트24): 전환유형 상관없이 전 행 × 판관비분류 물류비율 (카테고리명 대체·×1.1 없음, 못 찾으면 0) — 엑셀 원본 수식 그대로
+    else if (r.cvs) r.log = rateOf(ref.rate, r.ch, pc + norm(K.log)) * r.amt;
     else r.log = norm(r.tyn) === norm("직납-전환대상아님") ? rateOf(ref.rate, r.ch, pc + norm(K.log)) * r.amt : 0;
     r.fee = norm(r.tyn) === norm("도매위탁전환대상") ? rateOf(ref.rate, r.ch, pc + norm(K.fee)) * r.amt : 0;
     r.pDist = amtOf(ref.dist, r.ch, pc + norm(K.pDist)) * r.catP;
