@@ -631,7 +631,7 @@ const COLS = {
     ["jPct", "장려금_분배기준(%)", 1], ["jAmt", "장려금_분배기준", 1], ["sPct", "장려금_SKU기준(%)", 1], ["sAmt", "장려금_SKU기준(금액)", 1], ["jTot", "장려금계", 1],
     ["log", "물류비", 1], ["fee", "代수수료", 1], ["pDist", "판관비_분배", 1], ["pSku", "판관비_SKU", 1], ["pTot", "판관비계", 1], ["cost", "비용계", 1], ["vc", "변동원가계", 1], ["tr", "운송비계", 1], ["cm", "공헌이익(CM)", 1]]
 };
-const TABS = [["dash", "📊 대시보드"], ["sum", "채널 요약"], ["big", "대카테고리별"], ["small", "소카테고리별"], ["evt", "세분류별"], ["prod", "제품별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
+const TABS = [["dash", "📊 대시보드"], ["mom", "📅 전월 동기간 비교"], ["sum", "채널 요약"], ["big", "대카테고리별"], ["small", "소카테고리별"], ["evt", "세분류별"], ["prod", "제품별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
 
 function dataFor(tab, rows) {
   if (tab === "sum") return agg(rows, r => r.ch, r => ({ ch: r.ch }));
@@ -695,12 +695,18 @@ function render() {
     ${sel("bigSel", "대카테고리", ["전체", ...bigs(R.rows)], ST.big)}
     ${sel("smallSel", "소카테고리", ["전체", ...smalls(R.rows)], ST.small)}
     ${sel("evtSel", "세분류", ["전체", ...evts(R.rows)], ST.evt)}
-    ${ST.tab === "dash" ? "" : `<input type="text" id="q" placeholder="제품·분류 검색" value="${esc(ST.q)}" style="width:200px">`}
+    ${ST.tab === "dash" || ST.tab === "mom" ? "" : `<input type="text" id="q" placeholder="제품·분류 검색" value="${esc(ST.q)}" style="width:200px">`}
     <span class="sp"></span>
     <span class="muted">월일수 ${R.mdays}일 · 일할 ${R.chs.map(c => `${esc(c)} ${(R.prorate[c] * R.mdays).toFixed(0)}/${R.mdays}`).join(", ")}</span>
     <button id="dl">엑셀 다운로드</button>
   </div>`;
   if (ST.tab === "dash") { h += dash(rowsF, R); finishRender(h); return; }
+  if (ST.tab === "mom") {
+    MOMR = R; const mh = momHtml();
+    const ym = R.archived || $("#ym").value, pv = prevYm(ym);
+    h += `<div class="dgrid"><section class="card wide" id="momCard">${mh || `<h2>전월 동기간 비교</h2><div class="empty">보관함에 전월(${esc(pv || "?")}) 자료가 없거나 비교할 채널이 없어요 — 전월을 먼저 보관함에 저장해 주세요</div>`}</section></div>`;
+    finishRender(h); return;
+  }
   let data = ST.tab === "day" && R.days ? dataFor("day", filt(R.days)) : dataFor(ST.tab, rowsF);
   if (ST.q && ST.tab !== "sum" && ST.tab !== "day") { const q = ST.q.toLowerCase(); data = data.filter(r => String(r.code ?? "").includes(q) || String(r.name ?? "").toLowerCase().includes(q) || ["evt", "big", "small"].some(k => String(r[k] ?? "").toLowerCase().includes(q))); }
   const cols = viewCols(ST.tab); const s = ST.sort[ST.tab];
@@ -839,8 +845,6 @@ function dash(rows, R) {
   DDROWS = R.days ? filt(R.days) : rows.filter(r => r.day != null); DDAYS = dy.filter(a => a.sales).map(a => a.day);
   if (DDSEL == null || !DDAYS.includes(DDSEL)) DDSEL = DDAYS[DDAYS.length - 1] ?? null;
   if (DDAYS.length >= 2) h += `<section class="card wide" id="ddCard">${ddHtml()}</section>`;
-  // ②-2 전월 동기간 비교 (보관함에 전월이 있을 때)
-  MOMR = R; const mh = momHtml(); if (mh) h += `<section class="card wide" id="momCard">${mh}</section>`;
   // ③ 제품 TOP / BOTTOM
   const pr = agg(rows, r => r.code, r => ({ code: r.code, name: r.name }));
   const lab = a => `${a.name ?? ""} (${a.code})`;
