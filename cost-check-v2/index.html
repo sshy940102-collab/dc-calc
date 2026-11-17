@@ -432,10 +432,10 @@ function switchMode(m) {
 /* ---------- 숫자·표시 ---------- */
 const fN = x => (x == null || !isFinite(x)) ? "-" : Math.round(x).toLocaleString("ko-KR");
 const fD = x => (x == null || !isFinite(x)) ? "-" : (Math.round(x) > 0 ? "+" : "") + Math.round(x).toLocaleString("ko-KR");
-const fP = x => (x == null || !isFinite(x)) ? "-" : (x * 100).toFixed(1) + "%";
+const fP = x => (x == null || !isFinite(x)) ? "-" : (Math.round(x * 100) || 0) + "%";   // 율은 정수 (사용자: 소수점 X, %p 증감만 소수 1자리)
 const r1 = x => { const r = Math.round(x * 1000) / 10; return r === 0 ? "0.0" : (r > 0 ? "+" : "") + r.toFixed(1); };
 const fPP = x => (x == null || !isFinite(x)) ? "-" : r1(x) + "%p";
-const fGr = x => (x == null || !isFinite(x)) ? "-" : r1(x) + "%";
+const fGr = x => { if (x == null || !isFinite(x)) return "-"; const r = Math.round(x * 100); return (r > 0 ? "+" : "") + (r || 0) + "%"; };
 const nc = x => (x != null && isFinite(x) && Math.round(x) < 0) ? " neg" : "";
 const jb = k => `<span class="j ${k}">${IC[k]} ${LB[k]}</span>`;
 const yl = y => /^\d{4}$/.test(y) ? y.slice(2) + "년" : y;
@@ -517,6 +517,7 @@ function parse(text) {
     let last = "";
     for (let c = vi + 1; c < maxC; c++) {
       let v = cl(rows[i][c]).replace(/열\s*레이블|Column\s*Labels/ig, "").trim();
+      if (/^(연|월|년|연도|년도|연월|월별|Year|Month)$/i.test(v)) v = "";   // 피벗 열 필드 이름(연·월) 행은 라벨 아님
       if (i < hi) { if (v) last = v; v = last; }
       if (v) lab[c].push(v);
     }
@@ -1313,7 +1314,7 @@ function incCard(gs, skus, tot, scope, lvl) {
   const amt = vl("FY"), SEVI = { red: 0, warn: 1, up: 2, na: 3, ok: 4 };
   const rows = gs.map(g => ({ g, c: incOf(g.j.FY) })).filter(o => o.c).sort((a, b) => SEVI[a.c.k] - SEVI[b.c.k] || b.c.dC - a.c.dC);
   const T = incOf(tot.j.FY), cnt = k => rows.filter(o => o.c.k === k).length;
-  const fx = m => m == null ? "-" : (m < 0 ? "−" : "") + Math.abs(m).toFixed(1) + "배";
+  const fx = m => m == null ? "-" : (m < 0 ? "−" : "") + Math.abs(m).toFixed(0) + "배";
   const tr = (name, c, sub) => `<tr${c.k === "red" ? ' class="pk"' : ""}><td><b>${esc(name)}</b>${sub ? ` <small class="muted">${esc(sub)}</small>` : ""}</td><td><span class="j ${c.k}">${c.lb}</span></td><td class="n${c.dC > 0.5 ? " neg" : ""}">${fD(c.dC)}</td><td class="n${nc(c.dS)}">${fD(c.dS)}</td><td class="n${c.mult != null && c.mult < 1 ? " neg" : ""}">${fx(c.mult)}</td><td class="n${nc(c.dM)}">${fD(c.dM)}</td></tr>`;
   const head = `<tr><th>항목</th><th>판정</th><th>판촉비 증감</th><th>매출 증감</th><th>판촉비 1원당 매출</th><th>CM 증감</th></tr>`;
   const sk = skus.map(s => ({ s, c: incOf(s.j.FY) })).filter(o => o.c && o.c.k === "red").sort((a, b) => b.c.dC - a.c.dC).slice(0, 15);
@@ -1405,7 +1406,7 @@ function insCross(o, i, t, isPrd) {
 }
 function insCards(gs, tot, scope, lvl, f) {
   const T = insItem(tot), la = yl(D.y0), lb = yl(D.y1), lh = DC0 ? yl(DC0.y0) + " 전체" : "";
-  const fx = m => m == null || !isFinite(m) ? "-" : m < 0 ? "매출↓" : m.toFixed(1) + "배";
+  const fx = m => m == null || !isFinite(m) ? "-" : m < 0 ? "매출↓" : m.toFixed(0) + "배";
   const sumI = arr => arr.reduce((t, x) => t + x.r.imp, 0);
   // 조직(또는 제품 분석 모드의 보는 단위) 쪽
   const scopeL = gs.flatMap(g => g.L);
@@ -1768,7 +1769,7 @@ function impRows() {
   for (const o of items) FN.forEach((fn, i) => { const r = fn(o); if (r) out[i].push({ o, r }); });
   out.forEach(a => a.sort((x, y) => y.r.imp - x.r.imp));
   const val = o => o.g.d, get = (o, i) => { const k = key.indexOf(i); return k >= 0 ? o.g.d[k] : ""; };
-  const fx = v => v == null || !isFinite(v) ? "-" : v < 0 ? "매출↓" : v.toFixed(1) + "배";
+  const fx = v => v == null || !isFinite(v) ? "-" : v < 0 ? "매출↓" : v.toFixed(0) + "배";
   const why = (i, x) => { const o = x.o, r = x.r;
     return [`판촉율 ${fP(o.cr0)}→${fP(o.cr1)}(${fPP(o.dcr)})${r.k === "red" ? " 유지·↑인데" : "도 줄였고"} 매출 ${fGr(o.dSp)} 설정 → ${r.k === "red" ? "과소설정 의심" : "감소 일부 설명됨"} (부족 월 ${fN(r.imp)})`,
       `판촉율 ${fPP(o.dcr)}${hasSplit() ? `(차감 ${fPP(o.ddr)} / 판관 ${fPP(o.dpr)})` : ""} 올렸는데 매출 ${fGr(o.dSp)} → CM 월 ${fD(o.dM)}`,
@@ -1801,7 +1802,7 @@ function impXlsx() {
   const dSt = (v, isR) => { const z = isR ? Math.abs(v) < 0.05 : Math.abs(v) < 0.5; return z ? (isR ? 5 : 7) : v < 0 ? (isR ? 12 : 10) : (isR ? 13 : 11); };
   R.rows.forEach((x, ix) => {
     const o = x.o, A = o.h || o.a, Bs = o.a, C = o.b, rt = (t, k) => t && t.S ? t[k] / t.S : null;
-    const met = [["매출", A.S, Bs.S, C.S, 0], ["비용율", rt(A, "C"), rt(Bs, "C"), rt(C, "C"), 1], ...(hasSplit() ? [["└ 차감율", rt(A, "D"), rt(Bs, "D"), rt(C, "D"), 1], ["└ 판관비율", rt(A, "P"), rt(Bs, "P"), rt(C, "P"), 1]] : []), ["공헌이익", A.M, Bs.M, C.M, 0], ["공헌이익율", rt(A, "M"), rt(Bs, "M"), rt(C, "M"), 1]];
+    const met = [["매출", A.S, Bs.S, C.S, 0], ["비용율", rt(A, "C"), rt(Bs, "C"), rt(C, "C"), 1], ...(hasSplit() ? [["└ 차감율", rt(A, "D"), rt(Bs, "D"), rt(C, "D"), 1], ["└ 판관비율", rt(A, "P"), rt(Bs, "P"), rt(C, "P"), 1]] : []), ["원가율", rt(A, "V"), rt(Bs, "V"), rt(C, "V"), 1], ["공헌이익", A.M, Bs.M, C.M, 0], ["공헌이익율", rt(A, "M"), rt(Bs, "M"), rt(C, "M"), 1]];
     const r0 = r + 1;
     met.forEach(([n, a, b, c, isR], j) => { r++;
       const d1 = a != null && c != null ? (isR ? Math.round((c - a) * 1000) / 10 : Math.round((c - a) * 10) / 10) : null, d2 = b != null && c != null ? (isR ? Math.round((c - b) * 1000) / 10 : Math.round((c - b) * 10) / 10) : null;
