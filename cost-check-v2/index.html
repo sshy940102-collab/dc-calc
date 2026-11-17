@@ -1424,17 +1424,26 @@ function insCards(gs, tot, scope, lvl, f) {
   const sub2 = o => o.g.d.length > 1 ? ` <small class="muted">(${esc(o.g.d.slice(0, -1).join(" › "))})</small>` : "";
   const crossH = (o, i, t, isPrd, td) => { const c = insCross(o, i, t, isPrd); if (!c || !c.top.length) return td ? `<td class="muted">-</td>` : "";
     const s = c.top.map(x => `${esc(x.n)} <span class="neg">${i === 2 && t === "hi" ? "+" : "−"}${fN(x.v)}</span>`).join(" · ") + (c.n > 3 ? ` <span class="muted">외 ${c.n - 3}</span>` : "");
-    return td ? `<td style="white-space:normal;min-width:220px">${s}</td>` : `<br><span class="muted">↳ 원인 ${esc(c.nmX)}:</span> ${s}`; };
+    return td ? `<td style="white-space:normal;min-width:200px;font-size:12px">${s}</td>` : `<br><span class="muted">↳ 원인 ${esc(c.nmX)}:</span> ${s}`; };
   const crossX = (o, i, t, isPrd) => { const c = insCross(o, i, t, isPrd); return c && c.top.length ? ` [원인 ${c.nmX}: ${c.top.map(x => `${x.n} ${i === 2 && t === "hi" ? "+" : "−"}${fN(x.v)}`).join(", ")}]` : ""; };
   const isP = side === "prd", XH = `주요 원인 ${esc(((D.mode === "p" || isP) ? D.dims.find(d => /채널/.test(d)) || "채널" : D.dims[subIdx()]).replace(/^Meadow\s*/, ""))} TOP3`;
   const cards = [];
   // 🎯 IMPACT — ①→④, 관점마다 📍 조직 TOP 5 + 📦 소분류 TOP 5
-  let ih = `<p class="muted">관점별 IMPACT 큰 순 TOP 5 · 금액 = 월평균(백만원) · ①③ 매출 차이, ②④ CM 감소 기준${sub ? ` · 📦 = ${esc(scope)} 안 제품을 채널 합쳐서 ${esc(sub.dimN)} 기준` : ""}</p>`, ix = `[🎯 IMPACT — ${scope}, 월평균 백만원]`;
-  const blk = (S, i, icon, dn, isSub) => { const t = top5(S, i); return `<div><div class="muted" style="margin:4px 0 2px">${icon} <b>${esc(dn)}</b>별 ${cntOf(S, i)}개 · ${IMPN[i]} 합 월 ${fN(impOf(S, i))}${i === 2 && S.hi.length ? ` (+ 과대 의심 ${S.hi.length})` : ""}</div>${t.length ? `<ul style="margin-top:0">${t.map(x => `<li>${SS[i](x)}${isSub ? sub2(x.o) : ""}${crossH(x.o, i, x.r.t, !!isSub)}</li>`).join("")}</ul>` : `<p class="muted">✅ 해당 없음</p>`}</div>`; };
+  let ih = `<p class="muted">TOP 5 · 월평균 백만원 · 원인 = 그 항목 안에서 IMPACT 몫 큰 순${sub ? ` · 📦 = 채널 합친 ${esc(sub.dimN)}` : ""} · 판정 아이콘에 마우스 올리면 설명</p>`, ix = `[🎯 IMPACT — ${scope}, 월평균 백만원]`;
+  // IMPACT 표: 관점별 열 (판정은 아이콘만, 마우스 올리면 설명)
+  const ico = r => `<span title="${esc(r.lb)}">${r.lb.split(" ")[0]}</span>`, ng = s => `<span class="neg">${s}</span>`;
+  const IMPH = [["", "매출 기준→비교", "부족(월)", "증감률", "판촉율 Δ"], ["매출 증감률", "판촉율 Δ", "CM 증감(월)"], ["", "26 추세", "매출 26평균→비교", "차이(월)", "판촉율 Δ"], ["", "판촉비 Δ(월)", "매출 Δ(월)", "1원당/본전", "CM 손실(월)"]].map(h => h.map(x => x.replace("26", yl(DC0 ? DC0.y0 : D.y0).replace("년", ""))));
+  const IMPR = [x => { const o = x.o; return [ico(x.r), `${fN(o.a.S)}→${fN(o.b.S)}`, ng("−" + fN(-o.dS)), fGr(o.dSp), fPP(o.dcr)]; },
+    x => { const o = x.o; return [ng(fGr(o.dSp)), ng(fPP(o.dcr)), ng(fD(o.dM))]; },
+    x => { const o = x.o; return [ico(x.r), fGr(o.tr), `${fN(o.h.S)}→${fN(o.b.S)}`, x.r.t === "hi" ? "+" + fN(x.r.imp) : ng("−" + fN(x.r.imp)), fPP(x.r.dr)]; },
+    x => { const o = x.o; return [ico(x.r), fD(o.dC), fD(o.dS), `${fx(x.r.mult)} / ${fx(x.r.need)}`, ng("−" + fN(x.r.imp))]; }];
+  const cxN = isPrd => ((D.mode === "p" || isPrd) ? D.dims.find(d => /채널/.test(d)) || "채널" : D.dims[subIdx()]).replace(/^Meadow\s*/, "");
+  const blk = (S, i, icon, dn, isSub) => { const t = top5(S, i);
+    return `<div><div class="muted" style="margin:4px 0 2px">${icon} <b>${esc(dn)}</b>별 ${cntOf(S, i)}개 · ${IMPN[i]} 합 월 <b>${fN(impOf(S, i))}</b>${i === 2 && S.hi.length ? ` (⚠️ 과대 의심 ${S.hi.length})` : ""}</div>${t.length ? `<div class="tw" style="max-height:none"><table class="ov imp"><thead><tr><th>${esc(dn)}</th>${IMPH[i].map(h => `<th>${esc(h)}</th>`).join("")}<th>원인 ${esc(cxN(isSub))} TOP3</th></tr></thead><tbody>${t.map(x => `<tr><td title="${esc(x.o.g.d.join(" › "))}"><b>${esc(nm(x.o.g))}</b></td>${IMPR[i](x).map((v, k) => `<td class="${k === 0 && i !== 1 ? "" : "n"}">${v}</td>`).join("")}${crossH(x.o, i, x.r.t, !!isSub, 1)}</tr>`).join("")}</tbody></table></div>` : `<p class="muted">✅ 해당 없음</p>`}</div>`; };
   const blkX = (S, i, icon, dn, isSub) => `  ${icon} ${dn}별 ${cntOf(S, i)}개 (${IMPN[i]} 합 월 ${fN(impOf(S, i))})` + top5(S, i).map(x => "\n  · " + strip(SS[i](x)).replace(/&lt;/g, "<") + (isSub && x.o.g.d.length > 1 ? ` (${x.o.g.d.slice(0, -1).join(" > ")})` : "") + crossX(x.o, i, x.r.t, !!isSub)).join("");
   for (let i = 0; i < 4; i++) {
     ih += `<div class="lbl" style="font-size:13px;color:var(--txt);margin-top:10px"><b>${NM[i]}</b> <a class="lnk" data-insp="${i + 1}">표 보기 ▸</a></div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:4px 16px">${blk(org.S, i, "📍", org.dimN)}${sub ? blk(sub.S, i, "📦", sub.dimN, 1) : ""}</div>`;
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(600px,100%),1fr));gap:4px 16px">${blk(org.S, i, "📍", org.dimN)}${sub ? blk(sub.S, i, "📦", sub.dimN, 1) : ""}</div>`;
     ix += `\n${NM[i]}\n` + blkX(org.S, i, "📍", org.dimN) + (sub ? "\n" + blkX(sub.S, i, "📦", sub.dimN, 1) : "");
   }
   cards.push({ p: 0, cls: "red wide", t: `🎯 IMPACT 큰 항목 <small>${esc(scope)} · 📍 ${esc(org.dimN)}별${sub ? ` + 📦 ${esc(sub.dimN)}별` : ""} · ①→④ 순서</small>`, h: ih, x: ix });
@@ -1442,7 +1451,7 @@ function insCards(gs, tot, scope, lvl, f) {
   const S = C.S, sideTag = side === "prd" ? `📦 ${C.dimN}별` : `📍 ${C.dimN}별`;
   const ttl = (i, extra) => `${NM[i]} <small>${esc(sideTag)} · ${extra}</small>`;
   cards.push({ p: 1, cls: "b wide", t: ttl(0, `비교 월평균 매출 &lt; 기준(최근 실적 런레이트) 월평균 · ${S.P[0].length}개`),
-    h: `<p class="muted">기준 = <b>${esc(la)}</b> 월평균 (최근 실적 페이스) · 비교 = <b>${esc(lb)}</b> 월평균 · 기준보다 1% 넘게 낮으면 표시 · 🔴 = 판촉율은 유지·증가(−1%p 이내)인데 매출만 낮춤${lead}</p>` +
+    h: `<p class="muted">${esc(la)} → ${esc(lb)} 월평균 −1% 넘게 감소 · 🔴 판촉율 유지·↑ / 🟡 판촉율도 −1%p↓${lead}</p>` +
       tb(["항목", "판정", `매출 ${esc(la)}`, `매출 ${esc(lb)}`, "부족분(월)", "증감률", "판촉율", "연 환산 부족분", XH], S.P[0].map(x => { const o = x.o; return `<tr${trA(o, C)}>${tdN(o, C)}<td>${tag(x.r)}</td><td class="n">${fN(o.a.S)}</td><td class="n">${fN(o.b.S)}</td><td class="n neg">−${fN(-o.dS)}</td><td class="n neg">${fGr(o.dSp)}</td><td class="n">${fP(o.cr0)}→${fP(o.cr1)} (${fPP(o.dcr)})</td><td class="n neg">−${fN(-o.dS * 12)}</td>${crossH(o, 0, x.r.t, isP, 1)}</tr>`; })),
     x: `[${NM[0]} — ${scope}, ${sideTag}] ${S.P[0].length}개\n` + S.P[0].slice(0, 20).map(x => "· " + strip(s1(x))).join("\n") });
   cards.push({ p: 2, cls: "red wide", t: ttl(1, `판촉율 +${ST.thr}%p 초과 & 매출 감소 · ${S.P[1].length}개 · CM 감소 큰 순`),
@@ -1451,14 +1460,14 @@ function insCards(gs, tot, scope, lvl, f) {
     x: `[${NM[1]} — ${scope}, ${sideTag}] ${S.P[1].length}개\n` + S.P[1].slice(0, 20).map(x => "· " + strip(s2(x))).join("\n") });
   const hasTr = C.items.some(o => o.tr != null);
   const h3 = !hasTr ? `<p class="muted">월별 자료(기간 비교)에서만 볼 수 있어요</p>` :
-    `<p class="muted">${esc(yl(DC0.y0))} 1~12월 매출 추세선(최소제곱) 첫 달→마지막 달 증가율 +${INSK.trMin * 100}% 이상인데, 비교 <b>${esc(lb)}</b> 월평균 &lt; <b>${esc(lh)}</b> 월평균 · 판촉율을 ${lh} 대비 −1%p 넘게 줄였으면 🟡 설명 가능${lead}</p>` +
+    `<p class="muted">${esc(yl(DC0.y0))} 추세 +${INSK.trMin * 100}%↑인데 ${esc(lb)} &lt; ${esc(lh)} 월평균 · 🟡 판촉율 −1%p↓로 설명 가능${lead}</p>` +
       tb(["항목", "판정", `${esc(yl(DC0.y0))} 흐름`, "추세", `매출 ${esc(lh)}`, `매출 ${esc(lb)}`, "차이(월)", "판촉율", "판촉율 증감", XH], S.lo.map(x => { const o = x.o; return `<tr${trA(o, C)}>${tdN(o, C)}<td>${tag(x.r)}</td><td>${spark(o.sp)}</td><td class="n">${fGr(o.tr)}</td><td class="n">${fN(o.h.S)}</td><td class="n">${fN(o.b.S)}</td><td class="n neg">−${fN(x.r.imp)}</td><td class="n">${fP(o.crH)}→${fP(o.cr1)}</td><td class="n">${fPP(x.r.dr)}</td>${crossH(o, 2, x.r.t, isP, 1)}</tr>`; })) +
-      `<div class="lbl">⚠️ 반대 경우 — 판촉율을 ${lh} 대비 −1%p 넘게 줄였는데 매출은 늘려 잡음 (과대 설정 의심) · ${S.hi.length}개</div>` +
+      `<div class="lbl">⚠️ 과대 의심 — 판촉율 −1%p↓인데 매출↑ · ${S.hi.length}개</div>` +
       tb(["항목", `${esc(yl(DC0.y0))} 흐름`, "추세", `매출 ${esc(lh)}`, `매출 ${esc(lb)}`, "증가(월)", "판촉율", "판촉율 증감", XH], S.hi.map(x => { const o = x.o; return `<tr${trA(o, C)}>${tdN(o, C)}<td>${spark(o.sp)}</td><td class="n">${fGr(o.tr)}</td><td class="n">${fN(o.h.S)}</td><td class="n">${fN(o.b.S)}</td><td class="n">+${fN(x.r.imp)}</td><td class="n">${fP(o.crH)}→${fP(o.cr1)}</td><td class="n neg">${fPP(x.r.dr)}</td>${crossH(o, 2, x.r.t, isP, 1)}</tr>`; }));
   cards.push({ p: 3, cls: "warn wide", t: ttl(2, `${esc(DC0 ? yl(DC0.y0) : "")} 상승 추세인데 감소 설정 ${S.lo.length}개 · 판촉율↓인데 매출↑ ${S.hi.length}개`), h: h3,
     x: `[${NM[2]} — ${scope}, ${sideTag}] 추세↑인데 감소 ${S.lo.length}개 / 판촉율↓인데 매출↑ ${S.hi.length}개\n` + S.P[2].slice(0, 20).map(x => "· " + strip(s3(x)).replace(/&lt;/g, "<")).join("\n") });
   cards.push({ p: 4, cls: "warn wide", t: ttl(3, `판촉비↑인데 매출 증가가 본전 배수에 못 미침 · ${S.P[3].length}개 · CM 손실 큰 순`),
-    h: `<p class="muted">본전 배수 = 1 ÷ 판촉 전 마진율(≈ 1 − 원가율, ${esc(lb)} 기준) · 판촉비 1원당 매출 = 매출 증감 ÷ 판촉비 증감 · CM 손실 = 판촉비 증가 − 매출 증가 × 마진율 (예: 원가율 60% → 본전 2.5배, 판촉비 +10에 매출 +15면 CM −4)${lead}</p>` +
+    h: `<p class="muted">본전 = 1 ÷ (1 − 원가율) · CM 손실 = 판촉비Δ − 매출Δ × (1 − 원가율)${lead}</p>` +
       tb(["항목", "판정", "판촉비 증감(월)", "매출 증감(월)", "1원당 매출", "본전 배수", "CM 손실(월)", "CM 실제 증감(월)", "연 환산 손실", XH], S.P[3].map(x => { const o = x.o; return `<tr${trA(o, C)}>${tdN(o, C)}<td>${tag(x.r)}</td><td class="n neg">${fD(o.dC)}</td><td class="n${nc(o.dS)}">${fD(o.dS)}</td><td class="n neg">${fx(x.r.mult)}</td><td class="n">${fx(x.r.need)}</td><td class="n neg">−${fN(x.r.imp)}</td><td class="n${nc(o.dM)}">${fD(o.dM)}</td><td class="n neg">−${fN(x.r.imp * 12)}</td>${crossH(o, 3, x.r.t, isP, 1)}</tr>`; })),
     x: `[${NM[3]} — ${scope}, ${sideTag}] ${S.P[3].length}개\n` + S.P[3].slice(0, 20).map(x => "· " + strip(s4(x))).join("\n") });
   // 머리 카드용: 📍/📦 전환 버튼 + 제품 경로
