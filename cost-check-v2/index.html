@@ -1725,7 +1725,7 @@ function pzXlsx(list) {
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
 <cellXfs count="11">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
@@ -1805,18 +1805,15 @@ function impXlsx() {
     const r0 = r + 1;
     met.forEach(([n, a, b, c, isR], j) => { r++;
       const d1 = a != null && c != null ? (isR ? Math.round((c - a) * 1000) / 10 : Math.round((c - a) * 10) / 10) : null, d2 = b != null && c != null ? (isR ? Math.round((c - b) * 1000) / 10 : Math.round((c - b) * 10) / 10) : null;
-      const lead = [x.p, ...x.dims].map((v, k) => cell(r, k, j === 0 && (k >= nOrg || start[ix][k]) ? v : "", 2)).join("");
-      X.push(`<row r="${r}">${lead}${cell(r, nd, n, 2)}${[a, b, c].map((v, k) => cell(r, nd + 1 + k, v == null ? "" : isR ? v : Math.round(v * 10) / 10, isR ? 4 : 3)).join("")}${[d1, d2].map((v, k) => cell(r, nd + 4 + k, v == null ? "" : v, v == null ? (isR ? 5 : 7) : dSt(v, isR))).join("")}${cell(r, nC - 1, j === 0 ? x.txt : "", 6)}</row>`); });
-    for (let k = 0; k < nOrg; k++) if (start[ix][k]) mg.push(`${colL(k)}${r0}:${colL(k)}${r0 + start[ix][k] * met.length - 1}`);
-    for (let k = nOrg; k < nd; k++) mg.push(`${colL(k)}${r0}:${colL(k)}${r}`);
-    mg.push(`${colL(nC - 1)}${r0}:${colL(nC - 1)}${r}`);
+      const lead = [x.p, ...x.dims].map((v, k) => cell(r, k, v, 2)).join("");   // 필터용: 병합 없이 모든 줄 반복
+      X.push(`<row r="${r}">${lead}${cell(r, nd, n, 2)}${[a, b, c].map((v, k) => cell(r, nd + 1 + k, v == null ? "" : isR ? v : Math.round(v * 10) / 10, isR ? 4 : 3)).join("")}${[d1, d2].map((v, k) => cell(r, nd + 4 + k, v == null ? "" : v, v == null ? (isR ? 5 : 7) : dSt(v, isR))).join("")}${cell(r, nC - 1, x.txt, 6)}</row>`); });
   });
   const widths = head.map((h, i) => i === 0 ? 24 : i < nd ? 16 : i === nd ? 11 : i === nC - 1 ? 70 : 15);
   const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <dimension ref="A1:${colL(nC - 1)}${r}"/><sheetViews><sheetView workbookViewId="0" zoomScale="90"><pane ySplit="${hr}" topLeftCell="A${hr + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="16.5"/><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>
-<sheetData>${X.join("")}</sheetData>${mg.length ? `<mergeCells count="${mg.length}">${mg.map(m => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : ""}
+<sheetData>${X.join("")}</sheetData><autoFilter ref="A${hr}:${colL(nC - 1)}${r}"/>
 </worksheet>`;
   const B = `<border><left style="thin"><color rgb="FFC9D0DC"/></left><right style="thin"><color rgb="FFC9D0DC"/></right><top style="thin"><color rgb="FFC9D0DC"/></top><bottom style="thin"><color rgb="FFC9D0DC"/></bottom><diagonal/></border>`;
   const st = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1829,17 +1826,17 @@ function impXlsx() {
 <cellXfs count="14">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
 <xf numFmtId="3" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
 <xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="166" fontId="4" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="166" fontId="5" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="165" fontId="4" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="165" fontId="5" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
   const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="IMPACT상세" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="IMPACT상세" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">IMPACT상세!$A$3:$${colL(nC - 1)}$${r}</definedName></definedNames></workbook>`;
   const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
   const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
