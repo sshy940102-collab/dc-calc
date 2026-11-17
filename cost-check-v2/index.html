@@ -1778,12 +1778,21 @@ function impRows() {
   const skuTop = (i, x) => { const f = fImp(i, x.r.t); if (!x.o._sk2) x.o._sk2 = insGroupsBy(x.o.g.L, si, si).map(insItem);
     const s = x.o._sk2.map(q => ({ n: nm(q.g), v: f(q) })).filter(q => q.v > 0.5).sort((a, b) => b.v - a.v).slice(0, 3);
     return s.length ? ` / SKU: ` + s.map(q => `${q.n} ${i === 2 && x.r.t === "hi" ? "+" : "−"}${fN(q.v)}`).join(", ") : ""; };
+  // 엑셀 '내용' = 지표 줄마다 다른 내용 (결론 → 근거 → 원인 SKU), 같은 말 반복 X
+  const linesOf = (i, x) => { const o = x.o, r = x.r, ic = r.lb.split(" ")[0], sp = hasSplit();
+    const L = [[`${ic} ${r.k === "red" ? "과소설정 의심" : "감소 일부 설명됨 (판촉도 줄임)"} · 매출 부족 월 ${fN(r.imp)} (연 ${fN(r.imp * 12)})`, `판촉율 ${fP(o.cr0)}→${fP(o.cr1)} (${fPP(o.dcr)})${r.k === "red" ? " 유지·증가" : " 축소"}${sp ? ` · 차감 ${fPP(o.ddr)} / 판관 ${fPP(o.dpr)}` : ""}`, `매출 ${fN(o.a.S)}→${fN(o.b.S)} (${fGr(o.dSp)}) 낮춰 설정`],
+      [`🔴 판촉율↑ 매출↓ · CM 월 ${fD(o.dM)} (연 ${fD(o.dM * 12)})`, `판촉율 ${fP(o.cr0)}→${fP(o.cr1)} (${fPP(o.dcr)})${sp ? ` · 차감 ${fPP(o.ddr)} / 판관 ${fPP(o.dpr)}` : ""}`, `매출 ${fN(o.a.S)}→${fN(o.b.S)} (${fGr(o.dSp)})`],
+      r.t === "hi" ? [`⚠️ 과대 설정 의심 · 매출 26년 평균 대비 +${fN(r.imp)}`, `판촉율 ${fP(o.crH)}→${fP(o.cr1)} (${fPP(r.dr)}) 크게 축소`, `매출 ${fN(o.h.S)}→${fN(o.b.S)} 늘려 설정`]
+        : [`${ic} ${r.k === "red" ? "상승 추세인데 매출 꺾음 = 과소 의심" : "판촉 축소로 일부 설명"} · 26년 평균 대비 월 −${fN(r.imp)}`, `26년 월별 추세 ${fGr(o.tr)} 상승`, `판촉율 ${fP(o.crH)}→${fP(o.cr1)} (${fPP(r.dr)})`],
+      [`${ic} 효율 부족 · CM 손실 월 ${fN(r.imp)} (연 ${fN(r.imp * 12)})`, `판촉비 월 ${fD(o.dC)}${sp ? ` (차감 ${fD(o.dD)} / 판관 ${fD(o.dP)})` : ""}`, `매출 ${fD(o.dS)} · 1원당 ${fx(r.mult)} (본전 ${fx(r.need)})`]][i];
+    const f = fImp(i, r.t), s = (x.o._sk2 || (x.o._sk2 = insGroupsBy(x.o.g.L, si, si).map(insItem))).map(q => ({ n: nm(q.g), v: f(q) })).filter(q => q.v > 0.5).sort((a, b) => b.v - a.v);
+    return L.concat(s.slice(0, 3).map((q, k) => `원인 SKU ${k + 1}: ${q.n} ${i === 2 && r.t === "hi" ? "+" : "−"}${fN(q.v)}`), s.length > 3 ? [`외 ${s.length - 3}개 SKU`] : []); };
   const NM = ["① 매출 과소설정", "② 판촉율↑ 매출↓", "③ 월 흐름 대비 감소 설정", "④ 판촉 투입 효율 낮음"];
   const rows = [];
   // 관점 안 정렬: 부문 → 팀 → 채널로 묶고, 채널 안은 IMPACT 큰 순 (③은 감소·과대 의심 따로 묶음)
   const oc = (x, y) => { for (const k of od) { if (k < 0) continue; const c = String(get(x.o, k)).localeCompare(String(get(y.o, k)), "ko", { numeric: true }); if (c) return c; } return 0; };
   out.forEach((arr, i) => { const grp = i === 2 ? [arr.filter(x => x.r.t !== "hi"), arr.filter(x => x.r.t === "hi")] : [arr];
-    grp.forEach(a => a.slice().sort((x, y) => oc(x, y) || y.r.imp - x.r.imp).forEach(x => rows.push({ p: NM[i] + (i === 2 && x.r.t === "hi" ? " (과대 의심)" : ""), dims: [...od, ...pd].map(k => k >= 0 ? get(x.o, k) : ""), imp: x.r.imp, o: x.o, txt: `${x.r.lb.split(" ")[0]} ${why(i, x)}${skuTop(i, x)}` }))); });
+    grp.forEach(a => a.slice().sort((x, y) => oc(x, y) || y.r.imp - x.r.imp).forEach(x => rows.push({ p: NM[i] + (i === 2 && x.r.t === "hi" ? " (과대 의심)" : ""), dims: [...od, ...pd].map(k => k >= 0 ? get(x.o, k) : ""), imp: x.r.imp, o: x.o, txt: `${x.r.lb.split(" ")[0]} ${why(i, x)}${skuTop(i, x)}`, lines: linesOf(i, x) }))); });
   return { rows, pdN: pd.map(k => k >= 0 ? D.dims[k] : ""), odN: od.map(k => k >= 0 ? D.dims[k] : "") };
 }
 function impXlsx() {
@@ -1807,9 +1816,9 @@ function impXlsx() {
     met.forEach(([n, a, b, c, isR], j) => { r++;
       const d1 = a != null && c != null ? (isR ? Math.round((c - a) * 1000) / 10 : Math.round((c - a) * 10) / 10) : null, d2 = b != null && c != null ? (isR ? Math.round((c - b) * 1000) / 10 : Math.round((c - b) * 10) / 10) : null;
       const lead = [x.p, ...x.dims].map((v, k) => cell(r, k, v, 2)).join("");   // 필터용: 병합 없이 모든 줄 반복
-      X.push(`<row r="${r}">${lead}${cell(r, nd, n, 2)}${[a, b, c].map((v, k) => cell(r, nd + 1 + k, v == null ? "" : isR ? v : Math.round(v * 10) / 10, isR ? 4 : 3)).join("")}${[d1, d2].map((v, k) => cell(r, nd + 4 + k, v == null ? "" : v, v == null ? (isR ? 5 : 7) : dSt(v, isR))).join("")}${cell(r, nC - 1, x.txt, 6)}</row>`); });
+      X.push(`<row r="${r}">${lead}${cell(r, nd, n, 2)}${[a, b, c].map((v, k) => cell(r, nd + 1 + k, v == null ? "" : isR ? v : Math.round(v * 10) / 10, isR ? 4 : 3)).join("")}${[d1, d2].map((v, k) => cell(r, nd + 4 + k, v == null ? "" : v, v == null ? (isR ? 5 : 7) : dSt(v, isR))).join("")}${cell(r, nC - 1, j < met.length - 1 ? (x.lines[j] || "") : x.lines.slice(j).join(" · "), 6)}</row>`); });
   });
-  const widths = head.map((h, i) => i === 0 ? 24 : i < nd ? 16 : i === nd ? 11 : i === nC - 1 ? 70 : 15);
+  const widths = head.map((h, i) => i === 0 ? 24 : i < nd ? 16 : i === nd ? 11 : i === nC - 1 ? 120 : 15);
   const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <dimension ref="A1:${colL(nC - 1)}${r}"/><sheetViews><sheetView workbookViewId="0" zoomScale="90"><pane ySplit="${hr}" topLeftCell="A${hr + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
@@ -1831,7 +1840,7 @@ function impXlsx() {
 <xf numFmtId="3" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
-<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" shrinkToFit="1"/></xf>
 <xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>
