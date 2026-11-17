@@ -1768,30 +1768,38 @@ function impRows() {
     return s.length ? ` / SKU: ` + s.map(q => `${q.n} ${i === 2 && x.r.t === "hi" ? "+" : "−"}${fN(q.v)}`).join(", ") : ""; };
   const NM = ["① 매출 과소설정", "② 판촉율↑ 매출↓", "③ 월 흐름 대비 감소 설정", "④ 판촉 투입 효율 낮음"];
   const rows = [];
-  out.forEach((arr, i) => arr.forEach(x => rows.push({ p: NM[i] + (i === 2 && x.r.t === "hi" ? " (과대 의심)" : ""), dims: [...pd, ...od].map(k => k >= 0 ? get(x.o, k) : ""), o: x.o, txt: `${x.r.lb.split(" ")[0]} ${why(i, x)}${skuTop(i, x)}` })));
+  // 관점 안 정렬: 부문 → 팀 → 채널로 묶고, 채널 안은 IMPACT 큰 순 (③은 감소·과대 의심 따로 묶음)
+  const oc = (x, y) => { for (const k of od) { if (k < 0) continue; const c = String(get(x.o, k)).localeCompare(String(get(y.o, k)), "ko", { numeric: true }); if (c) return c; } return 0; };
+  out.forEach((arr, i) => { const grp = i === 2 ? [arr.filter(x => x.r.t !== "hi"), arr.filter(x => x.r.t === "hi")] : [arr];
+    grp.forEach(a => a.slice().sort((x, y) => oc(x, y) || y.r.imp - x.r.imp).forEach(x => rows.push({ p: NM[i] + (i === 2 && x.r.t === "hi" ? " (과대 의심)" : ""), dims: [...od, ...pd].map(k => k >= 0 ? get(x.o, k) : ""), imp: x.r.imp, o: x.o, txt: `${x.r.lb.split(" ")[0]} ${why(i, x)}${skuTop(i, x)}` }))); });
   return { rows, pdN: pd.map(k => k >= 0 ? D.dims[k] : ""), odN: od.map(k => k >= 0 ? D.dims[k] : "") };
 }
 function impXlsx() {
   const R = impRows(), lh = DC0 ? yl(DC0.y0) + " 1~12월" : "전체", la = yl(D.y0), lb = yl(D.y1);
-  const head = ["IMPACT 항목", ...R.pdN, ...R.odN, "지표", `${lh} (월평균)`, `기준 ${la} (월평균)`, `비교 ${lb} (월평균)`, `증감 (비교−${lh})`, `증감 (비교−기준)`, "내용"];
+  const head = ["IMPACT 항목", ...R.odN, ...R.pdN, "지표", `${lh} (월평균)`, `기준 ${la} (월평균)`, `비교 ${lb} (월평균)`, `증감 (비교−${lh})`, `증감 (비교−기준)`, "내용"];
   const cell = (r, c, v, s) => { const ref = colL(c) + r; if (v == null || v === "") return `<c r="${ref}" s="${s}"/>`; if (typeof v === "number") return isFinite(v) ? `<c r="${ref}" s="${s}"><v>${v}</v></c>` : `<c r="${ref}" s="${s}"/>`; return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xe(v)}</t></is></c>`; };
   // 스타일: 0 기본, 1 머리글, 2 가운데 텍스트, 3 #,##0, 4 0.0%, 5 ±%p, 6 왼쪽 줄바꿈, 7 ±#,##0, 8 제목, 9 회색
   const X = [], mg = [], hr = 3; let r = hr;
   X.push(`<row r="1">${cell(1, 0, `IMPACT 상세 — ${lab(Object.values(ST.ins.filt || {}).filter(Boolean).map(lab).join(" › ")) || "전체"} · ${ST.mode === "p" ? "제품 분석" : "채널 분석"}`, 8)}</row>`);
   X.push(`<row r="2">${cell(2, 0, `금액 = 월평균 백만원 · 비용율·공헌이익율 = 기간 합계 기준 · 증감: 금액 = 차이, 율 = %p · 소분류×채널 조합을 ①~④로 판정, 관점별 IMPACT 큰 순 (총 ${R.rows.length}건)`, 9)}</row>`);
   X.push(`<row r="${hr}" ht="30" customHeight="1">${head.map((h, i) => cell(hr, i, h, 1)).join("")}</row>`);
-  const nd = 1 + R.pdN.length + R.odN.length, nC = head.length;
-  for (const x of R.rows) {
+  const nd = 1 + R.pdN.length + R.odN.length, nC = head.length, nOrg = 1 + R.odN.length;   // 항목+부문·팀·채널 = 위아래 같은 값끼리 병합
+  const keyOf = (x, c) => [x.p, ...x.dims].slice(0, c + 1).join("\u0001"), start = R.rows.map(() => ({}));
+  for (let c = 0; c < nOrg; c++) { let s = 0; for (let k = 1; k <= R.rows.length; k++) if (k === R.rows.length || keyOf(R.rows[k], c) !== keyOf(R.rows[s], c)) { start[s][c] = k - s; s = k; } }
+  // 증감 색: 음수 = 빨강(10·12), 양수 = 초록(11·13), 0 = 기본(7·5)
+  const dSt = (v, isR) => { const z = isR ? Math.abs(v) < 0.05 : Math.abs(v) < 0.5; return z ? (isR ? 5 : 7) : v < 0 ? (isR ? 12 : 10) : (isR ? 13 : 11); };
+  R.rows.forEach((x, ix) => {
     const o = x.o, A = o.h || o.a, Bs = o.a, C = o.b, rt = (t, k) => t && t.S ? t[k] / t.S : null;
     const met = [["매출", A.S, Bs.S, C.S, 0], ["비용율", rt(A, "C"), rt(Bs, "C"), rt(C, "C"), 1], ["공헌이익", A.M, Bs.M, C.M, 0], ["공헌이익율", rt(A, "M"), rt(Bs, "M"), rt(C, "M"), 1]];
     const r0 = r + 1;
     met.forEach(([n, a, b, c, isR], j) => { r++;
-      const d1 = a != null && c != null ? c - a : null, d2 = b != null && c != null ? c - b : null;
-      const lead = j === 0 ? [x.p, ...x.dims].map((v, k) => cell(r, k, v, 2)).join("") : Array.from({ length: nd }, (_, k) => cell(r, k, "", 2)).join("");
-      X.push(`<row r="${r}">${lead}${cell(r, nd, n, 2)}${[a, b, c].map((v, k) => cell(r, nd + 1 + k, v == null ? "" : isR ? v : Math.round(v * 10) / 10, isR ? 4 : 3)).join("")}${[d1, d2].map((v, k) => cell(r, nd + 4 + k, v == null ? "" : isR ? Math.round(v * 1000) / 10 : Math.round(v * 10) / 10, isR ? 5 : 7)).join("")}${cell(r, nC - 1, j === 0 ? x.txt : "", 6)}</row>`); });
-    for (let k = 0; k < nd; k++) mg.push(`${colL(k)}${r0}:${colL(k)}${r}`);
+      const d1 = a != null && c != null ? (isR ? Math.round((c - a) * 1000) / 10 : Math.round((c - a) * 10) / 10) : null, d2 = b != null && c != null ? (isR ? Math.round((c - b) * 1000) / 10 : Math.round((c - b) * 10) / 10) : null;
+      const lead = [x.p, ...x.dims].map((v, k) => cell(r, k, j === 0 && (k >= nOrg || start[ix][k]) ? v : "", 2)).join("");
+      X.push(`<row r="${r}">${lead}${cell(r, nd, n, 2)}${[a, b, c].map((v, k) => cell(r, nd + 1 + k, v == null ? "" : isR ? v : Math.round(v * 10) / 10, isR ? 4 : 3)).join("")}${[d1, d2].map((v, k) => cell(r, nd + 4 + k, v == null ? "" : v, v == null ? (isR ? 5 : 7) : dSt(v, isR))).join("")}${cell(r, nC - 1, j === 0 ? x.txt : "", 6)}</row>`); });
+    for (let k = 0; k < nOrg; k++) if (start[ix][k]) mg.push(`${colL(k)}${r0}:${colL(k)}${r0 + start[ix][k] * 4 - 1}`);
+    for (let k = nOrg; k < nd; k++) mg.push(`${colL(k)}${r0}:${colL(k)}${r}`);
     mg.push(`${colL(nC - 1)}${r0}:${colL(nC - 1)}${r}`);
-  }
+  });
   const widths = head.map((h, i) => i === 0 ? 24 : i < nd ? 16 : i === nd ? 11 : i === nC - 1 ? 70 : 15);
   const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
@@ -1803,11 +1811,11 @@ function impXlsx() {
   const st = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="3"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="+0.0&quot;%p&quot;;-0.0&quot;%p&quot;;0.0&quot;%p&quot;"/><numFmt numFmtId="166" formatCode="+#,##0;-#,##0;0"/></numFmts>
-<fonts count="4"><font><sz val="10"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="13"/><color rgb="FF1F3864"/><name val="맑은 고딕"/><family val="3"/></font><font><sz val="9"/><color rgb="FF5B6577"/><name val="맑은 고딕"/><family val="3"/></font></fonts>
-<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F3864"/><bgColor indexed="64"/></patternFill></fill></fills>
+<fonts count="6"><font><sz val="10"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="13"/><color rgb="FF1F3864"/><name val="맑은 고딕"/><family val="3"/></font><font><sz val="9"/><color rgb="FF5B6577"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="10"/><color rgb="FFC00000"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="10"/><color rgb="FF2E7D32"/><name val="맑은 고딕"/><family val="3"/></font></fonts>
+<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F3864"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFDECEC"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8F5E9"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>${B}</borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="10">
+<cellXfs count="14">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
@@ -1818,7 +1826,7 @@ function impXlsx() {
 <xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>
-</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+<xf numFmtId="166" fontId="4" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="166" fontId="5" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="165" fontId="4" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="165" fontId="5" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
   const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="IMPACT상세" sheetId="1" r:id="rId1"/></sheets></workbook>`;
   const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
