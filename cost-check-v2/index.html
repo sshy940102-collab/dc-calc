@@ -1384,8 +1384,13 @@ function insCross(o, i, t, isPrd) {
   if (!o._cx) o._cx = insGroupsBy(o.g.L, cx, cx).map(insItem);
   if (o._cx.length <= 1) return null;   // 쪼갤 게 없음 (이미 그 단위 하나)
   const f = [o2 => o2.a.S - o2.b.S, o2 => o2.a.M - o2.b.M, o2 => t === "hi" ? (o2.h ? o2.b.S - o2.h.S : 0) : (o2.h ? o2.h.S - o2.b.S : 0), o2 => o2.dC - o2.dS * (o2.m1 > 0 ? o2.m1 : 0)][i];
-  const arr = o._cx.map(o2 => ({ n: nm(o2.g), v: f(o2) })).filter(x => x.v > 0.5).sort((a, b) => b.v - a.v);
-  return { nmX, top: arr.slice(0, 3), n: arr.length };
+  const arr = o._cx.map(o2 => ({ n: nm(o2.g), v: f(o2), o2 })).filter(x => x.v > 0.5).sort((a, b) => b.v - a.v);
+  const top = arr.slice(0, 3), si = (i => i >= 0 ? i : D.nd - 1)(D.dims.findIndex(d => /제품번호|SKU|Name/i.test(d)));
+  for (const x of top) {   // 마우스 올리면: 그 원인 안 SKU TOP 3 (같은 관점 금액)
+    if (!x.o2._sk) x.o2._sk = insGroupsBy(x.o2.g.L, si, si).map(insItem);
+    x.sk = x.o2._sk.map(s => ({ n: nm(s.g), v: f(s) })).filter(s => s.v > 0.5).sort((a, b) => b.v - a.v);
+  }
+  return { nmX, top, n: arr.length };
 }
 function insCards(gs, tot, scope, lvl, f) {
   const T = insItem(tot), la = yl(D.y0), lb = yl(D.y1), lh = DC0 ? yl(DC0.y0) + " 전체" : "";
@@ -1423,7 +1428,9 @@ function insCards(gs, tot, scope, lvl, f) {
   const top5 = (S, i) => (i === 2 ? S.lo.concat(S.hi) : S.P[i]).slice().sort((x, y) => y.r.imp - x.r.imp).slice(0, 5);
   const sub2 = o => o.g.d.length > 1 ? ` <small class="muted">(${esc(o.g.d.slice(0, -1).join(" › "))})</small>` : "";
   const crossH = (o, i, t, isPrd, td) => { const c = insCross(o, i, t, isPrd); if (!c || !c.top.length) return td ? `<td class="muted">-</td>` : "";
-    const s = c.top.map(x => `${esc(x.n)} <span class="neg">${i === 2 && t === "hi" ? "+" : "−"}${fN(x.v)}</span>`).join(" · ") + (c.n > 3 ? ` <span class="muted">외 ${c.n - 3}</span>` : "");
+    const sg = i === 2 && t === "hi" ? "+" : "−", IMN = ["매출 부족", "CM 감소", t === "hi" ? "매출 증가" : "매출 차이", "CM 손실"][i];
+    const tip = x => x.sk && x.sk.length ? `${x.n} 안 SKU TOP 3 (${IMN}, 월)\n` + x.sk.slice(0, 3).map(s => `· ${s.n}  ${sg}${fN(s.v)}`).join("\n") + (x.sk.length > 3 ? `\n외 ${x.sk.length - 3}개` : "") : "";
+    const s = c.top.map(x => `${esc(x.n)} <span class="neg"${tip(x) ? ` title="${esc(tip(x))}" style="cursor:help;text-decoration:underline dotted"` : ""}>${sg}${fN(x.v)}</span>`).join(" · ") + (c.n > 3 ? ` <span class="muted">외 ${c.n - 3}</span>` : "");
     return td ? `<td style="white-space:normal;min-width:200px;font-size:12px">${s}</td>` : `<br><span class="muted">↳ 원인 ${esc(c.nmX)}:</span> ${s}`; };
   const crossX = (o, i, t, isPrd) => { const c = insCross(o, i, t, isPrd); return c && c.top.length ? ` [원인 ${c.nmX}: ${c.top.map(x => `${x.n} ${i === 2 && t === "hi" ? "+" : "−"}${fN(x.v)}`).join(", ")}]` : ""; };
   const isP = side === "prd", XH = `주요 원인 ${esc(((D.mode === "p" || isP) ? D.dims.find(d => /채널/.test(d)) || "채널" : D.dims[subIdx()]).replace(/^Meadow\s*/, ""))} TOP3`;
