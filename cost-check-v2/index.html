@@ -589,6 +589,10 @@ function parse(text) {
       }
     }
   }
+  if (mf.C && (mf.D || mf.P)) {   // 비용 = 매출차감 + 판관비 검증
+    let tC = 0, tDP = 0; for (const Lf of LL) for (const y of [y0, y1]) for (const s of subs) { const o = Lf.v[y][s]; tC += o.C; tDP += o.D + o.P; }
+    if (Math.abs(tC - tDP) > Math.max(1, Math.abs(tC) * 0.001)) W.push(`비용 합계(${Math.round(tC).toLocaleString()})와 매출차감+판관비(${Math.round(tDP).toLocaleString()})가 달라요 — 차이 ${Math.round(tC - tDP).toLocaleString()} (판촉율은 비용 기준, 차감율·판관비율은 각 항목 기준)`);
+  }
   return { dims, nd, years, y0, y1, subs, leaves: LL, ign, mf, nRows, nSub, skipped, W };
 }
 
@@ -607,6 +611,8 @@ function judge(a, b) {
   r.dS = b.S - a.S; r.dSp = Math.abs(a.S) > e ? r.dS / Math.abs(a.S) : null;
   r.dM = b.M - a.M; r.dC = b.C - a.C;
   r.dcr = (r.cr0 != null && r.cr1 != null) ? r.cr1 - r.cr0 : null;
+  r.dr0 = a.S ? a.D / a.S : null; r.dr1 = b.S ? b.D / b.S : null; r.pr0 = a.S ? a.P / a.S : null; r.pr1 = b.S ? b.P / b.S : null;
+  r.ddr = r.dr0 != null && r.dr1 != null ? r.dr1 - r.dr0 : null; r.dpr = r.pr0 != null && r.pr1 != null ? r.pr1 - r.pr0 : null;
   r.dmr = (r.mr0 != null && r.mr1 != null) ? r.mr1 - r.mr0 : null;
   if (Math.abs(a.S) < e && Math.abs(b.S) < e) { r.k = "na"; return r; }
   if (a.S <= e) { r.k = "new"; return r; }
@@ -756,12 +762,14 @@ async function analyze(save, keepView) {
 
 /* ---------- 2. 요약표 (보고 양식) ---------- */
 const ITEMS = [["S", "Gross Revenue (총매출)"], ["C", "판촉비용"], ["cr", "% 판촉비용률"], ["M", "CM (공헌이익)"], ["mr", "% margin"]];
+/* 비용이 매출차감(DC+장려금)·판관비로 나뉘어 들어온 자료인지 */
+const hasSplit = () => !!(D && (D.mf.D || D.mf.P));
 function sumBlock(g) {
   const V = views(), J = V.map(v => g.j[v]);
-  const val = (j, side, it) => it === "cr" ? (side ? j.cr1 : j.cr0) : it === "mr" ? (side ? j.mr1 : j.mr0) : (side ? j.b : j.a)[it];
-  const rows = [];
-  for (const [it, label] of ITEMS) {
-    const rt = it === "cr" || it === "mr";
+  const val = (j, side, it) => it === "cr" ? (side ? j.cr1 : j.cr0) : it === "mr" ? (side ? j.mr1 : j.mr0) : it === "dr" ? (side ? j.dr1 : j.dr0) : it === "pr" ? (side ? j.pr1 : j.pr0) : (side ? j.b : j.a)[it];
+  const rows = [], IT = hasSplit() ? [...ITEMS.slice(0, 3), ["dr", "　└ % 차감율 (DC+장려금)"], ["pr", "　└ % 판관비율"], ...ITEMS.slice(3)] : ITEMS;
+  for (const [it, label] of IT) {
+    const rt = it === "cr" || it === "mr" || it === "dr" || it === "pr";
     const c0 = J.map(j => val(j, 0, it)), c1 = J.map(j => val(j, 1, it));
     const dl = J.map((j, i) => (c1[i] == null || c0[i] == null) ? null : c1[i] - c0[i]);
     const pc = J.map((j, i) => rt || !c0[i] ? null : dl[i] / Math.abs(c0[i]));
@@ -797,7 +805,7 @@ function renderSum() {
       r.c0.forEach((x, i) => h += `<td class="n${i === 0 ? " sep" : ""}">${f(x)}</td>`);
       r.c1.forEach((x, i) => h += `<td class="n${i === 0 ? " sep" : ""}">${f(x)}</td>`);
       r.dl.forEach((x, i) => {
-        const pk = (r.it === "cr" && x != null && x * 100 > ST.thr + 1e-9) || (r.it === "mr" && x != null && x * 100 <= -0.05);
+        const pk = ((r.it === "cr" || r.it === "dr" || r.it === "pr") && x != null && x * 100 > ST.thr + 1e-9) || (r.it === "mr" && x != null && x * 100 <= -0.05);
         h += `<td class="n${i === 0 ? " sep" : ""}${pk ? " pk" : ""}${nc(r.rt ? x * 1000 : x)}">${r.rt ? fPP(x) : fD(x)}</td>`;
       });
       r.pc.forEach((x, i) => h += r.rt ? `<td class="hat${i === 0 ? " sep" : ""}"></td>` : `<td class="n${i === 0 ? " sep" : ""}${nc(x * 1000)}">${fGr(x)}</td>`);
@@ -824,6 +832,7 @@ function colDefs() {
     ["매출 " + y0, g => g.jj.a.S, fN], ["매출 " + y1, g => g.jj.b.S, fN], ["매출 Δ", g => g.jj.dS, fD, 1], ["매출 Δ%", g => g.jj.dSp, fGr, 1],
     ["판촉비용 " + y0, g => g.jj.a.C, fN], ["판촉비용 " + y1, g => g.jj.b.C, fN],
     ["판촉율 " + y0, g => g.jj.cr0, fP], ["판촉율 " + y1, g => g.jj.cr1, fP], ["판촉율 Δ", g => g.jj.dcr, fPP, 2],
+    ...(hasSplit() ? [["차감율 " + y0, g => g.jj.dr0, fP], ["차감율 " + y1, g => g.jj.dr1, fP], ["차감율 Δ", g => g.jj.ddr, fPP, 2], ["판관비율 " + y0, g => g.jj.pr0, fP], ["판관비율 " + y1, g => g.jj.pr1, fP], ["판관비율 Δ", g => g.jj.dpr, fPP, 2]] : []),
     ["CM " + y0, g => g.jj.a.M, fN], ["CM " + y1, g => g.jj.b.M, fN], ["CM Δ", g => g.jj.dM, fD, 1],
     ["CM율 " + y0, g => g.jj.mr0, fP], ["CM율 " + y1, g => g.jj.mr1, fP], ["CM율 Δ", g => g.jj.dmr, fPP, 1],
     ["ΔCM: 매출효과", g => g.jj.eS, fD, 1], ["판촉율효과", g => g.jj.eC, fD, 1], ["원가율효과", g => g.jj.eV, fD, 1]
@@ -1341,7 +1350,8 @@ function insItem(g) {
   const r = (o, k) => o && o.S ? o[k] / o.S : null;
   const cr0 = r(a, "C"), cr1 = r(b, "C"), crH = r(h, "C");
   const m1 = b.S ? (b.M + b.C) / b.S : null;   // 판촉비 빼기 전 마진율 (= 1 − 원가율, 기타 있으면 반영)
-  return { g, a, b, h, tr, sp, cr0, cr1, crH, dcr: cr0 != null && cr1 != null ? cr1 - cr0 : null, dS: b.S - a.S, dSp: a.S ? (b.S - a.S) / Math.abs(a.S) : null, dC: b.C - a.C, dM: b.M - a.M, m1 };
+  const dr0 = r(a, "D"), dr1 = r(b, "D"), pr0 = r(a, "P"), pr1 = r(b, "P");
+  return { g, a, b, h, tr, sp, cr0, cr1, crH, ddr: dr0 != null && dr1 != null ? dr1 - dr0 : null, dpr: pr0 != null && pr1 != null ? pr1 - pr0 : null, dD: b.D - a.D, dP: b.P - a.P, dcr: cr0 != null && cr1 != null ? cr1 - cr0 : null, dS: b.S - a.S, dSp: a.S ? (b.S - a.S) / Math.abs(a.S) : null, dC: b.C - a.C, dM: b.M - a.M, m1 };
 }
 function insP1(o) { if (!(o.a.S > 0 && o.b.S > 0) || o.dSp == null || o.dSp > -INSK.sMin) return null; const hard = o.dcr != null && o.dcr > -INSK.cut; return { imp: -o.dS, k: hard ? "red" : "warn", lb: hard ? "🔴 판촉율 유지·↑인데 매출↓" : "🟡 판촉율도 줄임" }; }
 function insP2(o) { if (!(o.a.S > 0 && o.b.S > 0) || o.dcr == null || !(o.dcr * 100 > ST.thr + 1e-9) || !(o.dS < 0)) return null; return { imp: Math.max(0, -o.dM), k: "red", lb: "🔴 판촉율↑ 매출↓" }; }
@@ -1419,7 +1429,7 @@ function insCards(gs, tot, scope, lvl, f) {
   const lead = C.canDrill ? ` · 행 클릭 → ${esc(C.next)}(으)로 내려가기` : "";
   const N = o => `<b>${esc(nm(o.g))}</b>`;
   const s1 = x => { const o = x.o; return `${N(o)} — 비교 월평균 매출 ${fN(o.b.S)}, 기준 ${fN(o.a.S)}보다 <span class="neg">${fN(-o.dS)} 낮게(${fGr(o.dSp)})</span> 설정 · 판촉율 ${fP(o.cr0)}→${fP(o.cr1)} (${fPP(o.dcr)}) ${x.r.k === "red" ? "→ <b>판촉율은 유지·증가인데 매출만 낮춰 잡음 = 과소설정 의심</b>" : "→ 판촉도 줄여서 감소 일부 설명됨"} · 연 환산 −${fN(-o.dS * 12)}`; };
-  const s2 = x => { const o = x.o; return `${N(o)} — 판촉율 ${fP(o.cr0)}→${fP(o.cr1)} (<span class="neg">${fPP(o.dcr)}</span>) 올렸는데 매출 ${fN(o.a.S)}→${fN(o.b.S)} (<span class="neg">${fGr(o.dSp)}</span>) → CM 월 <span class="${nc(o.dM)}">${fD(o.dM)}</span> (연 환산 ${fD(o.dM * 12)})`; };
+  const s2 = x => { const o = x.o; return `${N(o)} — 판촉율 ${fP(o.cr0)}→${fP(o.cr1)} (<span class="neg">${fPP(o.dcr)}</span>${hasSplit() ? ` · 차감 ${fPP(o.ddr)} / 판관 ${fPP(o.dpr)}` : ""}) 올렸는데 매출 ${fN(o.a.S)}→${fN(o.b.S)} (<span class="neg">${fGr(o.dSp)}</span>) → CM 월 <span class="${nc(o.dM)}">${fD(o.dM)}</span> (연 환산 ${fD(o.dM * 12)})`; };
   const s3 = x => { const o = x.o; return x.r.t === "hi" ? `${N(o)} — 판촉율 ${fP(o.crH)}→${fP(o.cr1)} (<span class="neg">${fPP(x.r.dr)}</span>) 크게 줄였는데 매출은 ${lh} 월평균 ${fN(o.h.S)} → ${fN(o.b.S)} (+${fN(x.r.imp)}) 늘려 잡음 → <b>과대 설정 의심</b>` : `${N(o)} — ${esc(yl(DC0.y0))} 월별 매출 추세 <b>${fGr(o.tr)}</b> 상승 중인데 비교 월평균 ${fN(o.b.S)} &lt; ${lh} 월평균 ${fN(o.h.S)} (<span class="neg">−${fN(x.r.imp)}</span>) · 판촉율 ${fP(o.crH)}→${fP(o.cr1)} (${fPP(x.r.dr)}) ${x.r.k === "red" ? "→ <b>판촉율 유지·증가인데 매출 꺾음 = 과소 의심</b>" : "→ 판촉 축소로 일부 설명됨"}`; };
   const s4 = x => { const o = x.o; return `${N(o)} — 판촉비 월 <span class="neg">${fD(o.dC)}</span> 늘렸는데 매출 ${fD(o.dS)} (판촉비 1원당 ${fx(x.r.mult)}, 본전 ${fx(x.r.need)}) → 효율 부족으로 CM 월 <span class="neg">−${fN(x.r.imp)}</span> (연 환산 −${fN(x.r.imp * 12)})`; };
   const SS = [s1, s2, s3, s4];
@@ -1439,12 +1449,13 @@ function insCards(gs, tot, scope, lvl, f) {
   // 🎯 IMPACT — ①→④, 관점마다 📍 조직 TOP 5 + 📦 소분류 TOP 5
   let ih = `<p class="muted">TOP 5 · 월평균 백만원 · 원인 = 그 항목 안에서 IMPACT 몫 큰 순${sub ? ` · 📦 = 채널 합친 ${esc(sub.dimN)}` : ""} · 판정 아이콘에 마우스 올리면 설명</p>`, ix = `[🎯 IMPACT — ${scope}, 월평균 백만원]`;
   // IMPACT 표: 관점별 열 (판정은 아이콘만, 마우스 올리면 설명)
+  const fPPc = v => v != null && v * 100 > 0.05 ? ng(fPP(v)) : fPP(v), fDc = v => v != null && Math.round(v) > 0 ? ng(fD(v)) : fD(v);   // 비용 쪽은 늘면 빨강
   const ico = r => `<span title="${esc(r.lb)}">${r.lb.split(" ")[0]}</span>`, ng = s => `<span class="neg">${s}</span>`;
-  const IMPH = [["", "매출 기준→비교", "부족(월)", "증감률", "판촉율 Δ"], ["매출 증감률", "판촉율 Δ", "CM 증감(월)"], ["", "26 추세", "매출 26평균→비교", "차이(월)", "판촉율 Δ"], ["", "판촉비 Δ(월)", "매출 Δ(월)", "1원당/본전", "CM 손실(월)"]].map(h => h.map(x => x.replace("26", yl(DC0 ? DC0.y0 : D.y0).replace("년", ""))));
+  const IMPH = [["", "매출 기준→비교", "부족(월)", "증감률", "판촉율 Δ"], ["매출 증감률", "판촉율 Δ", ...(hasSplit() ? ["└ 차감율 Δ", "└ 판관비율 Δ"] : []), "CM 증감(월)"], ["", "26 추세", "매출 26평균→비교", "차이(월)", "판촉율 Δ"], ["", "판촉비 Δ(월)", ...(hasSplit() ? ["└ 차감 / 판관 Δ"] : []), "매출 Δ(월)", "1원당/본전", "CM 손실(월)"]].map(h => h.map(x => x.replace("26", yl(DC0 ? DC0.y0 : D.y0).replace("년", ""))));
   const IMPR = [x => { const o = x.o; return [ico(x.r), `${fN(o.a.S)}→${fN(o.b.S)}`, ng("−" + fN(-o.dS)), fGr(o.dSp), fPP(o.dcr)]; },
-    x => { const o = x.o; return [ng(fGr(o.dSp)), ng(fPP(o.dcr)), ng(fD(o.dM))]; },
+    x => { const o = x.o; return [ng(fGr(o.dSp)), ng(fPP(o.dcr)), ...(hasSplit() ? [fPPc(o.ddr), fPPc(o.dpr)] : []), ng(fD(o.dM))]; },
     x => { const o = x.o; return [ico(x.r), fGr(o.tr), `${fN(o.h.S)}→${fN(o.b.S)}`, x.r.t === "hi" ? "+" + fN(x.r.imp) : ng("−" + fN(x.r.imp)), fPP(x.r.dr)]; },
-    x => { const o = x.o; return [ico(x.r), fD(o.dC), fD(o.dS), `${fx(x.r.mult)} / ${fx(x.r.need)}`, ng("−" + fN(x.r.imp))]; }];
+    x => { const o = x.o; return [ico(x.r), fD(o.dC), ...(hasSplit() ? [`${fDc(o.dD)} / ${fDc(o.dP)}`] : []), fD(o.dS), `${fx(x.r.mult)} / ${fx(x.r.need)}`, ng("−" + fN(x.r.imp))]; }];
   const cxN = isPrd => ((D.mode === "p" || isPrd) ? D.dims.find(d => /채널/.test(d)) || "채널" : D.dims[subIdx()]).replace(/^Meadow\s*/, "");
   const blk = (S, i, icon, dn, isSub) => { const t = top5(S, i);
     return `<div><div class="muted" style="margin:4px 0 2px">${icon} <b>${esc(dn)}</b>별 ${cntOf(S, i)}개 · ${IMPN[i]} 합 월 <b>${fN(impOf(S, i))}</b>${i === 2 && S.hi.length ? ` (⚠️ 과대 의심 ${S.hi.length})` : ""}</div>${t.length ? `<div class="tw" style="max-height:none"><table class="ov imp"><thead><tr><th>${esc(dn)}</th>${IMPH[i].map(h => `<th>${esc(h)}</th>`).join("")}<th>원인 ${esc(cxN(isSub))} TOP3</th></tr></thead><tbody>${t.map(x => `<tr><td title="${esc(x.o.g.d.join(" › "))}"><b>${esc(nm(x.o.g))}</b></td>${IMPR[i](x).map((v, k) => `<td class="${k === 0 && i !== 1 ? "" : "n"}">${v}</td>`).join("")}${crossH(x.o, i, x.r.t, !!isSub, 1)}</tr>`).join("")}</tbody></table></div>` : `<p class="muted">✅ 해당 없음</p>`}</div>`; };
@@ -1464,7 +1475,7 @@ function insCards(gs, tot, scope, lvl, f) {
     x: `[${NM[0]} — ${scope}, ${sideTag}] ${S.P[0].length}개\n` + S.P[0].slice(0, 20).map(x => "· " + strip(s1(x))).join("\n") });
   cards.push({ p: 2, cls: "red wide", t: ttl(1, `판촉율 +${ST.thr}%p 초과 & 매출 감소 · ${S.P[1].length}개 · CM 감소 큰 순`),
     h: `<p class="muted">${esc(la)} → ${esc(lb)} 월평균 비교${lead}</p>` +
-      tb(["항목", `매출 ${esc(la)}→${esc(lb)}`, "매출 증감률", "판촉율", "판촉율 증감", "판촉비 증감(월)", "CM 증감(월)", XH], S.P[1].map(x => { const o = x.o; return `<tr${trA(o, C)}>${tdN(o, C)}<td class="n">${fN(o.a.S)}→${fN(o.b.S)}</td><td class="n neg">${fGr(o.dSp)}</td><td class="n">${fP(o.cr0)}→${fP(o.cr1)}</td><td class="n neg">${fPP(o.dcr)}</td><td class="n${nc(-o.dC)}">${fD(o.dC)}</td><td class="n${nc(o.dM)}">${fD(o.dM)}</td>${crossH(o, 1, x.r.t, isP, 1)}</tr>`; })),
+      tb(["항목", `매출 ${esc(la)}→${esc(lb)}`, "매출 증감률", "판촉율", "판촉율 증감", ...(hasSplit() ? ["└ 차감율 Δ", "└ 판관비율 Δ"] : []), "판촉비 증감(월)", "CM 증감(월)", XH], S.P[1].map(x => { const o = x.o; return `<tr${trA(o, C)}>${tdN(o, C)}<td class="n">${fN(o.a.S)}→${fN(o.b.S)}</td><td class="n neg">${fGr(o.dSp)}</td><td class="n">${fP(o.cr0)}→${fP(o.cr1)}</td><td class="n neg">${fPP(o.dcr)}</td>${hasSplit() ? `<td class="n">${fPPc(o.ddr)}</td><td class="n">${fPPc(o.dpr)}</td>` : ""}<td class="n${nc(-o.dC)}">${fD(o.dC)}</td><td class="n${nc(o.dM)}">${fD(o.dM)}</td>${crossH(o, 1, x.r.t, isP, 1)}</tr>`; })),
     x: `[${NM[1]} — ${scope}, ${sideTag}] ${S.P[1].length}개\n` + S.P[1].slice(0, 20).map(x => "· " + strip(s2(x))).join("\n") });
   const hasTr = C.items.some(o => o.tr != null);
   const h3 = !hasTr ? `<p class="muted">월별 자료(기간 비교)에서만 볼 수 있어요</p>` :
@@ -1476,7 +1487,7 @@ function insCards(gs, tot, scope, lvl, f) {
     x: `[${NM[2]} — ${scope}, ${sideTag}] 추세↑인데 감소 ${S.lo.length}개 / 판촉율↓인데 매출↑ ${S.hi.length}개\n` + S.P[2].slice(0, 20).map(x => "· " + strip(s3(x)).replace(/&lt;/g, "<")).join("\n") });
   cards.push({ p: 4, cls: "warn wide", t: ttl(3, `판촉비↑인데 매출 증가가 본전 배수에 못 미침 · ${S.P[3].length}개 · CM 손실 큰 순`),
     h: `<p class="muted">본전 = 1 ÷ (1 − 원가율) · CM 손실 = 판촉비Δ − 매출Δ × (1 − 원가율)${lead}</p>` +
-      tb(["항목", "판정", "판촉비 증감(월)", "매출 증감(월)", "1원당 매출", "본전 배수", "CM 손실(월)", "CM 실제 증감(월)", "연 환산 손실", XH], S.P[3].map(x => { const o = x.o; return `<tr${trA(o, C)}>${tdN(o, C)}<td>${tag(x.r)}</td><td class="n neg">${fD(o.dC)}</td><td class="n${nc(o.dS)}">${fD(o.dS)}</td><td class="n neg">${fx(x.r.mult)}</td><td class="n">${fx(x.r.need)}</td><td class="n neg">−${fN(x.r.imp)}</td><td class="n${nc(o.dM)}">${fD(o.dM)}</td><td class="n neg">−${fN(x.r.imp * 12)}</td>${crossH(o, 3, x.r.t, isP, 1)}</tr>`; })),
+      tb(["항목", "판정", "판촉비 증감(월)", ...(hasSplit() ? ["└ 차감 / 판관 Δ(월)"] : []), "매출 증감(월)", "1원당 매출", "본전 배수", "CM 손실(월)", "CM 실제 증감(월)", "연 환산 손실", XH], S.P[3].map(x => { const o = x.o; return `<tr${trA(o, C)}>${tdN(o, C)}<td>${tag(x.r)}</td><td class="n neg">${fD(o.dC)}</td>${hasSplit() ? `<td class="n">${fDc(o.dD)} / ${fDc(o.dP)}</td>` : ""}<td class="n${nc(o.dS)}">${fD(o.dS)}</td><td class="n neg">${fx(x.r.mult)}</td><td class="n">${fx(x.r.need)}</td><td class="n neg">−${fN(x.r.imp)}</td><td class="n${nc(o.dM)}">${fD(o.dM)}</td><td class="n neg">−${fN(x.r.imp * 12)}</td>${crossH(o, 3, x.r.t, isP, 1)}</tr>`; })),
     x: `[${NM[3]} — ${scope}, ${sideTag}] ${S.P[3].length}개\n` + S.P[3].slice(0, 20).map(x => "· " + strip(s4(x))).join("\n") });
   // 머리 카드용: 📍/📦 전환 버튼 + 제품 경로
   let sideH = "";
@@ -1760,9 +1771,9 @@ function impRows() {
   const fx = v => v == null || !isFinite(v) ? "-" : v < 0 ? "매출↓" : v.toFixed(1) + "배";
   const why = (i, x) => { const o = x.o, r = x.r;
     return [`판촉율 ${fP(o.cr0)}→${fP(o.cr1)}(${fPP(o.dcr)})${r.k === "red" ? " 유지·↑인데" : "도 줄였고"} 매출 ${fGr(o.dSp)} 설정 → ${r.k === "red" ? "과소설정 의심" : "감소 일부 설명됨"} (부족 월 ${fN(r.imp)})`,
-      `판촉율 ${fPP(o.dcr)} 올렸는데 매출 ${fGr(o.dSp)} → CM 월 ${fD(o.dM)}`,
+      `판촉율 ${fPP(o.dcr)}${hasSplit() ? `(차감 ${fPP(o.ddr)} / 판관 ${fPP(o.dpr)})` : ""} 올렸는데 매출 ${fGr(o.dSp)} → CM 월 ${fD(o.dM)}`,
       r.t === "hi" ? `판촉율 ${fPP(r.dr)} 크게 줄였는데 매출 26년 평균 대비 +${fN(r.imp)} → 과대 설정 의심` : `26년 추세 ${fGr(o.tr)} 상승인데 26년 평균 대비 −${fN(r.imp)} 설정 · 판촉율 ${fPP(r.dr)} → ${r.k === "red" ? "과소 의심" : "판촉 축소로 일부 설명"}`,
-      `판촉비 월 ${fD(o.dC)} 늘렸는데 매출 ${fD(o.dS)} (1원당 ${fx(r.mult)}, 본전 ${fx(r.need)}) → CM 손실 월 ${fN(r.imp)}`][i]; };
+      `판촉비 월 ${fD(o.dC)}${hasSplit() ? `(차감 ${fD(o.dD)} / 판관 ${fD(o.dP)})` : ""} 늘렸는데 매출 ${fD(o.dS)} (1원당 ${fx(r.mult)}, 본전 ${fx(r.need)}) → CM 손실 월 ${fN(r.imp)}`][i]; };
   const skuTop = (i, x) => { const f = fImp(i, x.r.t); if (!x.o._sk2) x.o._sk2 = insGroupsBy(x.o.g.L, si, si).map(insItem);
     const s = x.o._sk2.map(q => ({ n: nm(q.g), v: f(q) })).filter(q => q.v > 0.5).sort((a, b) => b.v - a.v).slice(0, 3);
     return s.length ? ` / SKU: ` + s.map(q => `${q.n} ${i === 2 && x.r.t === "hi" ? "+" : "−"}${fN(q.v)}`).join(", ") : ""; };
@@ -1790,13 +1801,13 @@ function impXlsx() {
   const dSt = (v, isR) => { const z = isR ? Math.abs(v) < 0.05 : Math.abs(v) < 0.5; return z ? (isR ? 5 : 7) : v < 0 ? (isR ? 12 : 10) : (isR ? 13 : 11); };
   R.rows.forEach((x, ix) => {
     const o = x.o, A = o.h || o.a, Bs = o.a, C = o.b, rt = (t, k) => t && t.S ? t[k] / t.S : null;
-    const met = [["매출", A.S, Bs.S, C.S, 0], ["비용율", rt(A, "C"), rt(Bs, "C"), rt(C, "C"), 1], ["공헌이익", A.M, Bs.M, C.M, 0], ["공헌이익율", rt(A, "M"), rt(Bs, "M"), rt(C, "M"), 1]];
+    const met = [["매출", A.S, Bs.S, C.S, 0], ["비용율", rt(A, "C"), rt(Bs, "C"), rt(C, "C"), 1], ...(hasSplit() ? [["└ 차감율", rt(A, "D"), rt(Bs, "D"), rt(C, "D"), 1], ["└ 판관비율", rt(A, "P"), rt(Bs, "P"), rt(C, "P"), 1]] : []), ["공헌이익", A.M, Bs.M, C.M, 0], ["공헌이익율", rt(A, "M"), rt(Bs, "M"), rt(C, "M"), 1]];
     const r0 = r + 1;
     met.forEach(([n, a, b, c, isR], j) => { r++;
       const d1 = a != null && c != null ? (isR ? Math.round((c - a) * 1000) / 10 : Math.round((c - a) * 10) / 10) : null, d2 = b != null && c != null ? (isR ? Math.round((c - b) * 1000) / 10 : Math.round((c - b) * 10) / 10) : null;
       const lead = [x.p, ...x.dims].map((v, k) => cell(r, k, j === 0 && (k >= nOrg || start[ix][k]) ? v : "", 2)).join("");
       X.push(`<row r="${r}">${lead}${cell(r, nd, n, 2)}${[a, b, c].map((v, k) => cell(r, nd + 1 + k, v == null ? "" : isR ? v : Math.round(v * 10) / 10, isR ? 4 : 3)).join("")}${[d1, d2].map((v, k) => cell(r, nd + 4 + k, v == null ? "" : v, v == null ? (isR ? 5 : 7) : dSt(v, isR))).join("")}${cell(r, nC - 1, j === 0 ? x.txt : "", 6)}</row>`); });
-    for (let k = 0; k < nOrg; k++) if (start[ix][k]) mg.push(`${colL(k)}${r0}:${colL(k)}${r0 + start[ix][k] * 4 - 1}`);
+    for (let k = 0; k < nOrg; k++) if (start[ix][k]) mg.push(`${colL(k)}${r0}:${colL(k)}${r0 + start[ix][k] * met.length - 1}`);
     for (let k = nOrg; k < nd; k++) mg.push(`${colL(k)}${r0}:${colL(k)}${r}`);
     mg.push(`${colL(nC - 1)}${r0}:${colL(nC - 1)}${r}`);
   });
