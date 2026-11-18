@@ -1234,8 +1234,9 @@ function goalCalc(GD, ym, chF, L) {
   const rows = src ? src.rows.filter(r => chF === "전체" || gk(r.ch) === gk(chF)) : [];
   const addA = (x, r) => { let c = x.act.get(r.ch); if (!c) x.act.set(r.ch, c = { sales: 0, cost: 0, cm: 0, vc: 0, tr: 0 }); c.sales += r.sales || 0; c.cost += r.cost || 0; c.cm += r.cm || 0; c.vc += r.vc || 0; c.tr += r.tr || 0; };
   const pl = [...grp.values()].map(x => [x, [...x.pats.values()]]);
-  let unS = 0;
-  for (const r of rows) { let any = false; for (const [x, ps] of pl) if (ps.some(p => gHit(p, r))) { addA(x, r); any = true; } if (any) addA(all, r); else unS += r.sales || 0; }
+  // 목표 없는 분류 실적도 합계에 포함 (대시보드 숫자와 맞춤) → 표에는 '(목표 없음)' 행으로 따로 표시
+  let unS = 0; const none = mk("\u0000none", GLV.slice(0, L).map((_, i) => i ? "" : "(목표 없음)"));
+  for (const r of rows) { let any = false; for (const [x, ps] of pl) if (ps.some(p => gHit(p, r))) { addA(x, r); any = true; } addA(all, r); if (!any) { addA(none, r); unS += r.sales || 0; } }
   const dAll = src ? Math.max(0, ...Object.keys(src.prorate || {}).filter(c => chF === "전체" || gk(c) === gk(chF)).map(dOf)) : 0;
   const fin = x => {
     let s = 0, c = 0, m = 0, fs = 0, fc = 0, fm = 0, d = 0, vc = 0, tr = 0;
@@ -1250,6 +1251,7 @@ function goalCalc(GD, ym, chF, L) {
     return x;
   };
   const groups = [...grp.values()].map(fin).sort((a, b) => b.S - a.S || b.sales - a.sales);
+  if (none.act.size) groups.push(fin(none));
   return { Y, M, ym, mdays, src, groups, all: fin(all), unS, nG: G.length, dAll };
 }
 function goalYear(GD, Y, curYm, chF) {
@@ -1353,7 +1355,7 @@ function renderGoal() {
   if (GD.clsDiff && GD.clsDiff.size) wn.push(`목표 파일과 제품분류의 대·소카테고리가 다른 SKU ${GD.clsDiff.size}개 → 실적과 맞추려고 제품분류 기준 사용: ${[...GD.clsDiff].slice(0, 5).map(([cd, o]) => esc(`${cd} ${o.name || ""} (목표 ${o.f} / 제품분류 ${o.p})`)).join(", ")}${GD.clsDiff.size > 5 ? " 외" : ""}`);
   if (!c.src) wn.push(`${gym} 실적 없음 — ${gym === baseYm ? "1단계에서 계산하면 나와요" : "📦 보관함에 이 달이 없어요"}`);
   if (T.miss.length) wn.push(`보관함 없는 지난 달: ${T.miss.map(m => m + "월").join(", ")} → YTD 비교(실적·목표 둘 다)에서 빠지고, 연말 예상엔 목표로 대체 (그 달 결과를 보관함에 저장하면 반영)`);
-  if (c.src && c.unS > 0 && x.sales > 0) wn.push(`목표 없는 분류의 실적 ${mil1(c.unS)}백만 (진척률 계산에서 제외)`);
+  if (c.src && c.unS > 0 && x.sales > 0) wn.push(`목표 없는 분류의 실적 ${mil1(c.unS)}백만 — 합계·진척률에 포함 (목표는 0), 표 맨 아래 '(목표 없음)' 행`);
   if (!c.nG) wn.push(`${gym} 목표가 없어요 (${chF === "전체" ? "" : chF + " · "}연도 ${Y})`);
   if (x.hasS && x.sales && x.S && (x.sales / x.S > 50 || x.sales / x.S < 0.002)) wn.push(`목표와 실적 규모가 너무 달라요 (진척 ${pct(x.pS)}) — 목표 금액 단위(원/천원/백만원)를 확인하세요`);
   if (wn.length) h += `<div class="warnbox" style="margin-top:6px">${wn.map(w => `<div>⚠️ ${esc(w)}</div>`).join("")}</div>`;
