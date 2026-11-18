@@ -911,14 +911,15 @@ function momCalc(R) {
   let skuC = null, skuP = null;
   const cS = R.archived ? sdRows(ARC[R.archived]) : R.rows.filter(r => r.day != null), pS = sdRows(P);
   // 비교 채널 중 하나라도 SKU×일자가 없으면 (예전 저장분) 부분 합계가 틀리므로 툴팁 대신 재저장 안내
-  const hasAll = S => S && chs.every(ch => S.some(r => r.ch === ch));
-  if (hasAll(cS) && hasAll(pS)) {
+  const miss = S => { const h = new Set((S || []).map(r => r.ch)); return chs.filter(ch => !h.has(ch)); };
+  const missC = miss(cS), missP = miss(pS);
+  if (!missC.length && !missP.length) {
     const cA = cS.filter(r => inC.has(r.ch)), pA = pS.filter(r => inC.has(r.ch));
     let cw = cA.filter(r => r.day >= 1 && r.day <= L[r.ch]), pw = pA.filter(r => r.day >= 1 + off && r.day <= L[r.ch] + off);
     if (MOM.fix) { cw = momScale(cA, cw, R.prorate || {}, mdC, L); pw = momScale(pA, pw, P.prorate || {}, mdP, L); }
     skuC = filt(cw); skuP = filt(pw);
   }
-  return { ym, pv, y, m, py, pm, off, chs, N, L, cut, mdC, mdP, cur: filt(cWin), prv: filt(pWin), fixRaw, fixAdj, skuC, skuP };
+  return { ym, pv, y, m, py, pm, off, chs, N, L, cut, mdC, mdP, cur: filt(cWin), prv: filt(pWin), fixRaw, fixAdj, skuC, skuP, missC, missP, cArc: !!R.archived };
 }
 // 보관 스냅샷의 SKU×일자(sd: [ch, code, day, sales, cm, jAmt, sAmt, pDist, pSku]) → 행 객체 (분류는 같은 스냅샷 rows에서)
 function sdRows(s) {
@@ -996,7 +997,8 @@ function momHtml() {
   const ppc = (o, k) => o.p.sales && o.c.sales ? cc(k, o.c[k] / o.c.sales - o.p[k] / o.p.sales) : "";
   let t2 = `<div class="tw"><table><thead><tr><th>${LV[MOM.lv]}</th><th>${pL} 매출</th><th>${cL} 매출</th><th>증감</th><th>증감률</th><th>${pL} 비용율</th><th>${cL} 비용율</th><th>%p</th><th>${pL} CM율</th><th>${cL} CM율</th><th>%p</th><th>CM 증감</th></tr></thead><tbody>`;
   const TP = C.skuC ? momTips(C, kf) : null; MOMTIP = [];
-  const noSku = `<b>SKU 증감</b><br>${pL} 보관 자료에 SKU×일자 정보가 없어요<br>→ ${pL} 로우를 다시 붙여넣고 「보관함 저장」하면 보여요`;
+  const ms = (lab, l, arcd) => l.length ? `<br>· <b>${lab}</b>${arcd ? " (보관함)" : ""}: ${l.map(esc).join(", ")}` : "";
+  const noSku = `<b>SKU 증감</b><br>아래 채널은 SKU×일자 정보가 없는 예전 저장분이에요${ms(pL, C.missP, true)}${ms(cL, C.missC, C.cArc)}<br>→ 그 달 로우를 다시 붙여넣고 「보관함 저장」하면 보여요 (Ctrl+F5 후 저장)`;
   const ta = (k, f) => { const h = TP ? (TP[k] || {})[f] : noSku; if (!h) return ""; MOMTIP.push(h); return ` data-tip="${MOMTIP.length - 1}" style="cursor:help;text-decoration:underline dotted"`; };
   const rowH = (lab, o, cls, tk) => `<tr${cls}><td>${lab}</td><td class="n">${mil1(o.p.sales)}</td><td class="n">${mil1(o.c.sales)}</td><td class="n ${cc("sales", o.df)}"${ta(tk, "s")}>${sg(o.df)}</td><td class="n ${cc("sales", o.df)}">${rr(o.c.sales, o.p.sales) != null ? pct(rr(o.c.sales, o.p.sales)) : "신규"}</td><td class="n">${pct(o.p.costR)}</td><td class="n">${pct(o.c.costR)}</td><td class="n ${ppc(o, "cost")}">${pp(o, "cost")}</td><td class="n">${pct(o.p.cmR)}</td><td class="n">${pct(o.c.cmR)}</td><td class="n ${ppc(o, "cm")}">${pp(o, "cm")}</td><td class="n ${cc("cm", o.c.cm - o.p.cm)}"${ta(tk, "c")}>${sg(o.c.cm - o.p.cm)}</td></tr>`;
   t2 += keys.map(o => rowH(esc(o.k), o, "", o.k)).join("") + rowH("합계", { p: a, c: b, df: b.sales - a.sales }, ' class="tot"', "\u0000합계") + `</tbody></table></div>`;
@@ -1014,7 +1016,8 @@ function momHtml() {
     for (const [v, c, dsh] of [[va, "#9aa3b2", ' stroke-dasharray="5 4"'], [vb, CLR.sales, ""]]) ch += `<path d="${v.map((q, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(q).toFixed(1)}`).join("")}" fill="none" stroke="${c}" stroke-width="2.2"${dsh}/>`;
     ch += `</svg><div class="lg"><span><b style="background:${CLR.sales}"></b>${cL} 누적 ${mil1(vb[Lx - 1])}</span><span><b style="background:#9aa3b2"></b>${pL} 누적 ${mil1(va[Lx - 1])}</span><span class="muted">기간 n일째까지 누적 총매출</span></div>`;
   }
-  return head + t + top + t2 + (ch ? `<h3 style="margin:14px 0 6px;font-size:14px">누적 총매출</h3>${ch}` : "");
+  const skuNote = TP ? `<div class="muted" style="margin:4px 0">💡 증감·CM 증감 칸에 마우스를 올리면 SKU별 증감이 보여요</div>` : `<div class="neg" style="margin:4px 0">⚠ SKU 툴팁 꺼짐 — SKU×일자 정보 없는 저장분:${ms(pL, C.missP, true)}${ms(cL, C.missC, C.cArc)}</div>`;
+  return head + t + top + skuNote + t2 + (ch ? `<h3 style="margin:14px 0 6px;font-size:14px">누적 총매출</h3>${ch}` : "");
 }
 document.addEventListener("change", e => { const k = e.target && e.target.dataset && e.target.dataset.mom; if (!k) return; MOM[k] = k === "fix" ? e.target.value === "true" : e.target.value; try { localStorage.setItem("dc_mom", JSON.stringify(MOM)); } catch (x) { } const c = document.getElementById("momCard"); if (c) c.innerHTML = momHtml(); });
 
