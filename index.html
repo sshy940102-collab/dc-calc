@@ -1111,7 +1111,7 @@ function parseGoal(g) {
   for (let i = 0; i < Math.min(g.length, 15); i++) {
     const r = g[i]; if (!r) continue; const h = r.map(norm);
     const f = re => h.findIndex(v => re.test(v)), fA = re => h.findIndex(v => re.test(v) && !/[율률%]/.test(v));
-    const ix = { ch: f(/^채널(명)?$/), big: f(/대카테고리|대분류/), small: f(/소카테고리|소분류/), evt: f(/세분류|행사분류/) };
+    const ix = { ch: f(/^(채널(명)?|경로세부1)$/), big: f(/대카테고리|대분류/), small: f(/소카테고리|소분류/), evt: f(/세분류|행사분류/) };
     if (ix.ch < 0 && ix.big < 0) continue;
     const mon = f(/^(월|기준월|대상월|연월|년월)$/), yr = f(/^(연도|년도|년)$/);
     const sal = fA(/매출/), cr = f(/비용[율률]/), cm = fA(/^CM|공헌이익/i);
@@ -1121,6 +1121,8 @@ function parseGoal(g) {
     const sku = f(/^(SKU코드|SKU|제품코드|제품CODE|제품번호|자재코드|자재)$/i), dcI = f(/^DC(금액)?(\(.*\))?$/i), jI = f(/^장려금/), pI = f(/^판관비/), vI = f(/^변동원가/), tI = f(/^(운송비|물류비)/);
     if (sku >= 0 && sal >= 0 && mon >= 0 && (dcI >= 0 || jI >= 0 || pI >= 0)) {
       out.layout = "sku"; out.unit = unitOf(h[sal]); const nmI = f(/^(SKU명|제품명|품명|자재명)$/);
+      // Rolling 양식: 비용·공헌이익 열이 있으면 툴 계산값과 대조 (행 단위, 10원 넘게 차이 나면 경고)
+      const cI = f(/^비용(계)?$/), cmI = f(/^(공헌이익|CM)(\(.*\))?$/i); out.chk = { n: 0, bad: [] };
       const M = new Map(), N = c => c >= 0 ? num(rr0[c]) ?? 0 : 0; let rr0;
       for (let j = i + 1; j < g.length; j++) {
         const rr = g[j]; if (!rr) continue; rr0 = rr; const cd = code(rr[sku]); if (!cd || SUB.test(norm(cd))) continue;
@@ -1128,8 +1130,13 @@ function parseGoal(g) {
         const mo = goalMonth(rr[mon]); if (!mo) { out.bad++; continue; }
         const y = (yr >= 0 ? yearV(rr[yr]) : null) ?? mo.y, ch = ix.ch >= 0 ? canonCh(gTxt(rr[ix.ch])) : "";
         const k = [gk(ch), cd, y ?? "", mo.m].join("\u0001");
-        let e = M.get(k); if (!e) M.set(k, e = { ch, code: cd, name: nmI >= 0 ? gTxt(rr[nmI]) : "", y, m: mo.m, u: out.unit, s: 0, dc: 0, j: 0, p: 0, vc: 0, tr: 0 });
+        let e = M.get(k); if (!e) M.set(k, e = { ch, code: cd, name: nmI >= 0 ? gTxt(rr[nmI]) : "", y, m: mo.m, u: out.unit, s: 0, dc: 0, j: 0, p: 0, vc: 0, tr: 0, fBig: ix.big >= 0 ? gTxt(rr[ix.big]) : "", fSmall: ix.small >= 0 ? gTxt(rr[ix.small]) : "" });
         e.s += sv ?? 0; e.dc += N(dcI); e.j += N(jI); e.p += N(pI); e.vc += N(vI); e.tr += N(tI);
+        if (cI >= 0 || cmI >= 0) {
+          out.chk.n++; const cst = N(dcI) + N(jI) + N(pI), cmv = (sv ?? 0) - cst - N(vI) - N(tI);
+          const dC = cI >= 0 && num(rr[cI]) != null ? num(rr[cI]) - cst : 0, dM = cmI >= 0 && num(rr[cmI]) != null ? num(rr[cmI]) - cmv : 0;
+          if (Math.abs(dC) > 10 || Math.abs(dM) > 10) out.chk.bad.push({ row: j + 1, ch, code: cd, name: e.name, dC, dM });
+        }
       }
       // 비용 = DC+장려금+판관비 (계산기와 동일), CM = 총매출 − 비용 − 변동원가 − 운송비
       out.rows = [...M.values()].map(e => { const cost = e.dc + e.j + e.p; return { ...e, cost, c: e.s ? cost / e.s : null, cm: e.s - cost - e.vc - e.tr }; });
@@ -1184,14 +1191,18 @@ function goalData() {   // 붙여넣은 목표 우선, 없으면 기준 파일�
 }
 // SKU형 목표: 제품코드 → 대·소카테고리·세분류 (계산기와 같은 규칙: 제품분류 → 점검 수기입력). 못 찾으면 (미분류)로 둬서 실적 (미분류)와 매칭
 function skuCls(GD) {
-  const ref = ST.ref || {}, FP = (ST.fix && ST.fix.prod) || {}, miss = new Map();
+  const ref = ST.ref || {}, FP = (ST.fix && ST.fix.prod) || {}, miss = new Map(), diff = new Map();
   for (const g of GD.rows) {
     const pj = ref.prodJ && ref.prodJ[g.code], fp = FP[g.code] || {};
-    const big = pj && !blank0(pj.L) ? pj.L : fp.big, small = pj && !blank0(pj.M) ? pj.M : fp.small, evt = ref.prodA && !blank0(ref.prodA[g.code]) ? ref.prodA[g.code] : fp.evt;
+    // 실적과 같은 기준이 되도록 제품분류 우선 → 점검 수기 → 목표 파일의 대·소카테고리 (다르면 경고)
+    const big0 = pj && !blank0(pj.L) ? pj.L : fp.big, small0 = pj && !blank0(pj.M) ? pj.M : fp.small;
+    const big = blank0(big0) ? g.fBig : big0, small = blank0(small0) ? g.fSmall : small0;
+    if (!blank0(big0) && g.fBig && (gk(big0) !== gk(g.fBig) || (!blank0(small0) && g.fSmall && gk(small0) !== gk(g.fSmall)))) diff.set(g.code, { name: g.name, f: g.fBig + " › " + g.fSmall, p: big0 + " › " + small0 });
+    const evt = ref.prodA && !blank0(ref.prodA[g.code]) ? ref.prodA[g.code] : fp.evt;
     g.big = blank0(big) ? NOCAT : String(big); g.small = blank0(small) ? NOCAT : String(small); g.evt = blank0(evt) ? NOCAT : String(evt);
     if (blank0(big) || blank0(small) || blank0(evt)) { const o = miss.get(g.code) || { name: g.name, s: 0 }; o.s += (g.s || 0) * (g.u || 1); miss.set(g.code, o); }
   }
-  GD.noCls = miss; return GD;
+  GD.noCls = miss; GD.clsDiff = diff; return GD;
 }
 const gUnit = () => +(ls.get("dc_gunit") || 0);   // 0 = 자동(머리글 단위)
 function goalsOf(GD, Y, M, chF) {
@@ -1336,7 +1347,9 @@ function renderGoal() {
   // 경고
   const wn = [];
   if (GD.bad) wn.push(`월을 못 읽은 목표 ${GD.bad}행 (빠짐)`);
-  if (GD.noCls && GD.noCls.size) wn.push(`제품분류에 없는 SKU 목표 ${GD.noCls.size}개 (총매출 ${mil1([...GD.noCls.values()].reduce((s, o) => s + o.s, 0))}백만) → (미분류)로 잡힘: ${[...GD.noCls].slice(0, 5).map(([c, o]) => esc(c + " " + (o.name || ""))).join(", ")}${GD.noCls.size > 5 ? " 외" : ""} — 제품분류 보완하면 자동 반영`);
+  if (GD.noCls && GD.noCls.size) wn.push(`분류(대·소·세분류 중 하나라도)가 비는 SKU 목표 ${GD.noCls.size}개 (총매출 ${mil1([...GD.noCls.values()].reduce((s, o) => s + o.s, 0))}백만) → 빈 단계는 (미분류)로 잡힘 (대·소는 목표 파일 값으로 채움, 세분류는 제품분류에서만): ${[...GD.noCls].slice(0, 5).map(([c, o]) => esc(c + " " + (o.name || ""))).join(", ")}${GD.noCls.size > 5 ? " 외" : ""} — 제품분류 보완하면 자동 반영`);
+  if (GD.chk && GD.chk.bad.length) wn.push(`목표 파일의 비용·공헌이익이 툴 계산(비용=DC+장려금+판관비, CM=총매출−비용−변동원가−운송비)과 다른 행 ${GD.chk.bad.length}개 / ${GD.chk.n}행: ${GD.chk.bad.slice(0, 5).map(b => esc(`${b.row}행 ${b.code} ${b.name || ""}`) + ` (비용 ${b.dC > 0 ? "+" : ""}${Math.round(b.dC).toLocaleString()}원, CM ${b.dM > 0 ? "+" : ""}${Math.round(b.dM).toLocaleString()}원)`).join(", ")}${GD.chk.bad.length > 5 ? " 외" : ""} — 툴은 계산값 사용`);
+  if (GD.clsDiff && GD.clsDiff.size) wn.push(`목표 파일과 제품분류의 대·소카테고리가 다른 SKU ${GD.clsDiff.size}개 → 실적과 맞추려고 제품분류 기준 사용: ${[...GD.clsDiff].slice(0, 5).map(([cd, o]) => esc(`${cd} ${o.name || ""} (목표 ${o.f} / 제품분류 ${o.p})`)).join(", ")}${GD.clsDiff.size > 5 ? " 외" : ""}`);
   if (!c.src) wn.push(`${gym} 실적 없음 — ${gym === baseYm ? "1단계에서 계산하면 나와요" : "📦 보관함에 이 달이 없어요"}`);
   if (T.miss.length) wn.push(`보관함 없는 지난 달: ${T.miss.map(m => m + "월").join(", ")} → YTD 비교(실적·목표 둘 다)에서 빠지고, 연말 예상엔 목표로 대체 (그 달 결과를 보관함에 저장하면 반영)`);
   if (c.src && c.unS > 0 && x.sales > 0) wn.push(`목표 없는 분류의 실적 ${mil1(c.unS)}백만 (진척률 계산에서 제외)`);
