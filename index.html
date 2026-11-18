@@ -931,7 +931,7 @@ function momHtml() {
   const rr = (x, w) => w ? (x - w) / Math.abs(w) : null, sg = v => (v > 0 ? "+" : "") + mil1(v), cl = v => v < 0 ? "neg" : v > 0 ? "pos" : "";
   const sh = (t, k) => t.sales ? t[k] / t.sales : null;
   const AM = [["sales", "총매출"], ["dc", "DC"], ["jTot", "장려금"], ["pTot", "판관비"], ["cost", "비용계"], ["vc", "변동원가"], ["tr", "운송비"], ["cm", "공헌이익(CM)"]];
-  const RT = [["dc", "DC율"], ["jTot", "장려금율"], ["pTot", "판관비율"], ["cost", "비용율"], ["cm", "CM율"]];
+  const RT = [["dc", "DC율"], ["jTot", "장려금율"], ["pTot", "판관비율"], ["cost", "비용율"], ["vc", "원가율"], ["tr", "운송비율"], ["cm", "CM율"]];
   // 비용은 늘면 나쁨(빨강), 매출·CM은 늘면 좋음
   const good = k => k === "sales" || k === "cm";
   const cc = (k, v) => !v ? "" : (good(k) ? v > 0 : v < 0) ? "pos" : "neg";
