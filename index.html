@@ -1004,21 +1004,19 @@ function momHtml() {
   t2 += keys.map(o => rowH(esc(o.k), o, "", o.k)).join("") + rowH("합계", { p: a, c: b, df: b.sales - a.sales }, ' class="tot"', "\u0000합계") + `</tbody></table></div>`;
   // 누적 총매출 (기간 n일째 기준)
   const cum = (rows, sh0) => { const v = Array(Lx).fill(0); for (const r of rows) { const i = r.day - 1 - sh0; if (i >= 0 && i < Lx) v[i] += r.sales || 0; } for (let i = 1; i < Lx; i++) v[i] += v[i - 1]; return v; };
-  // 누적 차트 제품 선택: 목록에서 고르면 그 SKU, 글자만 치면 제품명·코드에 그 글자가 들어간 SKU 전부 합산
-  let srcP = C.prv, srcC = C.cur, skuLab = "", skuUI = "";
-  if (C.skuC) {
-    const nm = new Map(); for (const r of [...C.skuC, ...C.skuP]) { const o = nm.get(r.code) || { n: r.name || r.code, s: 0 }; if (!o.n && r.name) o.n = r.name; o.s += r.sales || 0; nm.set(r.code, o); }
-    const opts = [...nm].filter(([, o]) => o.s).sort((a, b) => b[1].s - a[1].s).map(([c, o]) => `${o.n} · ${c}`);
-    const q = (MOMSKU || "").trim();
-    if (q) {
-      const mc = q.match(/ · ([^·]+)$/), code = mc && nm.has(mc[1].trim()) ? mc[1].trim() : null, ql = q.toLowerCase();
-      const hit = code ? c => c === code : c => String(c).toLowerCase().includes(ql) || String((nm.get(c) || {}).n || "").toLowerCase().includes(ql);
-      const codes = new Set([...nm.keys()].filter(hit));
-      srcP = C.skuP.filter(r => codes.has(r.code)); srcC = C.skuC.filter(r => codes.has(r.code));
-      skuLab = code ? ` · ${esc(q)}` : ` · '${esc(q)}' 포함 ${codes.size}개 SKU`;
-    }
-    skuUI = `<div class="toolbar" style="margin:0 0 6px;align-items:center;gap:6px"><label class="f" style="flex-direction:row;align-items:center;gap:6px">제품 <input type="text" id="momSku" list="momSkuL" value="${esc(q)}" placeholder="전체 (제품명·코드 검색, 목록 선택)" style="width:340px"></label><datalist id="momSkuL">${opts.map(o => `<option value="${esc(o)}">`).join("")}</datalist>${q ? `<button type="button" id="momSkuX">전체로</button>` : ""}<span class="muted">글자만 치고 Enter → 그 글자가 들어간 제품 합산</span></div>`;
-  }
+  // 누적 차트 분류 선택: 대카테고리 → 소카테고리 드롭다운 (위 필터 적용된 기간 데이터 안에서)
+  const both = [...C.prv, ...C.cur], sumS = rs => rs.reduce((t, r) => t + (r.sales || 0), 0);
+  const optsOf = rs => { const m = new Map(); for (const r of rs) m.set(r.k, (m.get(r.k) || 0) + (r.sales || 0)); return [...m].filter(([, s]) => s).sort((a, b) => b[1] - a[1]).map(([k]) => k); };
+  const bigs = optsOf(both.map(r => ({ k: catOf(r.big), sales: r.sales })));
+  if (MOMC.big !== "전체" && !bigs.includes(MOMC.big)) MOMC.big = "전체", MOMC.small = "전체";
+  const inB = r => MOMC.big === "전체" || catOf(r.big) === MOMC.big;
+  const smalls = MOMC.big === "전체" ? [] : optsOf(both.filter(inB).map(r => ({ k: catOf(r.small), sales: r.sales })));
+  if (MOMC.small !== "전체" && !smalls.includes(MOMC.small)) MOMC.small = "전체";
+  const inS = r => inB(r) && (MOMC.small === "전체" || catOf(r.small) === MOMC.small);
+  const srcP = C.prv.filter(inS), srcC = C.cur.filter(inS);
+  const skuLab = MOMC.big === "전체" ? "" : ` · ${esc(MOMC.big)}${MOMC.small !== "전체" ? " › " + esc(MOMC.small) : ""}`;
+  const dd = (id, lab, list, v, dis) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lab} <select id="${id}"${dis ? " disabled" : ""}><option value="전체">전체</option>${list.map(x => `<option value="${esc(x)}"${x === v ? " selected" : ""}>${esc(x)}</option>`).join("")}</select></label>`;
+  const skuUI = `<div class="toolbar" style="margin:0 0 6px;align-items:center;gap:10px">${dd("momCB", "대카테고리", bigs, MOMC.big)}${dd("momCS", "소카테고리", smalls, MOMC.small, MOMC.big === "전체")}</div>`;
   const va = cum(srcP, off), vb = cum(srcC, 0);
   let ch = "";
   if (Lx >= 2) {
@@ -1034,10 +1032,9 @@ function momHtml() {
   const skuNote = TP ? `<div class="muted" style="margin:4px 0">💡 증감·CM 증감 칸에 마우스를 올리면 SKU별 증감이 보여요</div>` : `<div class="neg" style="margin:4px 0">⚠ SKU 툴팁 꺼짐 — SKU×일자 정보 없는 저장분:${ms(pL, C.missP, true)}${ms(cL, C.missC, C.cArc)}</div>`;
   return head + t + top + skuNote + t2 + (ch ? `<h3 style="margin:14px 0 6px;font-size:14px">누적 총매출${skuLab}</h3>${skuUI}${ch}` : "");
 }
-let MOMSKU = "";
+let MOMC = { big: "전체", small: "전체" };
 const momRe = () => { const c = document.getElementById("momCard"); if (c) c.innerHTML = momHtml(); };
-document.addEventListener("change", e => { if (e.target && e.target.id === "momSku") { MOMSKU = e.target.value; momRe(); } });
-document.addEventListener("click", e => { if (e.target && e.target.id === "momSkuX") { MOMSKU = ""; momRe(); } });
+document.addEventListener("change", e => { const id = e.target && e.target.id; if (id === "momCB") { MOMC.big = e.target.value; MOMC.small = "전체"; momRe(); } else if (id === "momCS") { MOMC.small = e.target.value; momRe(); } });
 document.addEventListener("change", e => { const k = e.target && e.target.dataset && e.target.dataset.mom; if (!k) return; MOM[k] = k === "fix" ? e.target.value === "true" : e.target.value; try { localStorage.setItem("dc_mom", JSON.stringify(MOM)); } catch (x) { } const c = document.getElementById("momCard"); if (c) c.innerHTML = momHtml(); });
 
 // 대시보드 분류별 율 표: 보는 단계(대/소/세분류) + 대카테고리·소카테고리 조회
