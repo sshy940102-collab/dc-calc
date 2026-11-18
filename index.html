@@ -30,6 +30,11 @@ input[type=month],input[type=number],input[type=text],select{font:inherit;paddin
 .days div{border:1px solid var(--line);border-radius:4px;padding:6px 8px}
 .days b{display:block;font-size:12px;margin-bottom:3px}
 .days input{width:60px}
+#momTip{display:none;position:fixed;z-index:999;max-width:480px;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:8px 10px;font-size:12px;pointer-events:none}
+#momTip table{border-collapse:collapse;margin-top:4px;width:100%}
+#momTip td{padding:2px 6px;border-bottom:1px solid #eef0f4;white-space:nowrap}
+#momTip td:first-child{white-space:normal;max-width:240px}
+#momTip tr.h td{font-weight:600;background:#f4f6fa}
 button{font:inherit;border:0;border-radius:4px;padding:7px 14px;cursor:pointer;background:var(--navy);color:#fff}
 button.sec{background:#e7ebf2;color:var(--txt)}
 button:disabled{opacity:.4;cursor:default}
@@ -902,8 +907,49 @@ function momCalc(R) {
   const fixRaw = { c: fixOf(total(cWin)), p: fixOf(total(pWin)) };
   if (MOM.fix) { cWin = momScale(cAll, cWin, R.prorate || {}, mdC, L); pWin = momScale(pAll, pWin, P.prorate || {}, mdP, L); }
   const fixAdj = { c: fixOf(total(cWin)), p: fixOf(total(pWin)) };
-  return { ym, pv, y, m, py, pm, off, chs, N, L, cut, mdC, mdP, cur: filt(cWin), prv: filt(pWin), fixRaw, fixAdj };
+  // SKU×일자 (툴팁용): 당월 = 라이브 로우 또는 보관 sd, 전월 = 보관 sd (없으면 null → 재저장 안내)
+  let skuC = null, skuP = null;
+  const cS = R.archived ? sdRows(ARC[R.archived]) : R.rows.filter(r => r.day != null), pS = sdRows(P);
+  // 비교 채널 중 하나라도 SKU×일자가 없으면 (예전 저장분) 부분 합계가 틀리므로 툴팁 대신 재저장 안내
+  const hasAll = S => S && chs.every(ch => S.some(r => r.ch === ch));
+  if (hasAll(cS) && hasAll(pS)) {
+    const cA = cS.filter(r => inC.has(r.ch)), pA = pS.filter(r => inC.has(r.ch));
+    let cw = cA.filter(r => r.day >= 1 && r.day <= L[r.ch]), pw = pA.filter(r => r.day >= 1 + off && r.day <= L[r.ch] + off);
+    if (MOM.fix) { cw = momScale(cA, cw, R.prorate || {}, mdC, L); pw = momScale(pA, pw, P.prorate || {}, mdP, L); }
+    skuC = filt(cw); skuP = filt(pw);
+  }
+  return { ym, pv, y, m, py, pm, off, chs, N, L, cut, mdC, mdP, cur: filt(cWin), prv: filt(pWin), fixRaw, fixAdj, skuC, skuP };
 }
+// 보관 스냅샷의 SKU×일자(sd: [ch, code, day, sales, cm, jAmt, sAmt, pDist, pSku]) → 행 객체 (분류는 같은 스냅샷 rows에서)
+function sdRows(s) {
+  if (!s || !s.sd || !s.sd.length) return null;
+  const info = new Map(s.rows.map(r => [r.ch + "|" + r.code, r]));
+  return s.sd.map(a => { const i = info.get(a[0] + "|" + a[1]) || {}; return { ch: a[0], code: a[1], name: i.name, big: i.big, small: i.small, evt: i.evt, day: a[2], sales: a[3] || 0, cm: a[4] || 0, jAmt: a[5] || 0, sAmt: a[6] || 0, pDist: a[7] || 0, pSku: a[8] || 0, jTot: 0, pTot: 0, cost: 0 }; });
+}
+// 분류 key별 SKU 증감 툴팁 HTML (감소 TOP5 · 증가 TOP5)
+let MOMTIP = [];
+function momTips(C, kf) {
+  const g = new Map(), add = (rows, w) => { for (const r of rows) { const k = kf(r), c = r.code; if (!g.has(k)) g.set(k, new Map()); const m = g.get(k); const o = m.get(c) || { name: r.name, ps: 0, cs: 0, pm: 0, cm: 0 }; if (!o.name && r.name) o.name = r.name; if (w) { o.cs += r.sales || 0; o.cm += r.cm || 0; } else { o.ps += r.sales || 0; o.pm += r.cm || 0; } m.set(c, o); } };
+  add(C.skuP, 0); add(C.skuC, 1);
+  const all = new Map(); for (const m of g.values()) for (const [c, o] of m) { const a = all.get(c) || { name: o.name, ps: 0, cs: 0, pm: 0, cm: 0 }; a.ps += o.ps; a.cs += o.cs; a.pm += o.pm; a.cm += o.cm; all.set(c, a); }
+  g.set("\u0000합계", all);
+  const out = {};
+  for (const [k, m] of g) {
+    const mk = (f, lab) => {
+      const l = [...m].map(([c, o]) => ({ c, n: o.name || c, d: f === "s" ? o.cs - o.ps : o.cm - o.pm, p: f === "s" ? o.ps : o.pm, q: f === "s" ? o.cs : o.cm })).filter(o => Math.abs(o.d) >= 500);
+      const dn = l.filter(o => o.d < 0).sort((a, b) => a.d - b.d).slice(0, 5), up = l.filter(o => o.d > 0).sort((a, b) => b.d - a.d).slice(0, 5);
+      const li = o => `<tr><td>${esc(o.n)}</td><td class="n">${mil1(o.p)}</td><td class="n">${mil1(o.q)}</td><td class="n ${o.d < 0 ? "neg" : "pos"}">${(o.d > 0 ? "+" : "") + mil1(o.d)}</td></tr>`;
+      const sec = (t, a) => a.length ? `<tr class="h"><td colspan="4">${t}</td></tr>` + a.map(li).join("") : "";
+      return `<b>${esc(k === "\u0000합계" ? "합계" : k)} · ${lab} 증감 SKU</b> <span class="muted">(${l.length}개 변동, 백만원)</span><table><tr class="h"><td>SKU</td><td>${C.pm}월</td><td>${C.m}월</td><td>증감</td></tr>${sec("📉 감소 TOP5", dn)}${sec("📈 증가 TOP5", up)}</table>`;
+    };
+    out[k] = { s: mk("s", "매출"), c: mk("c", "CM") };
+  }
+  return out;
+}
+(function () {
+  const tip = document.createElement("div"); tip.id = "momTip"; (document.body || document.documentElement).appendChild(tip);
+  document.addEventListener("mouseover", e => { const el = e.target.closest && e.target.closest("[data-tip]"); if (!el) { tip.style.display = "none"; return; } const h = MOMTIP[+el.dataset.tip]; if (!h) return; tip.innerHTML = h; tip.style.display = "block"; const b = el.getBoundingClientRect(), w = tip.offsetWidth, ht = tip.offsetHeight; let x = b.right - w, y = b.bottom + 4; if (x < 8) x = 8; if (y + ht > innerHeight - 8) y = Math.max(8, b.top - ht - 4); tip.style.left = x + "px"; tip.style.top = y + "px"; });
+})();
 function momHtml() {
   const R = MOMR; if (!R) return "";
   const C = momCalc(R); if (!C) return "";
@@ -949,8 +995,11 @@ function momHtml() {
   const pp = (o, k) => o.p.sales && o.c.sales ? dpp(o.c[k] / o.c.sales - o.p[k] / o.p.sales) : "-";
   const ppc = (o, k) => o.p.sales && o.c.sales ? cc(k, o.c[k] / o.c.sales - o.p[k] / o.p.sales) : "";
   let t2 = `<div class="tw"><table><thead><tr><th>${LV[MOM.lv]}</th><th>${pL} 매출</th><th>${cL} 매출</th><th>증감</th><th>증감률</th><th>${pL} 비용율</th><th>${cL} 비용율</th><th>%p</th><th>${pL} CM율</th><th>${cL} CM율</th><th>%p</th><th>CM 증감</th></tr></thead><tbody>`;
-  const rowH = (lab, o, cls) => `<tr${cls}><td>${lab}</td><td class="n">${mil1(o.p.sales)}</td><td class="n">${mil1(o.c.sales)}</td><td class="n ${cc("sales", o.df)}">${sg(o.df)}</td><td class="n ${cc("sales", o.df)}">${rr(o.c.sales, o.p.sales) != null ? pct(rr(o.c.sales, o.p.sales)) : "신규"}</td><td class="n">${pct(o.p.costR)}</td><td class="n">${pct(o.c.costR)}</td><td class="n ${ppc(o, "cost")}">${pp(o, "cost")}</td><td class="n">${pct(o.p.cmR)}</td><td class="n">${pct(o.c.cmR)}</td><td class="n ${ppc(o, "cm")}">${pp(o, "cm")}</td><td class="n ${cc("cm", o.c.cm - o.p.cm)}">${sg(o.c.cm - o.p.cm)}</td></tr>`;
-  t2 += keys.map(o => rowH(esc(o.k), o, "")).join("") + rowH("합계", { p: a, c: b, df: b.sales - a.sales }, ' class="tot"') + `</tbody></table></div>`;
+  const TP = C.skuC ? momTips(C, kf) : null; MOMTIP = [];
+  const noSku = `<b>SKU 증감</b><br>${pL} 보관 자료에 SKU×일자 정보가 없어요<br>→ ${pL} 로우를 다시 붙여넣고 「보관함 저장」하면 보여요`;
+  const ta = (k, f) => { const h = TP ? (TP[k] || {})[f] : noSku; if (!h) return ""; MOMTIP.push(h); return ` data-tip="${MOMTIP.length - 1}" style="cursor:help;text-decoration:underline dotted"`; };
+  const rowH = (lab, o, cls, tk) => `<tr${cls}><td>${lab}</td><td class="n">${mil1(o.p.sales)}</td><td class="n">${mil1(o.c.sales)}</td><td class="n ${cc("sales", o.df)}"${ta(tk, "s")}>${sg(o.df)}</td><td class="n ${cc("sales", o.df)}">${rr(o.c.sales, o.p.sales) != null ? pct(rr(o.c.sales, o.p.sales)) : "신규"}</td><td class="n">${pct(o.p.costR)}</td><td class="n">${pct(o.c.costR)}</td><td class="n ${ppc(o, "cost")}">${pp(o, "cost")}</td><td class="n">${pct(o.p.cmR)}</td><td class="n">${pct(o.c.cmR)}</td><td class="n ${ppc(o, "cm")}">${pp(o, "cm")}</td><td class="n ${cc("cm", o.c.cm - o.p.cm)}"${ta(tk, "c")}>${sg(o.c.cm - o.p.cm)}</td></tr>`;
+  t2 += keys.map(o => rowH(esc(o.k), o, "", o.k)).join("") + rowH("합계", { p: a, c: b, df: b.sales - a.sales }, ' class="tot"', "\u0000합계") + `</tbody></table></div>`;
   // 누적 총매출 (기간 n일째 기준)
   const cum = (rows, sh0) => { const v = Array(Lx).fill(0); for (const r of rows) { const i = r.day - 1 - sh0; if (i >= 0 && i < Lx) v[i] += r.sales || 0; } for (let i = 1; i < Lx; i++) v[i] += v[i - 1]; return v; };
   const va = cum(C.prv, off), vb = cum(C.cur, 0);
@@ -1945,11 +1994,15 @@ function makeSnap(R, ym) {
   const days = agg(R.rows.filter(r => r.day != null), r => [r.ch, r.big, r.small, r.evt, r.day].join("|"), r => ({ ch: r.ch, big: r.big, small: r.small, evt: r.evt, day: r.day }))
     .map(a => ({ ch: a.ch, big: a.big, small: a.small, evt: a.evt, day: a.day, ...pick(a) }));
   const d = new Date(); const savedAt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  return { ym, savedAt, chs: R.chs, mdays: R.mdays, prorate: R.prorate, rows, days };
+  // SKU×일자 (전월 동기간 비교 SKU 툴팁용) — 용량 줄이려고 배열 [ch, code, day, sales, cm, jAmt, sAmt, pDist, pSku]
+  const sm = new Map();
+  for (const r of R.rows) { if (r.day == null) continue; const k = r.ch + "|" + r.code + "|" + r.day; let a = sm.get(k); if (!a) sm.set(k, a = [r.ch, r.code, r.day, 0, 0, 0, 0, 0, 0]); a[3] += r.sales || 0; a[4] += r.cm || 0; a[5] += r.jAmt || 0; a[6] += r.sAmt || 0; a[7] += r.pDist || 0; a[8] += r.pSku || 0; }
+  const sd = [...sm.values()].map(a => { for (let i = 3; i < 9; i++) a[i] = Math.round(a[i]); return a; });
+  return { ym, savedAt, chs: R.chs, mdays: R.mdays, prorate: R.prorate, rows, days, sd };
 }
 function snapRes(s) {
   const fill = a => { const o = { ...a }; NUMK.forEach(n => o[n] = o[n] || 0); return o; };
-  return { rows: s.rows.map(fill), days: s.days.map(fill), chs: s.chs, mdays: s.mdays, prorate: s.prorate, archived: s.ym, savedAt: s.savedAt,
+  return { rows: s.rows.map(fill), days: s.days.map(fill), sd: s.sd, chs: s.chs, mdays: s.mdays, prorate: s.prorate, archived: s.ym, savedAt: s.savedAt,
     W: { out: new Map(), vc: new Map(), tr: new Map(), cls: new Map(), cost: new Map(), neg: new Map(), chref: new Set(), noMonth: new Set(), noDay: 0 } };
 }
 function arcRender() {
@@ -2009,6 +2062,7 @@ function arcRename(mp, arcOnly) {
     const mergeBy = (list, key) => { const m = new Map(); for (const r0 of list) { const r = { ...r0, ch: to(r0.ch) }, k = key(r), p = m.get(k); if (!p) m.set(k, r); else NUMK.forEach(f => p[f] = (p[f] || 0) + (r[f] || 0)); } return [...m.values()]; };
     s.rows = mergeBy(s.rows, r => r.ch + "|" + r.code);
     s.days = mergeBy(s.days, r => [r.ch, r.big, r.small, r.evt, r.day].join("|"));
+    if (s.sd) { const m = new Map(); for (const a0 of s.sd) { const a = [to(a0[0]), ...a0.slice(1)], k = a[0] + "|" + a[1] + "|" + a[2], p = m.get(k); if (!p) m.set(k, a); else for (let i = 3; i < 9; i++) p[i] = (p[i] || 0) + (a[i] || 0); } s.sd = [...m.values()]; }
     const pr = {}; for (const [c, v] of Object.entries(s.prorate || {})) pr[to(c)] ??= v; s.prorate = pr;
     s.chs = [...new Set(chs)];
   }
@@ -2033,6 +2087,8 @@ $("#arcSave").onclick = async () => {
     const same = old.chs.filter(c => nw.chs.includes(c)), keep = old.chs.filter(c => !nw.chs.includes(c));
     if (same.length && !confirm(`${ym} ${same.join(", ")} 결과가 이미 있어요 (${old.savedAt}). 지금 결과로 덮어쓸까요?${keep.length ? `\n(${keep.join(", ")}는 그대로 유지)` : ""}`)) return;
     nw.rows = [...old.rows.filter(r => keep.includes(r.ch)), ...nw.rows]; nw.days = [...old.days.filter(r => keep.includes(r.ch)), ...nw.days];
+    // SKU×일자: 예전 저장분에 sd가 없으면 유지 채널 SKU는 빠짐 → 그 채널은 툴팁에서 제외 (다시 저장하면 채워짐)
+    nw.sd = [...(old.sd || []).filter(a => keep.includes(a[0])), ...nw.sd];
     nw.prorate = { ...old.prorate, ...nw.prorate }; nw.chs = [...keep, ...nw.chs];
   }
   ARC[ym] = nw;
