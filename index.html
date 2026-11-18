@@ -1278,7 +1278,7 @@ function rptBind() {
 // 분류 i: 실적 비중 a_i·실적율 x_i, Rolling 비중 t_i·Rolling율 y_i, Rolling 전체율 Y
 //   율 효과 = a_i (x_i − y_i) · 믹스 효과 = (a_i − t_i)(y_i − Y) → 합계 = 실적율 − Rolling율 (정확히)
 //   실적만 있는 분류는 y_i = x_i (율 효과 0), Rolling만 있는 분류는 a_i = 0
-let RCA = { met: "cost", lv: "big" }, RCATXT = "";
+let RCA = { met: "cost", lv: "big" }, RCATXT = "", RCAOPEN = new Set(), RCAIDS = [];
 try { const s = JSON.parse(ls.get("dc_rca") || "null"); if (s) RCA = { ...RCA, ...s }; } catch (x) { }
 const RCA_M = [["cost", "비용율", "cost", "COST"], ["dc", "DC율", "dc", "dcA"], ["j", "장려금율", "jTot", "jA"], ["p", "판관비율", "pTot", "pA"], ["vc", "원가율", "vc", "VC"], ["tr", "운송비율", "tr", "TR"]];
 function rcaHtml(R) {
@@ -1305,29 +1305,39 @@ function rcaHtml(R) {
   const ct = comp.map(o => `<tr${o.k === "cost" ? ' class="tot"' : ""}${o.k === RCA.met ? ' style="outline:2px solid var(--navy2)"' : ""}><td>${o.k === "dc" || o.k === "j" || o.k === "p" ? "　└ " : ""}${o.lab}</td><td class="n">${pct(o.T)}</td><td class="n">${pct(o.A)}</td><td class="n ${o.A != null && o.T != null && o.A - o.T >= 0.0005 ? "neg" : o.A != null && o.T != null && o.A - o.T <= -0.0005 ? "pos" : ""}">${o.A != null && o.T != null ? dpp(o.A - o.T) : "-"}</td></tr>`).join("");
   // 2) 율·믹스 효과
   const M = RCA_M.find(x => x[0] === RCA.met) || RCA_M[0], [, mLab, aK, gK] = M;
-  const keyA = r => lv === "sku" ? String(r.code) : catOf(r[lv]), keyG = g => lv === "sku" ? String(g.code ?? "") : catOf(g[lv]);
-  const mp = new Map(), get = (k, lab) => { let o = mp.get(k); if (!o) mp.set(k, o = { k, lab, as: 0, an: 0, ts: 0, tn: 0 }); if (lab && !o.lab0) o.lab0 = lab; return o; };
-  for (const r of act) { const o = get(keyA(r), lv === "sku" ? r.name : null); o.as += r.sales || 0; o.an += r[aK] || 0; }
-  for (const g of G) { if (g.S == null || g[gK] == null) continue; const o = get(keyG(g), lv === "sku" ? g.name : null); o.ts += g.S; o.tn += g[gK]; }
-  const AS = [...mp.values()].reduce((t, o) => t + o.as, 0), TS = [...mp.values()].reduce((t, o) => t + o.ts, 0);
+  // 트리: 대카테고리 → 소카테고리 → SKU (SKU는 라이브 계산일 때만). 각 단계 효과는 같은 공식(전체 비중·전체 Rolling율 Y 기준)
+  // → 하위 기여 합계 = 상위 기여 합계 (율/믹스 나눔은 단계마다 다를 수 있음: 분류 안 품목 구성 변화가 하위에선 믹스로 잡힘)
+  const deep = skuOK ? 3 : 2;
+  const pathA = r => [catOf(r.big), catOf(r.small), String(r.code)].slice(0, deep), pathG = g => [catOf(g.big), catOf(g.small), String(g.code ?? "")].slice(0, deep);
+  const NODE = new Map(), node = (p, nm) => { const id = p.join("\u241F"); let o = NODE.get(id); if (!o) NODE.set(id, o = { id, p, d: p.length, pid: p.slice(0, -1).join("\u241F"), nm: null, as: 0, an: 0, ts: 0, tn: 0 }); if (nm && !o.nm) o.nm = nm; return o; };
+  const addN = (p, nm, f) => { for (let d = 1; d <= p.length; d++) f(node(p.slice(0, d), d === 3 ? nm : null)); };
+  for (const r of act) addN(pathA(r), r.name, o => { o.as += r.sales || 0; o.an += r[aK] || 0; });
+  for (const g of G) { if (g.S == null || g[gK] == null) continue; addN(pathG(g), g.name, o => { o.ts += g.S; o.tn += g[gK]; }); }
+  const tops = [...NODE.values()].filter(o => o.d === 1);
+  const AS = tops.reduce((t, o) => t + o.as, 0), TS = tops.reduce((t, o) => t + o.ts, 0);
   if (!AS || !TS) return box("실적 또는 Rolling 매출이 0이에요");
-  const RA = [...mp.values()].reduce((t, o) => t + o.an, 0) / AS, RT = [...mp.values()].reduce((t, o) => t + o.tn, 0) / TS;
-  const L = [...mp.values()].map(o => {
+  const RA = tops.reduce((t, o) => t + o.an, 0) / AS, RT = tops.reduce((t, o) => t + o.tn, 0) / TS;
+  for (const o of NODE.values()) {
     const a = o.as / AS, t = o.ts / TS, x = o.as ? o.an / o.as : null, y0 = o.ts ? o.tn / o.ts : null, y = y0 ?? x ?? RT;
-    const rate = o.as && o.ts ? a * (x - y) : 0, mix = (a - t) * (y - RT);
-    return { ...o, lab: (lv === "sku" ? (o.lab0 || o.k) : o.k) + (!o.ts ? " (Rolling 없음)" : !o.as ? " (실적 없음)" : ""), a, t, x, y: y0, rate, mix, tot: rate + mix };
-  }).sort((p, q) => Math.abs(q.tot) - Math.abs(p.tot));
-  const TOPN = 15, top = L.slice(0, TOPN), rest = L.slice(TOPN);
-  const sum = (l, f) => l.reduce((t, o) => t + o[f], 0), sR = sum(L, "rate"), sM = sum(L, "mix");
-  const cc = v => Math.abs(v) < 0.00005 ? "" : v > 0 === (RCA.met !== "cm") ? "neg" : "pos";
+    o.rate = o.as && o.ts ? a * (x - y) : 0; o.mix = (a - t) * (y - RT); o.tot = o.rate + o.mix;
+    Object.assign(o, { a, t, x, y: y0 });
+    const raw = o.d === 3 ? (o.nm || o.p[2]) : o.p[o.d - 1];
+    o.lab = (o.d === 3 ? raw : shortLab(raw)) + (!o.ts ? " (Rolling 없음)" : !o.as ? " (실적 없음)" : "");
+  }
+  const kids = new Map(); for (const o of NODE.values()) if (o.d > 1) { if (!kids.has(o.pid)) kids.set(o.pid, []); kids.get(o.pid).push(o); }
+  const byTot = (p, q) => Math.abs(q.tot) - Math.abs(p.tot);
+  const sum = (l, f) => l.reduce((t, o) => t + o[f], 0), sR = sum(tops, "rate"), sM = sum(tops, "mix");
+  const cc = v => Math.abs(v) < 0.00005 ? "" : v > 0 ? "neg" : "pos";
   const pp2 = v => Math.abs(v) < 0.00005 ? "0.00%p" : (v > 0 ? "+" : "") + (v * 100).toFixed(2) + "%p";
-  const row = (o, cls) => `<tr${cls || ""}><td>${esc(o.lab)}</td><td class="n">${pct(o.t)}</td><td class="n">${pct(o.a)}</td><td class="n">${pct(o.y)}</td><td class="n">${pct(o.x)}</td><td class="n ${cc(o.rate)}">${pp2(o.rate)}</td><td class="n ${cc(o.mix)}">${pp2(o.mix)}</td><td class="n ${cc(o.tot)}"><b>${pp2(o.tot)}</b></td></tr>`;
-  let tb = top.map(o => row(o)).join("");
-  if (rest.length) tb += row({ lab: `기타 ${rest.length}개`, t: sum(rest, "t"), a: sum(rest, "a"), x: null, y: null, rate: sum(rest, "rate"), mix: sum(rest, "mix"), tot: sum(rest, "tot") });
-  tb += row({ lab: "합계", t: 1, a: 1, y: RT, x: RA, rate: sR, mix: sM, tot: sR + sM }, ' class="tot"');
+  const row = (o, extra) => { const ks = kids.get(o.id) || [], open = RCAOPEN.has(o.id), pad = (o.d - 1) * 18;
+    return `<tr${extra || ""}><td style="padding-left:${8 + pad}px;white-space:normal">${ks.length ? `<span class="rcaT" data-id="${esc(o.id)}" style="cursor:pointer;display:inline-block;width:16px;color:var(--navy2)">${open ? "▼" : "▶"}</span>` : `<span style="display:inline-block;width:16px"></span>`}${o.d === 1 ? `<b>${esc(o.lab)}</b>` : esc(o.lab)}${ks.length ? ` <span class="muted" style="font-size:11px">${ks.length}</span>` : ""}</td><td class="n">${pct(o.t)}</td><td class="n">${pct(o.a)}</td><td class="n">${pct(o.y)}</td><td class="n">${pct(o.x)}</td><td class="n ${cc(o.rate)}">${pp2(o.rate)}</td><td class="n ${cc(o.mix)}">${pp2(o.mix)}</td><td class="n ${cc(o.tot)}"><b>${pp2(o.tot)}</b></td></tr>`; };
+  const walk = o => row(o, o.d > 1 ? ` style="background:${o.d === 2 ? "#f7f9fc" : "#fbfcfe"}"` : "") + (RCAOPEN.has(o.id) ? (kids.get(o.id) || []).sort(byTot).map(walk).join("") : "");
+  let tb = [...tops].sort(byTot).map(walk).join("");
+  tb += row({ id: "", d: 1, lab: "합계", t: 1, a: 1, y: RT, x: RA, rate: sR, mix: sM, tot: sR + sM }, ' class="tot"');
+  RCAIDS = [...NODE.values()].filter(o => kids.has(o.id)).map(o => ({ id: o.id, d: o.d }));
   // 3) 요약 문구
-  const LVN = { big: "대카테고리", small: "소카테고리", evt: "세분류", sku: "SKU" }[lv];
-  const short = o => lv === "sku" ? o.lab : shortLab(o.lab);
+  const L = [...tops], LVN = "대카테고리";
+  const short = o => o.lab;
   const dir = RA >= RT ? 1 : -1;   // 차이 방향으로 기여한 것만 (초과면 올린 쪽, 미달이면 내린 쪽)
   const topR = L.filter(o => o.rate * dir > 0.00005).sort((p, q) => q.rate * dir - p.rate * dir).slice(0, 3);
   const topM = L.filter(o => o.mix * dir > 0.00005).sort((p, q) => q.mix * dir - p.mix * dir).slice(0, 3);
@@ -1335,18 +1345,24 @@ function rcaHtml(R) {
   if (RCA.met === "cost") { const p = k => comp.find(o => o.k === k); lines.push(` · 항목: ${["dc", "j", "p"].map(k => `${p(k).lab} ${p(k).A != null && p(k).T != null ? dpp(p(k).A - p(k).T) : "-"}`).join(", ")}`); }
   lines.push(` · 율 효과 ${dpp(sR)} : ${topR.map(o => `${short(o)} ${pct(o.y, 1)}→${pct(o.x, 1)}`).join(", ") || "-"}`);
   lines.push(` · 믹스 효과 ${dpp(sM)} : ${topM.map(o => `${short(o)} 비중 ${pct(o.t, 0)}→${pct(o.a, 0)} (${mLab} ${pct(o.y ?? o.x, 0)})`).join(", ") || "-"}`);
+  if (deep === 3) { const sk = [...NODE.values()].filter(o => o.d === 3 && o.tot * dir > 0.00005).sort((p, q) => q.tot * dir - p.tot * dir).slice(0, 5); if (sk.length) lines.push(` · 기여 큰 SKU : ${sk.map(o => `${o.lab} ${dpp(o.tot)}`).join(", ")}`); }
   RCATXT = lines.join("\n");
   return `<h2>🔍 Rolling 차이 분석 <small>${esc(ST.ch === "전체" ? "전체 채널" : ST.ch)} · ${C.m}월 1~${Lx}일 실적 vs ${C.m}월 Rolling · ${MOM.fix ? "고정비 일할 맞춤" : "고정비 저장값"}</small></h2>
-    <div class="toolbar" style="margin:0 0 8px">${sl("met", "지표", RCA_M.map(x => [x[0], x[1]]))}${sl("lv", "단위", [["big", "대카테고리"], ["small", "소카테고리"], ["evt", "세분류"], ["sku", "SKU" + (skuOK ? "" : " (보관함 보기에선 불가)")]])}<span class="sp"></span><button type="button" class="sec" id="rcaCp">📋 요약 복사</button><span class="muted" id="rcaMsg"></span></div>
-    ${RCA.lv === "sku" && !skuOK ? `<div class="warnbox" style="margin-bottom:8px">⚠️ 보관함에서 불러온 달은 SKU별 비용 항목이 없어서 대카테고리로 보여줘요 (당월을 붙여넣어 계산한 상태에서 SKU 가능)</div>` : ""}
+    <div class="toolbar" style="margin:0 0 8px">${sl("met", "지표", RCA_M.map(x => [x[0], x[1]]))}<button type="button" class="sec" data-rcax="0">모두 접기</button><button type="button" class="sec" data-rcax="1">소카테고리까지 펼치기</button>${deep === 3 ? `<button type="button" class="sec" data-rcax="2">SKU까지 전부 펼치기</button>` : ""}<span class="sp"></span><button type="button" class="sec" id="rcaCp">📋 요약 복사</button><span class="muted" id="rcaMsg"></span></div>
+    ${!skuOK ? `<div class="warnbox" style="margin-bottom:8px">⚠️ 보관함에서 불러온 달은 SKU별 비용 항목이 없어서 소카테고리까지만 펼쳐져요 (당월을 붙여넣어 계산한 상태에서 SKU까지 가능)</div>` : ""}
     <pre style="white-space:pre-wrap;background:#f7f8fb;border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.6 inherit;margin:0 0 10px">${esc(RCATXT)}</pre>
     <div class="dgrid"><div><h3 style="margin:0 0 6px;font-size:14px">① 항목별 (총매출 대비)</h3><div class="tw"><table><thead><tr><th>항목</th><th>Rolling</th><th>실적</th><th>차이</th></tr></thead><tbody>${ct}</tbody></table></div>
     <div class="help" style="margin-top:6px">비용율 = DC율 + 장려금율 + 판관비율 · 파란 테두리 = 아래 ②에서 보는 지표</div></div></div>
-    <h3 style="margin:14px 0 6px;font-size:14px">② ${mLab} 차이 = 율 효과 + 믹스 효과 (${LVN}별, 기여 큰 순)</h3>
-    <div class="tw" style="max-height:560px"><table><thead><tr><th>${LVN}</th><th>Rolling 매출비중</th><th>실적 매출비중</th><th>Rolling ${mLab}</th><th>실적 ${mLab}</th><th>율 효과</th><th>믹스 효과</th><th>기여 합계</th></tr></thead><tbody>${tb}</tbody></table></div>
-    <div class="help" style="margin-top:6px"><b>율 효과</b> = 실적 비중 × (실적율 − Rolling율): 같은 품목인데 ${mLab} 자체가 달라진 영향 · <b>믹스 효과</b> = (실적 비중 − Rolling 비중) × (그 품목 Rolling율 − 전체 Rolling율): ${mLab} 높은 품목 비중이 늘면 +, 낮은 품목 비중이 늘면 − · 두 효과 합계 = 전체 차이 (빨강 = ${mLab} 올린 쪽)</div>`;
+    <h3 style="margin:14px 0 6px;font-size:14px">② ${mLab} 차이 = 율 효과 + 믹스 효과 (기여 큰 순 · ▶ 누르면 대카테고리 → 소카테고리${deep === 3 ? " → SKU" : ""})</h3>
+    <div class="tw" style="max-height:640px"><table><thead><tr><th>분류 / SKU</th><th>Rolling 매출비중</th><th>실적 매출비중</th><th>Rolling ${mLab}</th><th>실적 ${mLab}</th><th>율 효과</th><th>믹스 효과</th><th>기여 합계</th></tr></thead><tbody>${tb}</tbody></table></div>
+    <div class="help" style="margin-top:6px"><b>율 효과</b> = 실적 비중 × (실적율 − Rolling율): 같은 품목인데 ${mLab} 자체가 달라진 영향 · <b>믹스 효과</b> = (실적 비중 − Rolling 비중) × (그 품목 Rolling율 − 전체 Rolling율): ${mLab} 높은 품목 비중이 늘면 +, 낮은 품목 비중이 늘면 − · 두 효과 합계 = 전체 차이 (빨강 = ${mLab} 올린 쪽) · 펼친 하위 행의 기여 합계를 더하면 상위 행과 같아요 (율/믹스 나눔은 단계마다 달라질 수 있음: 상위에선 율 효과였던 '분류 안 품목 구성 변화'가 하위에선 믹스 효과로 잡힘)</div>`;
 }
 function rcaBind() { const b = $("#rcaCp"); if (b) b.onclick = async () => { await copyBig(RCATXT, b); const m = $("#rcaMsg"); if (m) m.textContent = "✅ 복사됨"; }; }
+const rcaRe = () => { const c = document.getElementById("rcaCard"); if (c) { const sc = c.querySelector(".tw:last-of-type"), top = sc ? sc.scrollTop : 0; c.innerHTML = rcaHtml(MOMR); rcaBind(); const s2 = c.querySelector(".tw:last-of-type"); if (s2) s2.scrollTop = top; } };
+document.addEventListener("click", e => {
+  const t = e.target && e.target.closest && e.target.closest(".rcaT"); if (t) { const id = t.dataset.id; RCAOPEN.has(id) ? RCAOPEN.delete(id) : RCAOPEN.add(id); rcaRe(); return; }
+  const x = e.target && e.target.closest && e.target.closest("[data-rcax]"); if (x) { const n = +x.dataset.rcax; RCAOPEN = new Set(RCAIDS.filter(o => o.d <= n).map(o => o.id)); rcaRe(); }
+});
 document.addEventListener("change", e => { const k = e.target && e.target.dataset && e.target.dataset.rca; if (!k) return; RCA[k] = e.target.value; ls.set("dc_rca", JSON.stringify(RCA)); const c = document.getElementById("rcaCard"); if (c) { c.innerHTML = rcaHtml(MOMR); rcaBind(); } });
 let MOMC = { big: "전체", small: "전체" };
 const momRe = () => { const c = document.getElementById("momCard"); if (c) c.innerHTML = momHtml(); };
