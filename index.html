@@ -1208,7 +1208,7 @@ const gUnit = () => +(ls.get("dc_gunit") || 0);   // 0 = 자동(머리글 단위
 function goalsOf(GD, Y, M, chF) {
   const ov = gUnit();
   return GD.rows.filter(g => (g.y ?? Y) === Y && g.m === M && (chF === "전체" || gk(g.ch) === gk(chF)))
-    .map(g => { const u = ov || g.u; return { ...g, S: g.s != null ? g.s * u : null, CM: g.cm != null ? g.cm * u : null, COST: g.s != null && g.c != null ? g.s * u * g.c : null }; });
+    .map(g => { const u = ov || g.u; return { ...g, S: g.s != null ? g.s * u : null, CM: g.cm != null ? g.cm * u : null, COST: g.s != null && g.c != null ? g.s * u * g.c : null, VC: g.s != null && g.vc != null ? g.vc * u : null, TR: g.s != null && g.tr != null ? g.tr * u : null }; });
 }
 const gPat = g => GLV.map(([k]) => gk(g[k]));
 const gHit = (p, r) => (!p[0] || p[0] === gk(r.ch)) && (!p[1] || p[1] === gk(catOf(r.big))) && (!p[2] || p[2] === gk(catOf(r.small))) && (!p[3] || p[3] === gk(catOf(r.evt)));
@@ -1224,26 +1224,27 @@ function goalCalc(GD, ym, chF, L) {
   const G = goalsOf(GD, Y, M, chF), src = goalSrc(ym);
   const mdays = src ? src.mdays : new Date(Y, M, 0).getDate();
   const dOf = ch => src && src.prorate && src.prorate[ch] != null ? Math.round(src.prorate[ch] * mdays) : 0;
-  const mk = (key, lab) => ({ key, lab, pats: new Map(), S: 0, hasS: false, COST: 0, sC: 0, CM: 0, hasCM: false, act: new Map() });
+  const mk = (key, lab) => ({ key, lab, pats: new Map(), S: 0, hasS: false, COST: 0, sC: 0, VC: 0, TR: 0, sV: 0, CM: 0, hasCM: false, act: new Map() });
   const grp = new Map(), all = mk("*", ["합계"]);
   for (const g of G) {
     const p = gPat(g), k = p.slice(0, L).join("\u0001");
     let a = grp.get(k); if (!a) { a = mk(k, GLV.slice(0, L).map(([kk]) => g[kk] ? String(g[kk]) : "전체")); grp.set(k, a); }
-    for (const x of [a, all]) { x.pats.set(p.join("|"), p); if (g.S != null) { x.S += g.S; x.hasS = true; } if (g.COST != null) { x.COST += g.COST; x.sC += g.S; } if (g.CM != null) { x.CM += g.CM; x.hasCM = true; } }
+    for (const x of [a, all]) { x.pats.set(p.join("|"), p); if (g.S != null) { x.S += g.S; x.hasS = true; } if (g.COST != null) { x.COST += g.COST; x.sC += g.S; } if (g.VC != null) { x.VC += g.VC; x.TR += g.TR || 0; x.sV += g.S; } if (g.CM != null) { x.CM += g.CM; x.hasCM = true; } }
   }
   const rows = src ? src.rows.filter(r => chF === "전체" || gk(r.ch) === gk(chF)) : [];
-  const addA = (x, r) => { let c = x.act.get(r.ch); if (!c) x.act.set(r.ch, c = { sales: 0, cost: 0, cm: 0 }); c.sales += r.sales || 0; c.cost += r.cost || 0; c.cm += r.cm || 0; };
+  const addA = (x, r) => { let c = x.act.get(r.ch); if (!c) x.act.set(r.ch, c = { sales: 0, cost: 0, cm: 0, vc: 0, tr: 0 }); c.sales += r.sales || 0; c.cost += r.cost || 0; c.cm += r.cm || 0; c.vc += r.vc || 0; c.tr += r.tr || 0; };
   const pl = [...grp.values()].map(x => [x, [...x.pats.values()]]);
   let unS = 0;
   for (const r of rows) { let any = false; for (const [x, ps] of pl) if (ps.some(p => gHit(p, r))) { addA(x, r); any = true; } if (any) addA(all, r); else unS += r.sales || 0; }
   const dAll = src ? Math.max(0, ...Object.keys(src.prorate || {}).filter(c => chF === "전체" || gk(c) === gk(chF)).map(dOf)) : 0;
   const fin = x => {
-    let s = 0, c = 0, m = 0, fs = 0, fc = 0, fm = 0, d = 0;
-    for (const [ch, v] of x.act) { const dd = dOf(ch); d = Math.max(d, dd); s += v.sales; c += v.cost; m += v.cm; if (dd > 0) { const k = mdays / dd; fs += v.sales * k; fc += v.cost * k; fm += v.cm * k; } }
+    let s = 0, c = 0, m = 0, fs = 0, fc = 0, fm = 0, d = 0, vc = 0, tr = 0;
+    for (const [ch, v] of x.act) { const dd = dOf(ch); d = Math.max(d, dd); s += v.sales; c += v.cost; m += v.cm; vc += v.vc; tr += v.tr; if (dd > 0) { const k = mdays / dd; fs += v.sales * k; fc += v.cost * k; fm += v.cm * k; } }
     if (!x.act.size) d = dAll;
     Object.assign(x, { d, time: mdays ? d / mdays : null, sales: s, cost: c, cm: m, fS: d ? fs : null, fCost: d ? fc : null, fCM: d ? fm : null });
     x.pS = x.hasS && x.S ? s / x.S : null; x.aS = x.hasS && x.S && x.fS != null ? x.fS / x.S : null;
     x.pCM = x.hasCM && x.CM > 0 ? m / x.CM : null; x.aCM = x.hasCM && x.CM > 0 && x.fCM != null ? x.fCM / x.CM : null;
+    x.vc = vc; x.tr = tr; x.vcrT = x.sV ? x.VC / x.sV : null; x.vcr = s ? vc / s : null; x.trrT = x.sV ? x.TR / x.sV : null; x.trr = s ? tr / s : null;
     x.crT = x.sC ? x.COST / x.sC : null; x.cr = s ? c / s : null; x.fCr = x.fS ? x.fCost / x.fS : null;
     x.daily = d ? s / d : null; x.need = x.hasS && d < mdays ? Math.max(0, x.S - s) / (mdays - d) : null;
     return x;
@@ -1360,15 +1361,17 @@ function renderGoal() {
   const k = (lbl, v, sub, cls = "", bar = "") => `<div class="kpi ${cls}"><small>${lbl}</small><div class="${v < 0 ? "neg" : ""}">${v == null ? "-" : mil1(v)}<em>백만</em></div>${sub ? `<span class="sb">${sub}</span>` : ""}${bar}</div>`;
   const mm = +gym.slice(5), dTxt = c.src ? `${x.d}/${c.mdays}일` : "실적 없음";
   h += `<h3 style="margin:14px 0 4px;color:var(--navy)">📅 ${Y}년 ${mm}월 <span class="muted" style="font-weight:400;font-size:12px">경과 ${dTxt} · 시간 진척 ${pct(x.time)}${c.src ? ` · ${c.src.kind === "live" ? "현재 계산" : "보관함 " + esc(c.src.savedAt)}` : ""}</span></h3>
-  <div class="kpis top">
+  <div class="kpis top" style="grid-template-columns:repeat(5,1fr)">
     ${k("월 목표 (총매출)", x.hasS ? x.S : null, `비용율 목표 ${pct(x.crT)} · CM 목표 ${x.hasCM ? mil1(x.CM) : "-"}`)}
     ${k(`실적 (${dTxt})`, x.sales, `<b style="color:${gClr(x.pS != null && x.time ? x.pS / x.time : null)}">진척 ${pct(x.pS)}</b> vs 시간 ${pct(x.time)}`, "", pbar(x.pS, x.time))}
     ${k("월말 예상 (총매출)", x.fS, `<b style="color:${gClr(x.aS)}">${gIcon(x.aS)} 목표 대비 ${pct(x.aS)}</b>${x.hasS && x.fS != null ? ` (${x.fS - x.S >= 0 ? "+" : ""}${mil1(x.fS - x.S)})` : ""}`, "cm")}
     ${k("남은 기간 필요 일평균", x.need, x.daily != null ? `현재 일평균 ${mil1(x.daily)}${x.need != null && x.daily ? ` → <b class="${x.need > x.daily ? "neg" : ""}">${x.need > x.daily ? "+" : ""}${pct(x.need / x.daily - 1)}</b>` : ""}` : "")}
+    ${k(`${Y}년 연말 예상 (총매출)`, T.S ? T.fS : null, `<b style="color:${gClr(T.aS)}">${gIcon(T.aS)} 연간 목표 ${mil1(T.S)} 대비 ${pct(T.aS)}</b>`, "")}
     ${k("비용 (DC+장려금+판관비)", x.cost, `비용율 <b class="${x.crT != null && x.cr > x.crT ? "neg" : ""}">${pct(x.cr)}</b> vs 목표 ${pct(x.crT)} ${x.crT != null && x.cr != null ? `(${dpp(x.cr - x.crT)})` : ""}`)}
+    ${k("변동원가", x.vc, `원가율 <b class="${x.vcrT != null && x.vcr > x.vcrT ? "neg" : ""}">${pct(x.vcr)}</b> vs 목표 ${pct(x.vcrT)} ${x.vcrT != null && x.vcr != null ? `(${dpp(x.vcr - x.vcrT)})` : ""}`)}
+    ${k("운송비", x.tr, `운송비율 <b class="${x.trrT != null && x.trr > x.trrT ? "neg" : ""}">${pct(x.trr)}</b> vs 목표 ${pct(x.trrT)} ${x.trrT != null && x.trr != null ? `(${dpp(x.trr - x.trrT)})` : ""}`)}
     ${k("CM 실적", x.cm, `진척 ${pct(x.pCM)} vs 시간 ${pct(x.time)} · CM율 ${pct(x.sales ? x.cm / x.sales : null)}`, "", pbar(x.pCM, x.time))}
     ${k("CM 월말 예상", x.fCM, `<b style="color:${gClr(x.aCM)}">${gIcon(x.aCM)} 목표 대비 ${pct(x.aCM)}</b>${x.hasCM && x.fCM != null ? ` (${x.fCM - x.CM >= 0 ? "+" : ""}${mil1(x.fCM - x.CM)})` : ""}`, "cm")}
-    ${k(`${Y}년 연말 예상 (총매출)`, T.S ? T.fS : null, `<b style="color:${gClr(T.aS)}">${gIcon(T.aS)} 연간 목표 ${mil1(T.S)} 대비 ${pct(T.aS)}</b>`, "")}
   </div>`;
   h += `<div class="dgrid"><section class="card wide"><h2>일 누적 실적 vs 목표 <small>${mm}월 · ${esc(chF)} · 점선 = 목표 페이스 / 월말 예상</small></h2>${cumChart(c, GD, chF) || `<div class="empty" style="padding:16px">실적 또는 총매출 목표가 없어요</div>`}</section></div>`;
   // 분류별 표
@@ -1377,9 +1380,10 @@ function renderGoal() {
   const rowH = (a, tot) => `<tr${tot ? ' class="tot"' : ""}>${tot ? `<td colspan="${L}"><b>합계</b></td>` : a.lab.map(t => `<td class="l">${esc(t)}</td>`).join("")}
     ${td(a.hasS ? mil1(a.S) : "-")}${td(mil1(a.sales))}<td class="n">${pct(a.pS)}${pbar(a.pS, a.time)}</td>${td(a.fS != null ? mil1(a.fS) : "-")}${td(`<b style="color:${gClr(a.aS)}">${pct(a.aS)}</b>`)}${td(a.need != null ? mil1(a.need) : "-")}${td(a.daily != null ? mil1(a.daily) : "-")}
     ${td(pct(a.crT))}${td(pct(a.cr), a.crT != null && a.cr > a.crT ? "neg" : "")}${td(a.crT != null && a.cr != null ? dpp(a.cr - a.crT) : "-", a.crT != null && a.cr > a.crT ? "neg" : "")}
+    ${td(pct(a.vcrT))}${td(pct(a.vcr), a.vcrT != null && a.vcr > a.vcrT ? "neg" : "")}${td(a.vcrT != null && a.vcr != null ? dpp(a.vcr - a.vcrT) : "-", a.vcrT != null && a.vcr > a.vcrT ? "neg" : "")}
     ${td(a.hasCM ? mil1(a.CM) : "-")}${td(mil1(a.cm), a.cm < 0 ? "neg" : "")}${td(a.fCM != null ? mil1(a.fCM) : "-", a.fCM < 0 ? "neg" : "")}${td(`<b style="color:${gClr(a.aCM)}">${pct(a.aCM)}</b>`)}<td>${gIcon(a.aS)}${gIcon(a.aCM)}</td></tr>`;
   h += `<section class="card" style="margin-top:12px"><h2>분류별 진척 <small>${mm}월 · ${lv.map(v => v[1]).join(" > ")} · 목표 큰 순 · 🟢 100%↑ 🟡 95%↑ 🔴 95%↓ (총매출·CM 예상 달성)</small></h2>
-    <div class="tw gt" style="max-height:520px"><table><thead><tr>${lv.map(v => `<th>${v[1]}</th>`).join("")}<th>목표 총매출</th><th>실적</th><th>진척률 | 시간</th><th>월말 예상</th><th>예상 달성</th><th>필요 일평균</th><th>현재 일평균</th><th>비용율 목표</th><th>비용율 실적</th><th>차이</th><th>CM 목표</th><th>CM 실적</th><th>CM 예상</th><th>CM 예상 달성</th><th>상태</th></tr></thead>
+    <div class="tw gt" style="max-height:520px"><table><thead><tr>${lv.map(v => `<th>${v[1]}</th>`).join("")}<th>목표 총매출</th><th>실적</th><th>진척률 | 시간</th><th>월말 예상</th><th>예상 달성</th><th>필요 일평균</th><th>현재 일평균</th><th>비용율 목표</th><th>비용율 실적</th><th>차이</th><th>원가율 목표</th><th>원가율 실적</th><th>차이</th><th>CM 목표</th><th>CM 실적</th><th>CM 예상</th><th>CM 예상 달성</th><th>상태</th></tr></thead>
     <tbody>${gr.map(a => rowH(a)).join("")}${gr.length > 1 ? rowH(x, 1) : ""}</tbody></table></div>
     <div class="help" style="margin-top:6px">진척률 막대의 세로선 = 시간 진척 (경과일 ÷ 월일수) — 막대가 선보다 길면 페이스 앞섬 · 월말 예상 = 실적 ÷ 경과일 × 월일수 (= 실적 + 일평균 × 잔여일, 채널별 경과일) · 필요 일평균 = (목표 − 실적) ÷ 잔여일 · 비용율 = (DC+장려금+판관비) ÷ 총매출 · 금액 백만원</div></section>`;
   // 연간
@@ -1422,8 +1426,8 @@ function bindGoalTpl() {
 }
 function goalDownload(c, Yr, L, chF) {
   const wb = XLSX.utils.book_new(), lv = GLV.slice(0, L), r2 = v => v == null || !isFinite(v) ? null : Math.round(v), r4 = v => v == null || !isFinite(v) ? null : Math.round(v * 10000) / 10000;
-  const hd = [...lv.map(v => v[1]), "목표 총매출", "실적", "진척률", "시간 진척", "월말 예상", "예상 달성률", "필요 일평균", "현재 일평균", "비용율 목표", "비용율 실적", "CM 목표", "CM 실적", "CM 월말 예상", "CM 예상 달성률"];
-  const line = (a, tot) => [...(tot ? ["합계", ...Array(L - 1).fill("")] : a.lab), r2(a.hasS ? a.S : null), r2(a.sales), r4(a.pS), r4(a.time), r2(a.fS), r4(a.aS), r2(a.need), r2(a.daily), r4(a.crT), r4(a.cr), r2(a.hasCM ? a.CM : null), r2(a.cm), r2(a.fCM), r4(a.aCM)];
+  const hd = [...lv.map(v => v[1]), "목표 총매출", "실적", "진척률", "시간 진척", "월말 예상", "예상 달성률", "필요 일평균", "현재 일평균", "비용율 목표", "비용율 실적", "원가율 목표", "원가율 실적", "운송비율 목표", "운송비율 실적", "CM 목표", "CM 실적", "CM 월말 예상", "CM 예상 달성률"];
+  const line = (a, tot) => [...(tot ? ["합계", ...Array(L - 1).fill("")] : a.lab), r2(a.hasS ? a.S : null), r2(a.sales), r4(a.pS), r4(a.time), r2(a.fS), r4(a.aS), r2(a.need), r2(a.daily), r4(a.crT), r4(a.cr), r4(a.vcrT), r4(a.vcr), r4(a.trrT), r4(a.trr), r2(a.hasCM ? a.CM : null), r2(a.cm), r2(a.fCM), r4(a.aCM)];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([hd, ...c.groups.map(a => line(a)), line(c.all, 1)]), `${c.M}월 분류별`);
   const yh = ["월", "구분", "목표 총매출", "실적/예상", "달성률", "비용율 목표", "비용율 실적", "CM 목표", "CM 실적/예상", "CM 달성률"];
   const yl = Yr.ms.map(o => { const a = o.x, v = o.st === "past" ? (o.src ? a.sales : null) : o.st === "cur" ? a.fS : null, vc = o.st === "past" ? (o.src ? a.cm : null) : o.st === "cur" ? a.fCM : null; return [o.m + "월", o.st === "past" ? (o.src ? "실적" : "보관함 없음") : o.st === "cur" ? "월말 예상" : "예정", r2(a.hasS ? a.S : null), r2(v), r4(a.hasS && v != null && a.S ? v / a.S : null), r4(a.crT), r4(o.st !== "fut" && o.src ? a.cr : null), r2(a.hasCM ? a.CM : null), r2(vc), r4(a.hasCM && vc != null && a.CM > 0 ? vc / a.CM : null)]; });
