@@ -636,7 +636,7 @@ const COLS = {
     ["jPct", "장려금_분배기준(%)", 1], ["jAmt", "장려금_분배기준", 1], ["sPct", "장려금_SKU기준(%)", 1], ["sAmt", "장려금_SKU기준(금액)", 1], ["jTot", "장려금계", 1],
     ["log", "물류비", 1], ["fee", "代수수료", 1], ["pDist", "판관비_분배", 1], ["pSku", "판관비_SKU", 1], ["pTot", "판관비계", 1], ["cost", "비용계", 1], ["vc", "변동원가계", 1], ["tr", "운송비계", 1], ["cm", "공헌이익(CM)", 1]]
 };
-const TABS = [["dash", "📊 대시보드"], ["mom", "📅 전월 동기간 비교"], ["sum", "채널 요약"], ["big", "대카테고리별"], ["small", "소카테고리별"], ["evt", "세분류별"], ["prod", "제품별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
+const TABS = [["dash", "📊 대시보드"], ["mom", "📅 전월 동기간 비교"], ["rpt", "📝 보고서"],["sum", "채널 요약"], ["big", "대카테고리별"], ["small", "소카테고리별"], ["evt", "세분류별"], ["prod", "제품별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
 
 function dataFor(tab, rows) {
   if (tab === "sum") return agg(rows, r => r.ch, r => ({ ch: r.ch }));
@@ -664,7 +664,7 @@ const uniq = a => [...new Set(a)].sort((x, y) => (x === NOCAT) - (y === NOCAT) |
 const bigs = rows => uniq(rows.map(r => catOf(r.big)));
 const smalls = rows => uniq(rows.filter(r => ST.big === "전체" || catOf(r.big) === ST.big).map(r => catOf(r.small)));
 const evts = rows => uniq(rows.filter(r => (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small)).map(r => catOf(r.evt)));
-const filt = rows => rows.filter(r => (ST.ch === "전체" || r.ch === ST.ch) && (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small) && (ST.evt === "전체" || catOf(r.evt) === ST.evt));
+const filt = rows => rows.filter(r => (ST.ch === "전체" ? !ST._chs || ST._chs.has(r.ch) : r.ch === ST.ch) && (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small) && (ST.evt === "전체" || catOf(r.evt) === ST.evt));
 const sel = (id, lbl, opts, cur) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lbl} <select id="${id}">${opts.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
 
 function render() {
@@ -700,7 +700,7 @@ function render() {
     ${sel("bigSel", "대카테고리", ["전체", ...bigs(R.rows)], ST.big)}
     ${sel("smallSel", "소카테고리", ["전체", ...smalls(R.rows)], ST.small)}
     ${sel("evtSel", "세분류", ["전체", ...evts(R.rows)], ST.evt)}
-    ${ST.tab === "dash" || ST.tab === "mom" ? "" : `<input type="text" id="q" placeholder="제품·분류 검색" value="${esc(ST.q)}" style="width:200px">`}
+    ${ST.tab === "dash" || ST.tab === "mom" || ST.tab === "rpt" ? "" : `<input type="text" id="q" placeholder="제품·분류 검색" value="${esc(ST.q)}" style="width:200px">`}
     <span class="sp"></span>
     <span class="muted">월일수 ${R.mdays}일 · 일할 ${R.chs.map(c => `${esc(c)} ${(R.prorate[c] * R.mdays).toFixed(0)}/${R.mdays}`).join(", ")}</span>
     <button id="dl">엑셀 다운로드</button>
@@ -712,6 +712,7 @@ function render() {
     h += `<div class="dgrid"><section class="card wide" id="momCard">${mh || `<h2>전월 동기간 비교</h2><div class="empty">보관함에 전월(${esc(pv || "?")}) 자료가 없거나 비교할 채널이 없어요 — 전월을 먼저 보관함에 저장해 주세요</div>`}</section></div>`;
     finishRender(h); return;
   }
+  if (ST.tab === "rpt") { MOMR = R; h += `<div class="dgrid"><section class="card wide" id="rptCard">${rptHtml(R)}</section></div>`; finishRender(h); rptBind(); return; }
   let data = ST.tab === "day" && R.days ? dataFor("day", filt(R.days)) : dataFor(ST.tab, rowsF);
   if (ST.q && ST.tab !== "sum" && ST.tab !== "day") { const q = ST.q.toLowerCase(); data = data.filter(r => String(r.code ?? "").includes(q) || String(r.name ?? "").toLowerCase().includes(q) || ["evt", "big", "small"].some(k => String(r[k] ?? "").toLowerCase().includes(q))); }
   const cols = viewCols(ST.tab); const s = ST.sort[ST.tab];
@@ -1032,10 +1033,250 @@ function momHtml() {
   const skuNote = TP ? `<div class="muted" style="margin:4px 0">💡 증감·CM 증감 칸에 마우스를 올리면 SKU별 증감이 보여요</div>` : `<div class="neg" style="margin:4px 0">⚠ SKU 툴팁 꺼짐 — SKU×일자 정보 없는 저장분:${ms(pL, C.missP, true)}${ms(cL, C.missC, C.cArc)}</div>`;
   return head + t + top + skuNote + t2 + (ch ? `<h3 style="margin:14px 0 6px;font-size:14px">누적 총매출${skuLab}</h3>${skuUI}${ch}` : "");
 }
+// ================= 📝 보고서: 전월·당월 동기간 실적 vs Rolling + GAP 문구 자동 작성 =================
+// 기간·고정비 = 전월 동기간 비교 설정(MOM) 그대로, 필터(채널·분류) = 상단 툴바
+let RPT = { tsv: "", txt: "" };
+const r6 = v => Math.round((v || 0) / 1e6);
+const m0 = v => v == null || !isFinite(v) ? "-" : r6(v).toLocaleString();
+const sgn = v => (v > 0 ? "+" : "") + v.toLocaleString();
+const shortLab = s => String(s).replace(/^[A-Z]{1,2}\d{0,3}\.\s*/, "");
+function rptGoal(GD, Y, M) {
+  if (!GD || !GD.rows) return null;
+  const hit = (g, k) => ST[k] === "전체" || !g[k] || gk(catOf(g[k])) === gk(ST[k]);
+  const G = goalsOf(GD, Y, M, ST.ch).filter(g => (!ST._chs || [...ST._chs].some(c => gk(c) === gk(g.ch))) && hit(g, "big") && hit(g, "small") && hit(g, "evt"));
+  if (!G.length) return null;
+  const o = { S: 0, sC: 0, COST: 0, sV: 0, VC: 0, TR: 0, CM: 0, hasCM: false, sku: new Map() };
+  for (const g of G) {
+    if (g.S != null) o.S += g.S; if (g.COST != null) { o.COST += g.COST; o.sC += g.S; } if (g.VC != null) { o.VC += g.VC; o.TR += g.TR || 0; o.sV += g.S; } if (g.CM != null) { o.CM += g.CM; o.hasCM = true; }
+    if (g.code) { const q = o.sku.get(g.code) || { name: g.name, S: 0, CM: 0 }; q.S += g.S || 0; q.CM += g.CM || 0; if (!q.name) q.name = g.name; o.sku.set(g.code, q); }
+  }
+  o.cr = o.sC ? o.COST / o.sC : null; o.vcr = o.sV ? o.VC / o.sV : null; o.trr = o.sV ? o.TR / o.sV : null; o.cmr = o.hasCM && o.S ? o.CM / o.S : null;
+  return o;
+}
+function rptHtml(R) {
+  const d = rptData(R); RPT = { tsv: d.tsv || "", txt: d.txt || "" };
+  return d.err != null ? d.err : d.html;
+}
+// 지금 필터(ST.ch 등) 기준 보고서 데이터. 엑셀 다운로드는 채널을 바꿔가며 호출
+function rptData(R) {
+  if (!R) return { err: "" };
+  const ym = R.archived || $("#ym").value, pv = prevYm(ym);
+  const C = momCalc(R);
+  if (!C) return { err: `<h2>📝 보고서</h2><div class="empty">보관함에 전월(${esc(pv || "?")}) 자료가 없거나 비교할 채널이 없어요 — 전월을 먼저 보관함에 저장해 주세요</div>` };
+  if (ST.ch !== "전체" && !C.chs.includes(ST.ch)) return { err: `<h2>📝 보고서</h2><div class="empty">${esc(ST.ch)}는 전월 보관 자료가 없어요 (비교 가능 채널: ${C.chs.map(esc).join(", ")})</div>` };
+  const { m, pm, y, py } = C, pL = `${pm}월`, cL = `${m}월`;
+  const chs = C.chs.filter(c => ST.ch === "전체" ? !ST._chs || ST._chs.has(c) : c === ST.ch), Lx = Math.max(...chs.map(c => C.L[c])), multiL = new Set(chs.map(c => C.L[c])).size > 1;
+  const tP = Lx / C.mdP, tC = Lx / C.mdC;
+  const GD = goalData(), gP = rptGoal(GD, py, pm), gC = rptGoal(GD, y, m);
+  const a = total(C.prv), b = total(C.cur), rt = (t, k) => t.sales ? t[k] / t.sales : null;
+  // 표: [라벨, 종류, 전월 Rolling, 전월 실적, 당월 Rolling, 당월 실적, 좋은 방향(+1 늘면 좋음 / −1 늘면 나쁨)]
+  const RW = [
+    ["총매출", "amt", gP && gP.S, a.sales, gC && gC.S, b.sales, 1],
+    ["비용율", "rate", gP && gP.cr, rt(a, "cost"), gC && gC.cr, rt(b, "cost"), -1],
+    ["원가율", "rate", gP && gP.vcr, rt(a, "vc"), gC && gC.vcr, rt(b, "vc"), -1],
+    ["운송비율", "rate", gP && gP.trr, rt(a, "tr"), gC && gC.trr, rt(b, "tr"), -1],
+    ["공헌이익", "amt", gP && gP.hasCM ? gP.CM : null, a.cm, gC && gC.hasCM ? gC.CM : null, b.cm, 1],
+    ["CM%", "rate", gP && gP.cmr, rt(a, "cm"), gC && gC.cmr, rt(b, "cm"), 1]];
+  const cls = (d, g) => d == null || Math.abs(d) < 0.0005 ? "" : d * g > 0 ? "pos" : "neg";
+  const cells = (typ, T, A, t, g) => {   // [Rolling, 실적, 진척율, Rolling 대비] 텍스트 + 색
+    if (typ === "amt") { const p = T ? A / T : null, d = p != null ? p - t : null; return [[m0(T), ""], [m0(A), A < 0 ? "neg" : ""], [pct(p), ""], [dpp(d), cls(d, g)]]; }
+    const d = T != null && A != null ? A - T : null; return [[pct(T), ""], [pct(A), ""], ["", ""], [dpp(d), cls(d, g)]];
+  };
+  const tsv = [[`${ST.ch === "전체" ? "전체 채널" : ST.ch}${[ST.big, ST.small, ST.evt].filter(v => v !== "전체").map(v => " · " + v).join("")}`, `${pL}`, "", "", "", `${cL}`, "", "", "", "", "(관리원가 기준, 단위 : 백만원, %)"],
+    ["구분", "Rolling", "現 실적", "진척율", "Rolling 대비", "Rolling", "現 실적", "진척율", "Rolling 대비", "전월 대비"]];
+  let body = "";
+  for (const [lab, typ, pT, pA, cT, cA, g] of RW) {
+    const P = cells(typ, pT, pA, tP, g), Q = cells(typ, cT, cA, tC, g);
+    const dm = typ === "amt" ? cA - pA : (cA != null && pA != null ? cA - pA : null);
+    const dmT = typ === "amt" ? (dm > 0 ? "+" : "") + mil1(dm) : dpp(dm);
+    body += `<tr${lab === "공헌이익" || lab === "총매출" ? ' class="tot"' : ""}><td><b>${lab}</b></td>${[...P, ...Q].map(([v, c]) => `<td class="n ${c}">${v}</td>`).join("")}<td class="n ${cls(dm, g)}">${dmT}</td></tr>`;
+    tsv.push([lab, ...P.map(x => x[0]), ...Q.map(x => x[0]), dmT]);
+  }
+  tsv.push([`~${Lx}일 시간진척`, "", "", pct(tP), "", "", "", pct(tC), "", ""]);
+  // GAP ①② : 대카테고리별 증감 (+ 소카테고리), 기타로 합계 맞춤 (백만 정수 기준)
+  const byK = (rows, f) => { const mp = new Map(); for (const r of rows) { const k = f(r), o = mp.get(k) || { sales: 0, cm: 0 }; o.sales += r.sales || 0; o.cm += r.cm || 0; mp.set(k, o); } return mp; };
+  const dif = (mp, mc, f) => [...new Set([...mp.keys(), ...mc.keys()])].map(k => ({ k, d: ((mc.get(k) || {})[f] || 0) - ((mp.get(k) || {})[f] || 0) }));
+  const kB = r => catOf(r.big), kS = r => catOf(r.big) + "\u0001" + catOf(r.small);
+  const bP = byK(C.prv, kB), bC = byK(C.cur, kB), sP = byK(C.prv, kS), sC = byK(C.cur, kS);
+  const gap = (f, tot, sub) => {
+    const T = r6(tot), top = dif(bP, bC, f).map(o => ({ ...o, r: r6(o.d) })).filter(o => o.r).sort((x, z) => Math.abs(z.d) - Math.abs(x.d)).slice(0, 7);
+    const parts = top.map(o => {
+      let s = `${shortLab(o.k)} ${sgn(o.r)}`;
+      if (sub) {
+        const ss = dif(sP, sC, f).filter(x => x.k.startsWith(o.k + "\u0001")).map(x => ({ n: shortLab(x.k.split("\u0001")[1]), r: r6(x.d), d: x.d })).filter(x => x.r && Math.sign(x.r) === Math.sign(o.r)).sort((x, z) => Math.abs(z.d) - Math.abs(x.d)).slice(0, 3);
+        if (ss.length && !(ss.length === 1 && ss[0].r === o.r)) { const e = o.r - ss.reduce((t, x) => t + x.r, 0); s += `(${ss.map(x => `${x.n} ${sgn(x.r)}`).join(", ")}${e ? `, 기타 ${sgn(e)}` : ""})`; }
+      }
+      return s;
+    });
+    const e = T - top.reduce((t, o) => t + o.r, 0); if (e) parts.push(`기타 ${sgn(e)}`);
+    return `${sgn(T)} : ${parts.join(", ") || "변동 없음"}`;
+  };
+  const per = `${pm}/${1 + C.off}~${Lx + C.off} vs ${m}/1~${Lx}`;
+  const L = [`▷ 전월대비 Gap (백만, ${per}${MOM.mode === "dow" ? " 동일요일" : ""})`, ` ① 매출 ${gap("sales", b.sales - a.sales, true)}`, ` ② 공헌이익 ${gap("cm", b.cm - a.cm, false)}`];
+  // ③ 점검 품목: Rolling SKU 중 진척율 < 시간진척 − 5%p, 부족액(목표×시간진척 − 실적) 큰 순
+  const skuAgg = rows => { const mp = new Map(); for (const r of rows || []) { const o = mp.get(r.code) || { name: r.name, s: 0, cm: 0 }; o.s += r.sales || 0; o.cm += r.cm || 0; if (!o.name && r.name) o.name = r.name; mp.set(r.code, o); } return mp; };
+  let curRows = C.skuC;
+  if (!curRows) { const src = R.archived ? sdRows(ARC[R.archived]) : R.rows.filter(r => r.day != null); curRows = src ? filt(src.filter(r => C.L[r.ch] != null && r.day >= 1 && r.day <= C.L[r.ch])) : null; }
+  const AC = skuAgg(curRows), AP = C.skuP ? skuAgg(C.skuP) : null;
+  if (gC && gC.sku.size && curRows) {
+    const cand = [...gC.sku].filter(([, g]) => g.S > 0).map(([cd, g]) => { const x = AC.get(cd) || { s: 0, cm: 0 }; return { cd, n: g.name || x.name || cd, S: g.S, CMT: g.CM, A: x.s, CM: x.cm, p: x.s / g.S, short: g.S * tC - x.s, pa: AP ? (AP.get(cd) || { s: 0 }).s : null }; });
+    const lag = cand.filter(o => o.p < tC - 0.05).sort((x, z) => z.short - x.short).slice(0, 6);
+    const ln = o => `  - ${o.n} (${m0(o.S)}/${m0(o.A)}, ${pct(o.p, 0)}) · CM율 Rolling ${pct(o.S ? o.CMT / o.S : null, 0)} / 실적 ${pct(o.A ? o.CM / o.A : null, 0)}${o.pa != null ? ` · 전월 동기간 대비 매출 ${sgn(r6(o.A - o.pa))}` : ""}${o.A > 0 && o.CM < 0 ? " ⚠ CM율 마이너스 → 매출↑ 시 CM↓" : ""}`;
+    L.push("", `▷ Rolling 달성 위한 잔여기간 점검 품목 : 진척율이 시간진척(${pct(tC)})보다 5%p 이상 낮은 SKU, 부족액 큰 순 (목표/실적 백만, 진척율)`, ...(lag.length ? lag.map(ln) : ["  - 해당 없음"]));
+    const negs = cand.filter(o => o.A >= 1e6 && o.CM < 0 && !lag.includes(o)).sort((x, z) => x.CM - z.CM).slice(0, 3);
+    if (negs.length) L.push("", "▷ CM율 마이너스 품목 (매출이 늘수록 공헌이익 감소)", ...negs.map(ln));
+  } else L.push("", gC ? "▷ 점검 품목: SKU형 Rolling 목표가 있어야 나와요" : `▷ 점검 품목: ${cL} Rolling 목표가 없어요 (4 목표 진척 탭에 붙여넣기)`);
+  const TXT = L.join("\n"), TSV = tsv.map(r => r.join("\t")).join("\n") + "\n\nGAP 발생 사유 및 개선 필요사항\n" + TXT;
+  const sl = (k, lab, list) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lab} <select data-mom="${k}">${list.map(([v, l]) => `<option value="${v}" ${String(MOM[k]) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
+  const warn = [];
+  if (!gP && !gC) warn.push("Rolling 목표가 없어요 → 4 목표 진척 탭에 목표를 붙여넣으면 Rolling·진척율이 채워져요");
+  else { if (!gP) warn.push(`${pL} Rolling 목표 없음`); if (!gC) warn.push(`${cL} Rolling 목표 없음`); }
+  if (multiL) warn.push(`채널마다 경과일이 달라요 (${chs.map(c => `${esc(c)} ${C.L[c]}일`).join(", ")}) → 시간진척은 가장 긴 ${Lx}일 기준`);
+  if (MOM.mode === "dow") warn.push(`동일요일 기준이라 ${pL} 기간이 ${pm}/${1 + C.off}~${Lx + C.off}이에요 → 진척율은 그 기간 실적 ÷ ${pL} Rolling`);
+  if (C.cut) warn.push(`${pL}이 짧아서 기간이 잘렸어요 → '같은 일자' 기준 권장`);
+  const html = `<h2>📝 보고서 <small>${esc(ST.ch === "전체" ? "전체 채널" : ST.ch)} · ${per} · 백만원 · 관리원가 기준</small></h2>
+    <div class="toolbar" style="margin:0 0 8px">${sl("mode", "기준", [["date", "같은 일자"], ["dow", "동일요일 (요일 맞춤)"]])}${sl("fix", "고정비", [["true", "일할 맞춤"], ["false", "저장값 그대로"]])}<span class="sp"></span><label class="f" style="flex-direction:row;align-items:center;gap:6px">보고서 제목 <input type="text" id="rptTitle" value="${esc(ls.get("dc_rpt_title") || "Account별 매출/비용/이익 현황")}" style="width:220px"></label><button type="button" id="rptXl">📥 엑셀 다운로드 (전 채널·보고 양식)</button><button type="button" class="sec" id="rptAll">📋 전 채널 양식 복사</button><button type="button" class="sec" id="rptTsv">📋 이 채널 표+문구 복사</button><button type="button" class="sec" id="rptTxt">📋 문구만 복사</button><span class="muted" id="rptMsg"></span></div>
+    ${warn.length ? `<div class="warnbox" style="margin-bottom:8px">${warn.map(w => `<div>⚠️ ${w}</div>`).join("")}</div>` : ""}
+    <div class="tw"><table><thead><tr><th rowspan="2">구분</th><th colspan="4">${pL} (${pm}/${1 + C.off}~${Lx + C.off} · 시간진척 ${pct(tP)})</th><th colspan="4">${cL} (${m}/1~${Lx} · 시간진척 ${pct(tC)})</th><th rowspan="2">전월 대비</th></tr>
+    <tr><th>Rolling</th><th>現 실적</th><th>진척율</th><th>Rolling 대비</th><th>Rolling</th><th>現 실적</th><th>진척율</th><th>Rolling 대비</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="help" style="margin:6px 0 10px">진척율 = 동기간 실적 ÷ 월 Rolling · 금액의 Rolling 대비 = 진척율 − 시간진척(경과일 ÷ 월일수) · 율의 Rolling 대비 = 실적율 − Rolling율 · CM% = 100 − 비용율 − 원가율 − 운송비율</div>
+    <h3 style="margin:10px 0 6px;font-size:14px">GAP 발생 사유 및 개선 필요사항 <small class="muted">(자동 작성 — 원인·대책은 직접 보완)</small></h3>
+    <pre style="white-space:pre-wrap;background:#f7f8fb;border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.6 inherit;margin:0">${esc(TXT)}</pre>`;
+  return { html, tsv: TSV, txt: TXT, C, chs, Lx, tP, tC, RW, pm, m, gP, gC };
+}
+// ---- 보고 양식 (전 채널, 팀별 블록 + 팀 계) ----
+// 블록 = 채널 1개 × 5행 (총매출·비용율·원가율·공헌이익·%), 팀은 목표 파일 '팀구분'(없으면 '전체')
+function rptBlocks(R) {
+  const save = { ch: ST.ch, chs: ST._chs }, out = [];
+  try {
+    ST.ch = "전체"; ST._chs = null;
+    const all = rptData(R); if (all.err != null) return null;
+    const GD = goalData(), tm = new Map(); for (const g of (GD && GD.rows) || []) if (g.team && g.ch) tm.set(gk(g.ch), g.team);
+    const ord = c => { const i = STD_CH.indexOf(c); return i < 0 ? 999 : i; };
+    const teams = new Map();
+    for (const c of [...all.C.chs].sort((a, b) => ord(a) - ord(b))) { const t = tm.get(gk(c)) || "전체"; if (!teams.has(t)) teams.set(t, []); teams.get(t).push(c); }
+    for (const [t, cs] of teams) {
+      for (const c of cs) { ST.ch = c; ST._chs = null; out.push({ team: t, lab: shortLab(c), d: rptData(R) }); }
+      ST.ch = "전체"; ST._chs = new Set(cs); out.push({ team: t, lab: "팀 계", tot: true, d: rptData(R) });
+    }
+    if (teams.size > 1) { ST.ch = "전체"; ST._chs = null; out.push({ team: "전체", lab: "합계", tot: true, d: all }); }
+  } finally { ST.ch = save.ch; ST._chs = save.chs; }
+  return out;
+}
+// 블록 → 5행 값: [라벨, 전월 Rolling, 실적, 진척율, Rolling대비, 당월 Rolling, 실적, 진척율, Rolling대비, 전월대비] (원시값, 종류 포함)
+function rptRows(d) {
+  const W = { 총매출: 0, 비용율: 1, 원가율: 2, 공헌이익: 4, "%": 5 };
+  return Object.entries(W).map(([lab, i]) => {
+    const [, typ, pT, pA, cT, cA, g] = d.RW[i];
+    const one = (T, A, t) => typ === "amt" ? { T, A, p: T ? A / T : null, d: T ? A / T - t : null } : { T, A, p: null, d: T != null && A != null ? A - T : null };
+    const P = one(pT, pA, d.tP), Q = one(cT, cA, d.tC), dm = cA != null && pA != null ? cA - pA : null;
+    return { lab, typ, g, P, Q, dm };
+  });
+}
+const xe = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
+const colL = n => { let s = ""; n++; while (n) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; };
+function rptXlsx(R, title) {
+  const B = rptBlocks(R); if (!B || !B.length) return null;
+  const d0 = B[0].d, pm = d0.pm, m = d0.m;
+  // 스타일 (cellXfs 순서)
+  const S = { def: 0, title: 1, hG: 2, hB: 3, hX: 4, txt: 5, ch: 6, red: 7, num: 8, pct: 9, pp: 10, ppBad: 11, dAmt: 12, dAmtBad: 13, gap: 14, team: 15, unit: 16, tot: 17, numT: 18, pctT: 19 };
+  const cells = new Map(), merges = [], rowH = {};
+  const put = (r, c, v, s) => cells.set(r * 100 + c, { r, c, v, s });
+  put(0, 0, `■ ${title}`, S.title);
+  put(1, 3, `${pm}월`, S.hG); for (let c = 4; c <= 6; c++) put(1, c, "", S.hG); merges.push([1, 3, 1, 6]);
+  put(1, 7, `${m}월`, S.hB); for (let c = 8; c <= 10; c++) put(1, c, "", S.hB); merges.push([1, 7, 1, 10]);
+  put(1, 12, "(관리원가 기준, 단위 : 백만원, %)", S.unit);
+  const H2 = (c, t) => { put(2, c, t, S.hX); put(3, c, "", S.hX); merges.push([2, c, 3, c]); };
+  H2(0, "팀"); H2(1, "채널"); H2(2, "구분"); H2(3, "Rolling"); H2(6, "Rolling\n대비"); H2(7, "Rolling"); H2(10, "Rolling\n대비"); H2(11, "전월\n대비"); H2(12, "GAP 발생 사유 및 개선 필요사항");
+  for (const c of [4, 8]) { put(2, c, "現 실적", S.hX); put(2, c + 1, "", S.hX); merges.push([2, c, 2, c + 1]); put(3, c, "실적", S.hX); put(3, c + 1, "진척율", S.hX); }
+  rowH[2] = 18; rowH[3] = 18;
+  let r = 4, teamStart = 4, curTeam = B[0].team;
+  const closeTeam = (endR) => { if (endR > teamStart) { put(teamStart, 0, curTeam, S.team); for (let i = teamStart + 1; i < endR; i++) put(i, 0, "", S.team); merges.push([teamStart, 0, endR - 1, 0]); } };
+  for (const b of B) {
+    if (b.d.err != null) continue;
+    if (b.tot) { closeTeam(r); }
+    if (b.team !== curTeam && !b.tot) { curTeam = b.team; teamStart = r; }
+    const rows = rptRows(b.d), T = !!b.tot;
+    // GAP 글이 5행 안에 다 보이게 행 높이 계산 (M열 95폭 ≈ 한 줄 70자, 줄당 12.5pt)
+    const nLn = String(b.d.txt || "").split("\n").reduce((t, s) => t + Math.max(1, Math.ceil(s.length / 70)), 0), hh = Math.max(24, Math.ceil(nLn * 12.5 / 5) + 1);
+    rows.forEach((x, i) => {
+      const R0 = r + i; rowH[R0] = hh;
+      if (T) put(R0, 0, i ? "" : (b.lab === "합계" ? "전체 합계" : `${b.team} 계`), S.team);
+      put(R0, 1, i === 0 ? b.lab : i === 1 ? `~${b.d.Lx}일` : i === 2 ? b.d.tC : i === 3 ? `${pm}월 ${pct(b.d.tP)}` : "", i === 0 ? (T ? S.tot : S.ch) : i === 1 ? S.red : i === 2 ? S.pct : S.txt);
+      put(R0, 2, x.lab, T ? S.tot : S.txt);
+      const amt = x.typ === "amt", bad = v => v != null && Math.abs(v) >= 0.0005 && v * x.g < 0;
+      const side = (c0, o) => {
+        if (amt) { put(R0, c0, o.T != null ? o.T / 1e6 : "", T ? S.numT : S.num); put(R0, c0 + 1, o.A / 1e6, T ? S.numT : S.num); put(R0, c0 + 2, o.p != null ? o.p : "", T ? S.pctT : S.pct); }
+        else { put(R0, c0, o.T != null ? o.T : "", T ? S.pctT : S.pct); put(R0, c0 + 1, o.A != null ? o.A : "", T ? S.pctT : S.pct); put(R0, c0 + 2, "", S.txt); }
+        put(R0, c0 + 3, o.d != null ? o.d * 100 : "", bad(o.d) ? S.ppBad : S.pp);
+      };
+      side(3, x.P); side(7, x.Q);
+      if (amt) put(R0, 11, x.dm != null ? x.dm / 1e6 : "", bad(x.dm) ? S.dAmtBad : S.dAmt); else put(R0, 11, x.dm != null ? x.dm * 100 : "", bad(x.dm) ? S.ppBad : S.pp);
+      put(R0, 12, i === 0 ? b.d.txt : "", S.gap);
+    });
+    merges.push([r, 12, r + 4, 12]);
+    if (T) merges.push([r, 0, r + 4, 0]);
+    r += 5;
+    if (T) teamStart = r;
+  }
+  // XML
+  const rowsX = []; const byRow = new Map(); for (const c of cells.values()) { if (!byRow.has(c.r)) byRow.set(c.r, []); byRow.get(c.r).push(c); }
+  for (const rr of [...byRow.keys()].sort((a, b) => a - b)) {
+    const cs = byRow.get(rr).sort((a, b) => a.c - b.c).map(c => { const ref = colL(c.c) + (rr + 1); if (typeof c.v === "number" && isFinite(c.v)) return `<c r="${ref}" s="${c.s}"><v>${c.v}</v></c>`; if (c.v === "" || c.v == null) return `<c r="${ref}" s="${c.s}"/>`; return `<c r="${ref}" s="${c.s}" t="inlineStr"><is><t xml:space="preserve">${xe(c.v)}</t></is></c>`; }).join("");
+    rowsX.push(`<row r="${rr + 1}"${rowH[rr] ? ` ht="${rowH[rr]}" customHeight="1"` : ""}>${cs}</row>`);
+  }
+  const W = [8, 10, 8, 8.5, 8.5, 8.5, 10, 8.5, 8.5, 8.5, 10, 9, 95];
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${W.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols><sheetData>${rowsX.join("")}</sheetData><mergeCells count="${merges.length}">${merges.map(([a, b, c, e]) => `<mergeCell ref="${colL(b)}${a + 1}:${colL(e)}${c + 1}"/>`).join("")}</mergeCells><pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/></worksheet>`;
+  const bd = `<border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border>`;
+  const fill = rgb => `<fill><patternFill patternType="solid"><fgColor rgb="FF${rgb}"/><bgColor indexed="64"/></patternFill></fill>`;
+  const xf = (nf, font, fl, b, h, v, wrap) => `<xf numFmtId="${nf}" fontId="${font}" fillId="${fl}" borderId="${b}" xfId="0"${nf ? ' applyNumberFormat="1"' : ""} applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment${h ? ` horizontal="${h}"` : ""} vertical="${v || "center"}"${wrap ? ' wrapText="1"' : ""}/></xf>`;
+  // fonts: 0 기본 9 · 1 굵게 · 2 굵게 흰색 · 3 빨강 · 4 제목 11 굵게 · 5 작게 8
+  // fills: 0 none · 1 gray125 · 2 초록 · 3 파랑 · 4 회색 · 5 노랑 · 6 분홍 · 7 연회색(합계)
+  const xfs = [
+    xf(0, 0, 0, 0), xf(0, 4, 0, 0, "left"), xf(0, 2, 2, 1, "center", "center", 1), xf(0, 2, 3, 1, "center", "center", 1), xf(0, 1, 4, 1, "center", "center", 1),
+    xf(0, 0, 0, 1, "center"), xf(0, 1, 5, 1, "center"), xf(0, 3, 0, 1, "center"), xf(3, 0, 0, 1, "right"), xf(164, 0, 0, 1, "right"),
+    xf(165, 0, 0, 1, "right"), xf(165, 0, 6, 1, "right"), xf(166, 0, 0, 1, "right"), xf(166, 0, 6, 1, "right"), xf(0, 0, 0, 1, "left", "top", 1),
+    xf(0, 1, 0, 1, "center", "center", 1), xf(0, 5, 0, 0, "right"), xf(0, 1, 7, 1, "center"), xf(3, 1, 7, 1, "right"), xf(164, 1, 7, 1, "right")];
+  const font = (sz, b, rgb) => `<font>${b ? "<b/>" : ""}<sz val="${sz}"/>${rgb ? `<color rgb="FF${rgb}"/>` : ""}<name val="맑은 고딕"/><family val="3"/></font>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="3"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="+0.0&quot;%p&quot;;-0.0&quot;%p&quot;;0.0&quot;%p&quot;"/><numFmt numFmtId="166" formatCode="+#,##0.0;-#,##0.0;0.0"/></numFmts><fonts count="6">${font(9)}${font(9, 1)}${font(9, 1, "FFFFFF")}${font(9, 0, "C00000")}${font(11, 1)}${font(8)}</fonts><fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>${fill("70AD47")}${fill("2F5597")}${fill("D9D9D9")}${fill("FFF2CC")}${fill("FFC7CE")}${fill("F2F2F2")}</fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>${bd}</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="보고서" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">'보고서'!$1:$4</definedName></definedNames></workbook>`;
+  const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  const wrels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const CF = XLSX.CFB, z = CF.utils.cfb_new(), enc = new TextEncoder();
+  [["[Content_Types].xml", ct], ["_rels/.rels", rels], ["xl/workbook.xml", wb], ["xl/_rels/workbook.xml.rels", wrels], ["xl/styles.xml", styles], ["xl/worksheets/sheet1.xml", sheet]].forEach(([p, s]) => CF.utils.cfb_add(z, p, enc.encode(s)));
+  CF.utils.cfb_del(z, "\u0001Sh33tJ5");
+  return { bytes: CF.write(z, { fileType: "zip", type: "array", compression: true }), name: `보고서_${pm}월vs${m}월_${d0.Lx}일.xlsx`, B };
+}
+// 전 채널 양식 TSV (같은 열 배치, 값은 표시 형식 텍스트) — 회사 PC에서 다운로드가 막힐 때 기존 양식에 붙여넣기용
+function rptAllTsv(R, title) {
+  const B = rptBlocks(R); if (!B) return "";
+  const d0 = B[0].d, L = [[`■ ${title}`], ["", "", "", `${d0.pm}월`, "", "", "", `${d0.m}월`, "", "", "", "", "(관리원가 기준, 단위 : 백만원, %)"], ["팀", "채널", "구분", "Rolling", "실적", "진척율", "Rolling 대비", "Rolling", "실적", "진척율", "Rolling 대비", "전월 대비", "GAP 발생 사유 및 개선 필요사항"]];
+  const q = s => /[\t\n"]/.test(s) ? `"${String(s).replace(/"/g, '""')}"` : s;
+  for (const b of B) {
+    if (b.d.err != null) continue;
+    rptRows(b.d).forEach((x, i) => {
+      const amt = x.typ === "amt", side = o => amt ? [m0(o.T), m0(o.A), pct(o.p), dpp(o.d)] : [pct(o.T), pct(o.A), "", dpp(o.d)];
+      L.push([i ? "" : (b.tot ? (b.lab === "합계" ? "전체 합계" : `${b.team} 계`) : b.team), i === 0 ? b.lab : i === 1 ? `~${b.d.Lx}일` : i === 2 ? pct(b.d.tC) : i === 3 ? `${d0.pm}월 ${pct(b.d.tP)}` : "", x.lab, ...side(x.P), ...side(x.Q), amt ? (x.dm > 0 ? "+" : "") + mil1(x.dm) : dpp(x.dm), i ? "" : q(b.d.txt)]);
+    });
+  }
+  return L.map(r => r.join("\t")).join("\n");
+}
+function rptBind() {
+  const t = $("#rptTsv"), x = $("#rptTxt"), msg = $("#rptMsg");
+  const ttl = () => { const v = ($("#rptTitle") || {}).value || "Account별 매출/비용/이익 현황"; ls.set("dc_rpt_title", v); return v; };
+  const xl = $("#rptXl"); if (xl) xl.onclick = () => {
+    try { const o = rptXlsx(MOMR, ttl()); if (!o) { alert("보고서 자료가 없어요"); return; } const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([o.bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); a.download = o.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); if (msg) msg.textContent = `✅ ${o.name} (${o.B.filter(b => !b.tot).length}개 채널)`; }
+    catch (e) { alert("엑셀 만들기 실패: " + e.message); }
+  };
+  const al = $("#rptAll"); if (al) al.onclick = async () => { await copyBig(rptAllTsv(MOMR, ttl()), al); if (msg) msg.textContent = "✅ 전 채널 양식 복사됨 → 엑셀 A1에 붙여넣기"; };
+  if (t) t.onclick = async () => { await copyBig(RPT.tsv, t); if (msg) msg.textContent = "✅ 복사됨 → 엑셀 A1에 붙여넣기"; };
+  if (x) x.onclick = async () => { await copyBig(RPT.txt, x); if (msg) msg.textContent = "✅ 문구 복사됨"; };
+}
 let MOMC = { big: "전체", small: "전체" };
 const momRe = () => { const c = document.getElementById("momCard"); if (c) c.innerHTML = momHtml(); };
 document.addEventListener("change", e => { const id = e.target && e.target.id; if (id === "momCB") { MOMC.big = e.target.value; MOMC.small = "전체"; momRe(); } else if (id === "momCS") { MOMC.small = e.target.value; momRe(); } });
-document.addEventListener("change", e => { const k = e.target && e.target.dataset && e.target.dataset.mom; if (!k) return; MOM[k] = k === "fix" ? e.target.value === "true" : e.target.value; try { localStorage.setItem("dc_mom", JSON.stringify(MOM)); } catch (x) { } const c = document.getElementById("momCard"); if (c) c.innerHTML = momHtml(); });
+document.addEventListener("change", e => { const k = e.target && e.target.dataset && e.target.dataset.mom; if (!k) return; MOM[k] = k === "fix" ? e.target.value === "true" : e.target.value; try { localStorage.setItem("dc_mom", JSON.stringify(MOM)); } catch (x) { } const c = document.getElementById("momCard"); if (c) c.innerHTML = momHtml(); const rp = document.getElementById("rptCard"); if (rp) { rp.innerHTML = rptHtml(MOMR); rptBind(); } });
 
 // 대시보드 분류별 율 표: 보는 단계(대/소/세분류) + 대카테고리·소카테고리 조회
 let EVROWS = [], EVS = { lv: "evt", big: "전체", small: "전체" };
@@ -1122,7 +1363,7 @@ function parseGoal(g) {
     if (sku >= 0 && sal >= 0 && mon >= 0 && (dcI >= 0 || jI >= 0 || pI >= 0)) {
       out.layout = "sku"; out.unit = unitOf(h[sal]); const nmI = f(/^(SKU명|제품명|품명|자재명)$/);
       // Rolling 양식: 비용·공헌이익 열이 있으면 툴 계산값과 대조 (행 단위, 10원 넘게 차이 나면 경고)
-      const cI = f(/^비용(계)?$/), cmI = f(/^(공헌이익|CM)(\(.*\))?$/i); out.chk = { n: 0, bad: [] };
+      const cI = f(/^비용(계)?$/), cmI = f(/^(공헌이익|CM)(\(.*\))?$/i), tmI = f(/^팀(구분|명)?$/); out.chk = { n: 0, bad: [] };
       const M = new Map(), N = c => c >= 0 ? num(rr0[c]) ?? 0 : 0; let rr0;
       for (let j = i + 1; j < g.length; j++) {
         const rr = g[j]; if (!rr) continue; rr0 = rr; const cd = code(rr[sku]); if (!cd || SUB.test(norm(cd))) continue;
@@ -1130,7 +1371,7 @@ function parseGoal(g) {
         const mo = goalMonth(rr[mon]); if (!mo) { out.bad++; continue; }
         const y = (yr >= 0 ? yearV(rr[yr]) : null) ?? mo.y, ch = ix.ch >= 0 ? canonCh(gTxt(rr[ix.ch])) : "";
         const k = [gk(ch), cd, y ?? "", mo.m].join("\u0001");
-        let e = M.get(k); if (!e) M.set(k, e = { ch, code: cd, name: nmI >= 0 ? gTxt(rr[nmI]) : "", y, m: mo.m, u: out.unit, s: 0, dc: 0, j: 0, p: 0, vc: 0, tr: 0, fBig: ix.big >= 0 ? gTxt(rr[ix.big]) : "", fSmall: ix.small >= 0 ? gTxt(rr[ix.small]) : "" });
+        let e = M.get(k); if (!e) M.set(k, e = { ch, code: cd, name: nmI >= 0 ? gTxt(rr[nmI]) : "", y, m: mo.m, u: out.unit, s: 0, dc: 0, j: 0, p: 0, vc: 0, tr: 0, fBig: ix.big >= 0 ? gTxt(rr[ix.big]) : "", fSmall: ix.small >= 0 ? gTxt(rr[ix.small]) : "", team: tmI >= 0 ? gTxt(rr[tmI]) : "" });
         e.s += sv ?? 0; e.dc += N(dcI); e.j += N(jI); e.p += N(pI); e.vc += N(vI); e.tr += N(tI);
         if (cI >= 0 || cmI >= 0) {
           out.chk.n++; const cst = N(dcI) + N(jI) + N(pI), cmv = (sv ?? 0) - cst - N(vI) - N(tI);
