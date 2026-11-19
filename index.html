@@ -55,6 +55,14 @@ button:disabled{opacity:.4;cursor:default}
 .tabs button.on{background:var(--navy);color:#fff}
 .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
 .toolbar .sp{flex:1}
+.chm{position:relative}
+.chm>summary{list-style:none;cursor:pointer;border:1px solid #c9d1dc;border-radius:4px;padding:4px 26px 4px 8px;min-width:150px;background:#fff;position:relative;font-size:13px}
+.chm>summary::-webkit-details-marker{display:none}
+.chm>summary::after{content:"▾";position:absolute;right:8px;top:3px;color:#555}
+.chmBox{position:absolute;z-index:50;top:calc(100% + 2px);left:0;background:#fff;border:1px solid #c9d1dc;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,.15);padding:6px 4px;max-height:360px;overflow:auto;min-width:190px}
+.chmBox label{display:flex;align-items:center;gap:6px;padding:3px 8px;white-space:nowrap;cursor:pointer;font-size:13px}
+.chmBox label:hover{background:#eef3fb}
+.chmBox label:first-child{border-bottom:1px solid #e3e7ee;margin-bottom:3px;padding-bottom:5px}
 .tw{overflow:auto;max-height:68vh;border:1px solid var(--line);background:#fff;border-radius:0 0 6px 6px}
 table{border-collapse:collapse;width:100%;font-size:12px}
 th{position:sticky;top:0;background:var(--navy);color:#fff;font-weight:600;padding:6px 8px;white-space:nowrap;cursor:pointer;z-index:1}
@@ -665,7 +673,29 @@ const uniq = a => [...new Set(a)].sort((x, y) => (x === NOCAT) - (y === NOCAT) |
 const bigs = rows => uniq(rows.map(r => catOf(r.big)));
 const smalls = rows => uniq(rows.filter(r => ST.big === "전체" || catOf(r.big) === ST.big).map(r => catOf(r.small)));
 const evts = rows => uniq(rows.filter(r => (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small)).map(r => catOf(r.evt)));
-const filt = rows => rows.filter(r => (ST.ch === "전체" ? !ST._chs || ST._chs.has(r.ch) : r.ch === ST.ch) && (ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small) && (ST.evt === "전체" || catOf(r.evt) === ST.evt));
+// 채널 필터: ST.ch = 한 채널 또는 "전체", 여러 채널 선택은 ST.ch="전체" + ST._chs(Set)
+const chOk = c => ST.ch === "전체" ? !ST._chs || ST._chs.has(c) : c === ST.ch;
+const chArg = () => ST.ch === "전체" && ST._chs ? ST._chs : ST.ch;   // 목표 함수용 (Set 또는 이름)
+const chMatch = (chF, c) => chF === "전체" ? true : chF instanceof Set ? [...chF].some(x => gk(x) === gk(c)) : gk(c) === gk(chF);
+const chLab = () => ST.ch !== "전체" ? ST.ch : ST._chs ? `선택 채널 ${ST._chs.size}개 (${[...ST._chs].join(", ")})` : "전체 채널";
+const chTag = () => ST.ch === "전체" && ST._chs ? [...ST._chs].map(c => c.replace(/^[A-Z]{1,3}\d{1,3}\./, "")).join("+") : ST.ch;
+function chMulti(chs) {
+  const on = c => chOk(c), n = chs.filter(on).length;
+  const lab = ST.ch !== "전체" ? ST.ch : !ST._chs ? "전체" : n === 0 ? "선택 없음" : `${n}개 선택`;
+  return `<label class="f" style="flex-direction:row;align-items:center;gap:6px">채널 <details class="chm" id="chM" ${ST._chOpen ? "open" : ""}><summary>${esc(lab)}</summary><div class="chmBox">
+    <label><input type="checkbox" data-chall ${!ST._chs && ST.ch === "전체" ? "checked" : ""}> <b>전체</b></label>
+    ${chs.map(c => `<label><input type="checkbox" data-chm="${esc(c)}" ${on(c) ? "checked" : ""}> ${esc(c)}</label>`).join("")}
+  </div></details></label>`;
+}
+function chMultiBind(chs) {
+  const d = $("#chM"); if (!d) return;
+  d.ontoggle = () => { ST._chOpen = d.open; };
+  const set = list => { const s = chs.filter(c => list.includes(c)); if (!s.length || s.length === chs.length) { ST.ch = "전체"; ST._chs = null; } else if (s.length === 1) { ST.ch = s[0]; ST._chs = null; } else { ST.ch = "전체"; ST._chs = new Set(s); } ST._chOpen = true; render(); };
+  d.querySelector("[data-chall]").onchange = () => set(chs);
+  d.querySelectorAll("[data-chm]").forEach(b => b.onchange = () => { const cur = chs.filter(chOk); const c = b.dataset.chm; const allNow = ST.ch === "전체" && !ST._chs; set(allNow ? [c] : b.checked ? [...cur, c] : cur.filter(x => x !== c)); });
+}
+document.addEventListener("click", e => { const d = document.getElementById("chM"); if (d && d.open && !d.contains(e.target)) { d.open = false; ST._chOpen = false; } });
+const filt = rows => rows.filter(r => chOk(r.ch) &&(ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small) && (ST.evt === "전체" || catOf(r.evt) === ST.evt));
 const sel = (id, lbl, opts, cur) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lbl} <select id="${id}">${opts.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
 
 function render() {
@@ -697,7 +727,7 @@ function render() {
   const tabs = R.archived ? TABS.filter(([k]) => k !== "det") : TABS; if (R.archived && ST.tab === "det") ST.tab = "dash";
   h += `<div class="tabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${ST.tab === k ? "on" : ""}">${l}</button>`).join("")}</div>`;
   h += `<div class="toolbar">
-    ${sel("chSel", "채널", ["전체", ...R.chs], ST.ch)}
+    ${chMulti(R.chs)}
     ${sel("bigSel", "대카테고리", ["전체", ...bigs(R.rows)], ST.big)}
     ${sel("smallSel", "소카테고리", ["전체", ...smalls(R.rows)], ST.small)}
     ${sel("evtSel", "세분류", ["전체", ...evts(R.rows)], ST.evt)}
@@ -731,7 +761,7 @@ function finishRender(h) {
   $("#out").innerHTML = h;
   $("#out").querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { ST.tab = b.dataset.tab; render(); });
   $("#out").querySelectorAll("th").forEach(th => th.onclick = () => { const k = th.dataset.k; const c = ST.sort[ST.tab]; ST.sort[ST.tab] = { k, d: c && c.k === k ? -c.d : -1 }; render(); });
-  $("#chSel").onchange = e => { ST.ch = e.target.value; render(); };
+  if (ST.res) chMultiBind(ST.res.chs);
   $("#bigSel").onchange = e => { ST.big = e.target.value; ST.small = "전체"; ST.evt = "전체"; render(); };
   $("#smallSel").onchange = e => { ST.small = e.target.value; ST.evt = "전체"; render(); };
   $("#evtSel").onchange = e => { ST.evt = e.target.value; render(); };
@@ -872,7 +902,7 @@ function dash(rows, R) {
   EVROWS = rows; h += `<section class="card wide" id="evCard">${evHtml()}</section>`;
   // ⑤ 고정비 스프레드 영향 품목: 율이 아니라 월 고정금액(장려금_분배기준·SKU금액, 판관비_분배·SKU)을 매입비중으로 나눠 받아 CM율이 깎이는 제품
   h += fixedSpread(rows, t);
-  const fl = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체");
+  const fl = [chTag(), ST.big, ST.small, ST.evt].filter(x => x !== "전체");
   return h + `</div><div class="help" style="margin-top:8px">금액 단위 백만원 · 율은 모두 <b>총매출(출고가 기준)</b> 대비 · 필터: <b>${fl.length ? fl.map(esc).join(" / ") : "전체"}</b> (장려금·판관비 배분은 전체 기준으로 계산 후 필터)</div>`;
 }
 
@@ -900,7 +930,7 @@ function momCalc(R) {
   const [y, m] = ym.split("-").map(Number), [py, pm] = pv.split("-").map(Number);
   const mdC = R.mdays || new Date(y, m, 0).getDate(), mdP = P.mdays || new Date(py, pm, 0).getDate();
   const off = MOM.mode === "dow" ? (new Date(y, m - 1, 1).getDay() - new Date(py, pm - 1, 1).getDay() + 7) % 7 : 0;
-  const chs = [...new Set(curAll.map(r => r.ch))].filter(ch => P.days.some(r => r.ch === ch));
+  const chs = [...new Set(curAll.map(r => r.ch))].filter(ch => chOk(ch) && P.days.some(r => r.ch === ch));
   if (!chs.length) return null;
   const N = {}, L = {}; let cut = false;
   for (const ch of chs) { const pr = R.prorate && R.prorate[ch]; N[ch] = pr ? Math.round(pr * mdC) : Math.max(...curAll.filter(r => r.ch === ch).map(r => r.day)); L[ch] = Math.min(N[ch], mdP - off); if (L[ch] < N[ch]) cut = true; }
@@ -1084,7 +1114,7 @@ function rptData(R) {
     if (typ === "amt") { const p = T ? A / T : null, d = p != null ? p - t : null; return [[m0(T), ""], [m0(A), A < 0 ? "neg" : ""], [pct(p), ""], [dpp(d), cls(d, g)]]; }
     const d = T != null && A != null ? A - T : null; return [[pct(T), ""], [pct(A), ""], ["", ""], [dpp(d), cls(d, g)]];
   };
-  const tsv = [[`${ST.ch === "전체" ? "전체 채널" : ST.ch}${[ST.big, ST.small, ST.evt].filter(v => v !== "전체").map(v => " · " + v).join("")}`, `${pL}`, "", "", "", `${cL}`, "", "", "", "", "(관리원가 기준, 단위 : 백만원, %)"],
+  const tsv = [[`${chLab()}${[ST.big, ST.small, ST.evt].filter(v => v !== "전체").map(v => " · " + v).join("")}`, `${pL}`, "", "", "", `${cL}`, "", "", "", "", "(관리원가 기준, 단위 : 백만원, %)"],
     ["구분", "Rolling", "現 실적", "진척율", "Rolling 대비", "Rolling", "現 실적", "진척율", "Rolling 대비", "전월 대비"]];
   let body = "";
   for (const [lab, typ, pT, pA, cT, cA, g] of RW) {
@@ -1136,7 +1166,7 @@ function rptData(R) {
   if (multiL) warn.push(`채널마다 경과일이 달라요 (${chs.map(c => `${esc(c)} ${C.L[c]}일`).join(", ")}) → 시간진척은 가장 긴 ${Lx}일 기준`);
   if (MOM.mode === "dow") warn.push(`동일요일 기준이라 ${pL} 기간이 ${pm}/${1 + C.off}~${Lx + C.off}이에요 → 진척율은 그 기간 실적 ÷ ${pL} Rolling`);
   if (C.cut) warn.push(`${pL}이 짧아서 기간이 잘렸어요 → '같은 일자' 기준 권장`);
-  const html = `<h2>📝 보고서 <small>${esc(ST.ch === "전체" ? "전체 채널" : ST.ch)} · ${per} · 백만원 · 관리원가 기준</small></h2>
+  const html = `<h2>📝 보고서 <small>${esc(chLab())} · ${per} · 백만원 · 관리원가 기준</small></h2>
     <div class="toolbar" style="margin:0 0 8px">${sl("mode", "기준", [["date", "같은 일자"], ["dow", "동일요일 (요일 맞춤)"]])}${sl("fix", "고정비", [["true", "일할 맞춤"], ["false", "저장값 그대로"]])}<span class="sp"></span><label class="f" style="flex-direction:row;align-items:center;gap:6px">보고서 제목 <input type="text" id="rptTitle" value="${esc(ls.get("dc_rpt_title") || "Account별 매출/비용/이익 현황")}" style="width:220px"></label><button type="button" id="rptXl">📥 엑셀 다운로드 (전 채널·보고 양식)</button><button type="button" class="sec" id="rptAll">📋 전 채널 양식 복사</button><button type="button" class="sec" id="rptTsv">📋 이 채널 표+문구 복사</button><button type="button" class="sec" id="rptTxt">📋 문구만 복사</button><span class="muted" id="rptMsg"></span></div>
     ${warn.length ? `<div class="warnbox" style="margin-bottom:8px">${warn.map(w => `<div>⚠️ ${w}</div>`).join("")}</div>` : ""}
     <div class="tw"><table><thead><tr><th rowspan="2">구분</th><th colspan="4">${pL} (${pm}/${1 + C.off}~${Lx + C.off} · 시간진척 ${pct(tP)})</th><th colspan="4">${cL} (${m}/1~${Lx} · 시간진척 ${pct(tC)})</th><th rowspan="2">전월 대비</th></tr>
@@ -1288,13 +1318,13 @@ function rcaHtml(R) {
   const box = s => `<h2>🔍 Rolling 차이 분석</h2><div class="empty">${s}</div>`;
   if (!C) return box(`보관함에 전월(${esc(prevYm(ym) || "?")}) 자료가 없어요 — 기간(경과일) 계산에 전월 동기간 비교 로직을 같이 써서, 전월을 보관함에 저장해야 해요`);
   if (ST.ch !== "전체" && !C.chs.includes(ST.ch)) return box(`${esc(ST.ch)}는 전월 보관 자료가 없어요`);
-  const chs = C.chs.filter(c => ST.ch === "전체" || c === ST.ch), Lx = Math.max(...chs.map(c => C.L[c]));
+  const chs = C.chs.filter(chOk), Lx = Math.max(...chs.map(c => C.L[c]));
   // 실적: 라이브면 SKU 행(일할 맞춤 동일 적용), 보관함이면 분류 단위
   let act = C.cur, skuOK = false;
   if (!R.archived) { const all = R.rows.filter(r => r.day != null && C.L[r.ch] != null); let w = all.filter(r => r.day >= 1 && r.day <= C.L[r.ch]); if (MOM.fix) w = momScale(all, w, R.prorate || {}, C.mdC, C.L); act = filt(w); skuOK = true; }
   let lv = RCA.lv; if (lv === "sku" && !skuOK) lv = "big";
   const GD = goalData(), hit = (g, k) => ST[k] === "전체" || !g[k] || gk(catOf(g[k])) === gk(ST[k]);
-  const G = GD && GD.rows ? goalsOf(GD, C.y, C.m, ST.ch).filter(g => hit(g, "big") && hit(g, "small") && hit(g, "evt")) : [];
+  const G = GD && GD.rows ? goalsOf(GD, C.y, C.m, chArg()).filter(g => hit(g, "big") && hit(g, "small") && hit(g, "evt")) : [];
   if (!G.length) return box(`${C.m}월 Rolling 목표가 없어요 → 4 목표 진척 탭에 붙여넣어 주세요`);
   const uu = g => gUnit() || g.u || 1;
   G.forEach(g => { g.dcA = g.dc != null ? g.dc * uu(g) : null; g.jA = g.j != null ? g.j * uu(g) : null; g.pA = g.p != null ? g.p * uu(g) : null; });
@@ -1342,13 +1372,13 @@ function rcaHtml(R) {
   const dir = RA >= RT ? 1 : -1;   // 차이 방향으로 기여한 것만 (초과면 올린 쪽, 미달이면 내린 쪽)
   const topR = L.filter(o => o.rate * dir > 0.00005).sort((p, q) => q.rate * dir - p.rate * dir).slice(0, 3);
   const topM = L.filter(o => o.mix * dir > 0.00005).sort((p, q) => q.mix * dir - p.mix * dir).slice(0, 3);
-  const lines = [`▷ ${ST.ch === "전체" ? "전체 채널" : ST.ch} ${mLab}: Rolling ${pct(RT)} → 실적 ${pct(RA)} (${dpp(RA - RT)}, ${C.m}/1~${Lx})`];
+  const lines = [`▷ ${chLab()} ${mLab}: Rolling ${pct(RT)} → 실적 ${pct(RA)} (${dpp(RA - RT)}, ${C.m}/1~${Lx})`];
   if (RCA.met === "cost") { const p = k => comp.find(o => o.k === k); lines.push(` · 항목: ${["dc", "j", "p"].map(k => `${p(k).lab} ${p(k).A != null && p(k).T != null ? dpp(p(k).A - p(k).T) : "-"}`).join(", ")}`); }
   lines.push(` · 율 효과 ${dpp(sR)} : ${topR.map(o => `${short(o)} ${pct(o.y, 1)}→${pct(o.x, 1)}`).join(", ") || "-"}`);
   lines.push(` · 믹스 효과 ${dpp(sM)} : ${topM.map(o => `${short(o)} 비중 ${pct(o.t, 0)}→${pct(o.a, 0)} (${mLab} ${pct(o.y ?? o.x, 0)})`).join(", ") || "-"}`);
   if (deep === 3) { const sk = [...NODE.values()].filter(o => o.d === 3 && o.tot * dir > 0.00005).sort((p, q) => q.tot * dir - p.tot * dir).slice(0, 5); if (sk.length) lines.push(` · 기여 큰 SKU : ${sk.map(o => `${o.lab} ${dpp(o.tot)}`).join(", ")}`); }
   RCATXT = lines.join("\n");
-  return `<h2>🔍 Rolling 차이 분석 <small>${esc(ST.ch === "전체" ? "전체 채널" : ST.ch)} · ${C.m}월 1~${Lx}일 실적 vs ${C.m}월 Rolling · ${MOM.fix ? "고정비 일할 맞춤" : "고정비 저장값"}</small></h2>
+  return `<h2>🔍 Rolling 차이 분석 <small>${esc(chLab())} · ${C.m}월 1~${Lx}일 실적 vs ${C.m}월 Rolling · ${MOM.fix ? "고정비 일할 맞춤" : "고정비 저장값"}</small></h2>
     <div class="toolbar" style="margin:0 0 8px">${sl("met", "지표", RCA_M.map(x => [x[0], x[1]]))}<button type="button" class="sec" data-rcax="0">모두 접기</button><button type="button" class="sec" data-rcax="1">소카테고리까지 펼치기</button>${deep === 3 ? `<button type="button" class="sec" data-rcax="2">SKU까지 전부 펼치기</button>` : ""}<span class="sp"></span><button type="button" class="sec" id="rcaCp">📋 요약 복사</button><span class="muted" id="rcaMsg"></span></div>
     ${!skuOK ? `<div class="warnbox" style="margin-bottom:8px">⚠️ 보관함에서 불러온 달은 SKU별 비용 항목이 없어서 소카테고리까지만 펼쳐져요 (당월을 붙여넣어 계산한 상태에서 SKU까지 가능)</div>` : ""}
     <pre style="white-space:pre-wrap;background:#f7f8fb;border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.6 inherit;margin:0 0 10px">${esc(RCATXT)}</pre>
@@ -1540,7 +1570,7 @@ function skuCls(GD) {
 const gUnit = () => +(ls.get("dc_gunit") || 0);   // 0 = 자동(머리글 단위)
 function goalsOf(GD, Y, M, chF) {
   const ov = gUnit();
-  return GD.rows.filter(g => (g.y ?? Y) === Y && g.m === M && (chF === "전체" || gk(g.ch) === gk(chF)))
+  return GD.rows.filter(g => (g.y ?? Y) === Y && g.m === M && chMatch(chF, g.ch))
     .map(g => { const u = ov || g.u; return { ...g, S: g.s != null ? g.s * u : null, CM: g.cm != null ? g.cm * u : null, COST: g.s != null && g.c != null ? g.s * u * g.c : null, VC: g.s != null && g.vc != null ? g.vc * u : null, TR: g.s != null && g.tr != null ? g.tr * u : null }; });
 }
 const gPat = g => GLV.map(([k]) => gk(g[k]));
@@ -1564,13 +1594,13 @@ function goalCalc(GD, ym, chF, L) {
     let a = grp.get(k); if (!a) { a = mk(k, GLV.slice(0, L).map(([kk]) => g[kk] ? String(g[kk]) : "전체")); grp.set(k, a); }
     for (const x of [a, all]) { x.pats.set(p.join("|"), p); if (g.S != null) { x.S += g.S; x.hasS = true; } if (g.COST != null) { x.COST += g.COST; x.sC += g.S; } if (g.VC != null) { x.VC += g.VC; x.TR += g.TR || 0; x.sV += g.S; } if (g.CM != null) { x.CM += g.CM; x.hasCM = true; } }
   }
-  const rows = src ? src.rows.filter(r => chF === "전체" || gk(r.ch) === gk(chF)) : [];
+  const rows = src ? src.rows.filter(r => chMatch(chF, r.ch)) : [];
   const addA = (x, r) => { let c = x.act.get(r.ch); if (!c) x.act.set(r.ch, c = { sales: 0, cost: 0, cm: 0, vc: 0, tr: 0 }); c.sales += r.sales || 0; c.cost += r.cost || 0; c.cm += r.cm || 0; c.vc += r.vc || 0; c.tr += r.tr || 0; };
   const pl = [...grp.values()].map(x => [x, [...x.pats.values()]]);
   // 목표 없는 분류 실적도 합계에 포함 (대시보드 숫자와 맞춤) → 표에는 '(목표 없음)' 행으로 따로 표시
   let unS = 0; const none = mk("\u0000none", GLV.slice(0, L).map((_, i) => i ? "" : "(목표 없음)"));
   for (const r of rows) { let any = false; for (const [x, ps] of pl) if (ps.some(p => gHit(p, r))) { addA(x, r); any = true; } addA(all, r); if (!any) { addA(none, r); unS += r.sales || 0; } }
-  const dAll = src ? Math.max(0, ...Object.keys(src.prorate || {}).filter(c => chF === "전체" || gk(c) === gk(chF)).map(dOf)) : 0;
+  const dAll = src ? Math.max(0, ...Object.keys(src.prorate || {}).filter(c => chMatch(chF, c)).map(dOf)) : 0;
   const fin = x => {
     let s = 0, c = 0, m = 0, fs = 0, fc = 0, fm = 0, d = 0, vc = 0, tr = 0;
     for (const [ch, v] of x.act) { const dd = dOf(ch); d = Math.max(d, dd); s += v.sales; c += v.cost; m += v.cm; vc += v.vc; tr += v.tr; if (dd > 0) { const k = mdays / dd; fs += v.sales * k; fc += v.cost * k; fm += v.cm * k; } }
@@ -1775,7 +1805,7 @@ function goalDownload(c, Yr, L, chF) {
 // INSIGHT 카드: 목표가 있으면 월말 예상 달성 · 뒤처진 분류 · 비용율 초과 · 연말 예상
 function goalIns(ym, add) {
   const GD = goalData(); if (!GD || !GD.rows.length || !ym) return;
-  const c = goalCalc(GD, ym, ST.ch, 4), x = c.all; if (!c.nG || !c.src) return;
+  const c = goalCalc(GD, ym, chArg(), 4), x = c.all; if (!c.nG || !c.src) return;
   const mm = +ym.slice(5), lab = a => a.lab.filter(t => t !== "전체").join(" > ") || "전체";
   if (x.hasS && x.aS != null) {
     const lv = x.aS >= 1 ? "g" : x.aS >= 0.95 ? "y" : "r";
@@ -1789,7 +1819,7 @@ function goalIns(ym, add) {
   const cr = c.groups.filter(a => a.crT != null && a.cr != null && a.cr - a.crT >= 0.01 && a.sales > 0).sort((a, b) => (b.cr - b.crT) * b.sales - (a.cr - a.crT) * a.sales);
   if (cr.length) add("y", "목표", `비용율 목표 1%p 이상 초과 분류 ${cr.length}개`, "", "DC·장려금·판관비 중 어느 항목이 늘었는지 대시보드에서 해당 분류 필터로 확인",
     [["분류", "비용율 목표", "비용율 실적", "차이", "매출"], ...cr.slice(0, 6).map(a => [lab(a), pct(a.crT), pct(a.cr), dpp(a.cr - a.crT), mil1(a.sales)])]);
-  const Yr = goalYear(GD, c.Y, ym, ST.ch), T = Yr.T;
+  const Yr = goalYear(GD, c.Y, ym, chArg()), T = Yr.T;
   if (T.S && T.aS != null) add(T.aS >= 1 ? "g" : T.aS >= 0.95 ? "y" : "r", "목표", `${c.Y}년 연말 예상 총매출 ${mil1(T.fS)}백만 — 연간 목표 대비 ${pct(T.aS)}`,
     `YTD 실적 ${mil1(T.ytdA)}백만 (연간 진척 ${pct(T.pS)}, 지금까지 목표 대비 ${T.ytdT ? pct(T.ytdA / T.ytdT) : "-"})${T.CM ? ` · CM 연말 예상 ${pct(T.aCM)}` : ""}${T.miss.length ? ` · ⚠ 보관함 없는 달 ${T.miss.map(m => m + "월").join(", ")}은 목표로 대체` : ""}.`, "");
 }
@@ -1798,7 +1828,7 @@ function goalIns(ym, add) {
 const prevYm = ym => { const [y, m] = (ym || "").split("-").map(Number); if (!y || !m) return null; const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const dpp = v => v == null || !isFinite(v) ? "-" : Math.abs(v) < 0.0005 ? "0.0%p" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%p";
 function insights(R) {
-  const rows = R.rows.filter(r => ST.ch === "전체" || r.ch === ST.ch);
+  const rows = R.rows.filter(r => chOk(r.ch));
   const t = total(rows); if (!t.sales) return { t, list: [] };
   const L = []; const add = (lv, tag, title, msg, sug, tbl) => L.push({ lv, tag, title, msg, sug, tbl });
   const sh = v => v / t.sales;   // 총매출 대비
@@ -1854,7 +1884,7 @@ function insights(R) {
       [["대카테고리", "매출", "비중", "DC율", "CM율"], ...bg.slice(0, 8).map(a => [a.big, mil1(a.sales), pct(sh(a.sales), 0), pct(a.dcR), pct(a.cmR)])]);
   }
   // ⑦ 일자별 — 매출 튄 날, CM율 낮은 날
-  const dsrc = R.days ? R.days.filter(r => ST.ch === "전체" || r.ch === ST.ch) : rows.filter(r => r.day != null);
+  const dsrc = R.days ? R.days.filter(r => chOk(r.ch)) :rows.filter(r => r.day != null);
   const dy = agg(dsrc, r => r.day, r => ({ day: r.day })).filter(a => a.day != null).sort((a, b) => a.day - b.day);
   if (dy.length >= 5) {
     const avg = dy.reduce((x, a) => x + a.sales, 0) / dy.length;
@@ -1864,16 +1894,16 @@ function insights(R) {
     if (loD && loD.cmR < t.cmR - 0.05) add("y", "일자", `${loD.day}일 CM율 ${pct(loD.cmR)} (평균 ${dpp(loD.cmR - t.cmR)})`, `해당일 매출 ${mil1(loD.sales)}백만 · DC율 ${pct(loD.dcR)}.`, "그날 행사·특가 입고 여부 확인");
   }
   // ⑧ 채널 비교
-  if (ST.ch === "전체" && R.chs.length > 1) {
-    const cs = agg(R.rows, r => r.ch, r => ({ ch: r.ch })).sort((a, b) => b.sales - a.sales);
+  if (ST.ch === "전체" && R.chs.filter(chOk).length > 1) {
+    const cs = agg(rows, r => r.ch, r => ({ ch: r.ch })).sort((a, b) => b.sales - a.sales);
     add("b", "채널", `채널 ${cs.length}개 CM율 ${pct(Math.min(...cs.map(a => a.cmR)))} ~ ${pct(Math.max(...cs.map(a => a.cmR)))}`, "", "", [["채널", "매출", "DC율", "CM율"], ...cs.map(a => [a.ch, mil1(a.sales), pct(a.dcR), pct(a.cmR)])]);
   }
   // ⑨ 전월 대비 (보관함에 전월이 있을 때)
   const ym = R.archived || $("#ym").value, pv = prevYm(ym), P = pv && ARC[pv];
   if (P) {
-    const prow = P.rows.filter(r => ST.ch === "전체" || r.ch === ST.ch), pt = total(prow);
+    const prow = P.rows.filter(r => chOk(r.ch)), pt = total(prow);
     const dN = s => Math.max(1, ...s.map(r => r.day || 0));
-    const cd = dN(dsrc), pd = dN(P.days.filter(r => ST.ch === "전체" || r.ch === ST.ch));
+    const cd = dN(dsrc), pd = dN(P.days.filter(r => chOk(r.ch)));
     const g = (t.sales / cd) / ((pt.sales / pd) || 1) - 1;
     const pe = new Map(agg(prow, r => catOf(r.evt), r => ({ evt: catOf(r.evt) })).map(a => [a.evt, a]));
     const chg = agg(rows, r => catOf(r.evt), r => ({ evt: catOf(r.evt) })).filter(a => pe.has(a.evt) && a.sales / t.sales >= 0.03).map(a => ({ ...a, d: a.cmR - pe.get(a.evt).cmR })).sort((a, b) => a.d - b.d);
@@ -1899,9 +1929,9 @@ function renderIns() {
   <div class="toolbar" style="margin-top:0">${sel("insCh", "채널", ["전체", ...R.chs], ST.ch)}<span class="muted">${esc(R.archived || $("#ym").value || "")} · 총매출 ${mil1(t.sales)}백만 · CM ${mil1(t.cm)}백만 · <b>CM율 ${pct(t.cmR)}</b></span><span class="sp"></span><button type="button" class="sec" id="insCopy">📋 텍스트 복사 (보고용)</button></div>
   <div class="ins">${list.map(a => `<section class="card ${a.lv}"><h3>${ic[a.lv]} <i>[${esc(a.tag)}]</i> : ${a.title}</h3>${a.msg ? `<p>${a.msg}</p>` : ""}${a.sug ? `<p class="sug">→ ${a.sug}</p>` : ""}${tbl(a.tbl)}</section>`).join("")}</div>
   <div class="help" style="margin-top:8px">금액 단위 백만원 · 율은 총매출 대비 · 이 화면은 정해진 규칙(평균 대비 ±3%p, DC율 +10%p, 매출 1.8배 등)으로 자동 산출 — 판단은 담당자 확인 필요 · 대·소·세분류 필터는 무시, 채널만 적용</div>`;
-  $("#insCh").onchange = e => { ST.ch = e.target.value; render(); };
+  $("#insCh").onchange = e => { ST.ch = e.target.value; ST._chs = null; render(); };
   $("#insCopy").onclick = async () => {
-    const txt = `[${R.archived || $("#ym").value} ${ST.ch === "전체" ? "전체 채널" : ST.ch}] 총매출 ${mil1(t.sales)}백만 / CM ${mil1(t.cm)}백만 (CM율 ${pct(t.cmR)})\n` + list.map(a => `${ic[a.lv]} [${a.tag}] : ${a.title.replace(/<[^>]+>/g, "")}${a.sug ? `\n   → ${a.sug.replace(/<[^>]+>/g, "")}` : ""}`).join("\n");
+    const txt = `[${R.archived || $("#ym").value} ${chLab()}] 총매출 ${mil1(t.sales)}백만 / CM ${mil1(t.cm)}백만 (CM율 ${pct(t.cmR)})\n` + list.map(a => `${ic[a.lv]} [${a.tag}] : ${a.title.replace(/<[^>]+>/g, "")}${a.sug ? `\n   → ${a.sug.replace(/<[^>]+>/g, "")}` : ""}`).join("\n");
     const tx = document.createElement("textarea"); tx.value = txt.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
     try { await navigator.clipboard.writeText(tx.value); } catch (e) { document.body.appendChild(tx); tx.select(); document.execCommand("copy"); tx.remove(); }
     $("#insCopy").textContent = "✅ 복사됨"; setTimeout(() => { const b = $("#insCopy"); if (b) b.textContent = "📋 텍스트 복사 (보고용)"; }, 1500);
@@ -2121,7 +2151,7 @@ function download() {
   XLSX.utils.book_append_sheet(wb, toSheet("evt", dataFor("evt", rowsF)), "세분류별");
   XLSX.utils.book_append_sheet(wb, toSheet("prod", dataFor("prod", rowsF)), "제품별");
   XLSX.utils.book_append_sheet(wb, toSheet("day", dataFor("day", R.days ? filt(R.days) : rowsF)), "일자별");
-  if (R.archived) { XLSX.writeFile(wb, `DC_CM_${R.archived}_보관함_${[ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체"}.xlsx`.replace(/[\\/:*?"<>|]/g, "")); return; }
+  if (R.archived) { XLSX.writeFile(wb, `DC_CM_${R.archived}_보관함_${[chTag(), ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체"}.xlsx`.replace(/[\\/:*?"<>|]/g, "")); return; }
   XLSX.utils.book_append_sheet(wb, toSheet("det", rowsF), "상세");
   const W = R.W; const wr = [["구분", "제품코드", "제품명"]];
   [["출고가 미매칭", W.out], ["운송비 없음", W.tr], ["변동원가 없음", W.vc], ["제품분류 누락", W.cls], ["비용배부 분류 없음", W.cost]].forEach(([n, m]) => m.forEach((v, k) => wr.push([n, k, v ?? ""])));
@@ -2131,7 +2161,7 @@ function download() {
     [a.z.j && "장려금", a.z.p && "판관비", a.z.fee && "代수수료", a.z.log && "물류비"].filter(Boolean).join(", ")]));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(zr), "비용0점검");
   const ym = $("#ym").value || "";
-  const tag = [ST.ch, ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체";
+  const tag = [chTag(), ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체";
   XLSX.writeFile(wb, `DC_CM_${ym}_${tag}.xlsx`.replace(/[\\/:*?"<>|]/g, ""));
 }
 
