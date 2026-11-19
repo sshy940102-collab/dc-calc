@@ -1588,11 +1588,15 @@ function goalSrc(ym) {
   const s = ARC[ym]; if (s) return { rows: s.rows, days: s.days, prorate: s.prorate, mdays: s.mdays, kind: "arc", savedAt: s.savedAt };
   return null;
 }
-function goalCalc(GD, ym, chF, L) {
+function goalCalc(GD, ym, chF, L, rng) {
   const [Y, M] = ym.split("-").map(Number);
   const G = goalsOf(GD, Y, M, chF), src = goalSrc(ym);
   const mdays = src ? src.mdays : new Date(Y, M, 0).getDate();
-  const dOf = ch => src && src.prorate && src.prorate[ch] != null ? Math.round(src.prorate[ch] * mdays) : 0;
+  const dOf0 = ch => src && src.prorate && src.prorate[ch] != null ? Math.round(src.prorate[ch] * mdays) : 0;
+  // 기간 지정 (시작일~종료일): 일자 있는 실적만 그 기간으로 자르고, 채널별 경과일 = min(종료일, 채널 실적일) − 시작일 + 1
+  const hasDay = !!(src && src.days && src.days.some(r => r.day != null));
+  const R0 = rng && (rng.s > 1 || rng.e) && hasDay ? { s: Math.max(1, rng.s || 1), e: Math.min(mdays, rng.e || mdays) } : null;
+  const dOf = ch => { const d = dOf0(ch); return R0 ? Math.max(0, Math.min(d, R0.e) - R0.s + 1) : d; };
   const mk = (key, lab) => ({ key, lab, pats: new Map(), S: 0, hasS: false, COST: 0, sC: 0, VC: 0, TR: 0, sV: 0, CM: 0, hasCM: false, act: new Map() });
   const grp = new Map(), all = mk("*", ["합계"]);
   for (const g of G) {
@@ -1600,13 +1604,14 @@ function goalCalc(GD, ym, chF, L) {
     let a = grp.get(k); if (!a) { a = mk(k, GLV.slice(0, L).map(([kk]) => g[kk] ? String(g[kk]) : "전체")); grp.set(k, a); }
     for (const x of [a, all]) { x.pats.set(p.join("|"), p); if (g.S != null) { x.S += g.S; x.hasS = true; } if (g.COST != null) { x.COST += g.COST; x.sC += g.S; } if (g.VC != null) { x.VC += g.VC; x.TR += g.TR || 0; x.sV += g.S; } if (g.CM != null) { x.CM += g.CM; x.hasCM = true; } }
   }
-  const rows = src ? src.rows.filter(r => chMatch(chF, r.ch)) : [];
+  const rows = src ? (R0 ? src.days.filter(r => r.day != null && r.day >= R0.s && r.day <= R0.e) : src.rows).filter(r => chMatch(chF, r.ch)) : [];
   const addA = (x, r) => { let c = x.act.get(r.ch); if (!c) x.act.set(r.ch, c = { sales: 0, cost: 0, cm: 0, vc: 0, tr: 0 }); c.sales += r.sales || 0; c.cost += r.cost || 0; c.cm += r.cm || 0; c.vc += r.vc || 0; c.tr += r.tr || 0; };
   const pl = [...grp.values()].map(x => [x, [...x.pats.values()]]);
   // 목표 없는 분류 실적도 합계에 포함 (대시보드 숫자와 맞춤) → 표에는 '(목표 없음)' 행으로 따로 표시
   let unS = 0; const none = mk("\u0000none", GLV.slice(0, L).map((_, i) => i ? "" : "(목표 없음)"));
   for (const r of rows) { let any = false; for (const [x, ps] of pl) if (ps.some(p => gHit(p, r))) { addA(x, r); any = true; } addA(all, r); if (!any) { addA(none, r); unS += r.sales || 0; } }
-  const dAll = src ? Math.max(0, ...Object.keys(src.prorate || {}).filter(c => chMatch(chF, c)).map(dOf)) : 0;
+  const dL = src ? Object.keys(src.prorate || {}).filter(c => chMatch(chF, c)).map(ch => [ch, dOf(ch)]).filter(a => a[1] > 0) : [];
+  const dAll = Math.max(0, ...dL.map(a => a[1])), dMin = dL.length ? Math.min(...dL.map(a => a[1])) : 0;
   const fin = x => {
     let s = 0, c = 0, m = 0, fs = 0, fc = 0, fm = 0, d = 0, vc = 0, tr = 0;
     for (const [ch, v] of x.act) { const dd = dOf(ch); d = Math.max(d, dd); s += v.sales; c += v.cost; m += v.cm; vc += v.vc; tr += v.tr; if (dd > 0) { const k = mdays / dd; fs += v.sales * k; fc += v.cost * k; fm += v.cm * k; } }
@@ -1617,17 +1622,17 @@ function goalCalc(GD, ym, chF, L) {
     x.vc = vc; x.tr = tr; x.vcrT = x.sV ? x.VC / x.sV : null; x.vcr = s ? vc / s : null; x.trrT = x.sV ? x.TR / x.sV : null; x.trr = s ? tr / s : null;
     x.cmrT = x.hasS && x.hasCM && x.S ? x.CM / x.S : null; x.cmr = s ? m / s : null;
     x.crT = x.sC ? x.COST / x.sC : null; x.cr = s ? c / s : null; x.fCr = x.fS ? x.fCost / x.fS : null;
-    x.daily = d ? s / d : null; x.need = x.hasS && d < mdays ? Math.max(0, x.S - s) / (mdays - d) : null;
+    x.daily = d ? s / d : null; x.need = x.hasS && d < mdays && !(R0 && R0.s > 1) ? Math.max(0, x.S - s) / (mdays - d) : null;
     return x;
   };
   const groups = [...grp.values()].map(fin).sort((a, b) => b.S - a.S || b.sales - a.sales);
   if (none.act.size) groups.push(fin(none));
-  return { Y, M, ym, mdays, src, groups, all: fin(all), unS, nG: G.length, dAll };
+  return { Y, M, ym, mdays, src, groups, all: fin(all), unS, nG: G.length, dAll, dMin, dL, R0, rngNoDay: !!(rng && (rng.s > 1 || rng.e) && src && !hasDay) };
 }
-function goalYear(GD, Y, curYm, chF) {
+function goalYear(GD, Y, curYm, chF, rng) {
   const ms = [], T = { S: 0, CM: 0, COST: 0, sC: 0, ytdA: 0, ytdT: 0, ytdCM: 0, ytdCMT: 0, ytdCost: 0, fS: 0, fCM: 0, miss: [] };
   for (let m = 1; m <= 12; m++) {
-    const ym = `${Y}-${String(m).padStart(2, "0")}`, c = goalCalc(GD, ym, chF, 0), x = c.all;
+    const ym = `${Y}-${String(m).padStart(2, "0")}`, c = goalCalc(GD, ym, chF, 0, ym === curYm ? rng : null), x = c.all;
     const st = ym < curYm ? "past" : ym === curYm ? "cur" : "fut";
     const o = { m, ym, st, src: c.src, x, mdays: c.mdays, hasG: c.nG > 0 };
     if (x.hasS) T.S += x.S; if (x.hasCM) T.CM += x.CM; T.COST += x.COST; T.sC += x.sC;
@@ -1653,17 +1658,18 @@ const pbar = (p, t) => p == null ? "" : `<div class="pbar" title="진척 ${pct(p
 function cumChart(c, GD, chF) {
   const x = c.all; if (!c.src || !x.hasS) return "";
   const pats = [...x.pats.values()], dd = new Map();
-  for (const r of c.src.days) { if (r.day == null || !chMatch(chF, r.ch) ||!pats.some(p => gHit(p, r))) continue; dd.set(r.day, (dd.get(r.day) || 0) + (r.sales || 0)); }
-  const N = c.mdays, d0 = x.d; if (!d0) return "";
-  const cum = []; let a = 0; for (let d = 1; d <= d0; d++) { a += dd.get(d) || 0; cum.push(a); }
+  const s0 = c.R0 ? c.R0.s : 1, e0 = c.R0 ? c.R0.e : 99;
+  for (const r of c.src.days) { if (r.day == null || r.day < s0 || r.day > e0 || !chMatch(chF, r.ch) || !pats.some(p => gHit(p, r))) continue; dd.set(r.day, (dd.get(r.day) || 0) + (r.sales || 0)); }
+  const N = c.mdays, d0 = x.d ? s0 + x.d - 1 : 0; if (!d0) return "";
+  const cum = []; let a = 0; for (let d = s0; d <= d0; d++) { a += dd.get(d) || 0; cum.push(a); }
   const W = 1100, H = 260, L = 56, Rr = 70, Tp = 16, B = 28, mx = Math.max(x.S, x.fS || 0, a) * 1.05 || 1;
   const X = d => L + (W - L - Rr) * d / N, Y = v => Tp + (H - Tp - B) * (1 - v / mx);
   let s = `<svg class="ln" viewBox="0 0 ${W} ${H}" role="img" aria-label="일 누적 실적과 목표 페이스">`;
   for (let k = 0; k <= 4; k++) { const v = mx * k / 4; s += `<line x1="${L}" x2="${W - Rr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#e6e9ef"/><text x="${L - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${mil1(v)}</text>`; }
   for (let d = 1; d <= N; d++) if (d === 1 || d % 5 === 0 || d === N) s += `<text x="${X(d).toFixed(1)}" y="${H - 8}" text-anchor="middle">${d}일</text>`;
   s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(N)}" y2="${Y(x.S)}" stroke="#9aa3b2" stroke-width="2" stroke-dasharray="6 4"/><text x="${X(N) + 6}" y="${Y(x.S) + 4}" style="fill:var(--sub)">목표 ${mil1(x.S)}</text>`;
-  s += `<path d="M${X(0)},${Y(0)}${cum.map((v, i) => `L${X(i + 1).toFixed(1)},${Y(v).toFixed(1)}`).join("")}" fill="none" stroke="${CLR.sales}" stroke-width="2.6"/>`;
-  if (x.fS != null && d0 < N) s += `<line x1="${X(d0)}" y1="${Y(a)}" x2="${X(N)}" y2="${Y(x.fS)}" stroke="${gClr(x.aS)}" stroke-width="2.2" stroke-dasharray="3 4"/><circle cx="${X(N)}" cy="${Y(x.fS)}" r="4" fill="${gClr(x.aS)}"/><text x="${X(N) + 6}" y="${Y(x.fS) + (Math.abs(Y(x.fS) - Y(x.S)) < 14 ? 16 : 4)}" style="font-weight:700;fill:${gClr(x.aS)}">예상 ${mil1(x.fS)}</text>`;
+  s += `<path d="M${X(s0 - 1)},${Y(0)}${cum.map((v, i) => `L${X(s0 + i).toFixed(1)},${Y(v).toFixed(1)}`).join("")}" fill="none" stroke="${CLR.sales}" stroke-width="2.6"/>`;
+  if (x.fS != null && d0 < N && s0 === 1) s += `<line x1="${X(d0)}" y1="${Y(a)}" x2="${X(N)}" y2="${Y(x.fS)}" stroke="${gClr(x.aS)}" stroke-width="2.2" stroke-dasharray="3 4"/><circle cx="${X(N)}" cy="${Y(x.fS)}" r="4" fill="${gClr(x.aS)}"/><text x="${X(N) + 6}" y="${Y(x.fS) + (Math.abs(Y(x.fS) - Y(x.S)) < 14 ? 16 : 4)}" style="font-weight:700;fill:${gClr(x.aS)}">예상 ${mil1(x.fS)}</text>`;
   s += `<circle cx="${X(d0)}" cy="${Y(a)}" r="4.5" fill="${CLR.sales}"/><text x="${X(d0)}" y="${Y(a) - 9}" text-anchor="middle" style="font-weight:700;fill:var(--txt)">${d0}일 ${mil1(a)}</text>`;
   return s + `</svg><div class="lg"><span><b style="background:${CLR.sales}"></b>누적 실적</span><span><b style="background:#9aa3b2"></b>목표 페이스 (일할)</span><span><b style="background:${gClr(x.aS)}"></b>월말 예상 (일평균 × 잔여일)</span><span class="muted">단위 백만</span></div>`;
 }
@@ -1708,7 +1714,9 @@ function renderGoal() {
   const chT = !gSel ? "전체" : gSel.join(", "), chFile = !gSel ? "전체" : gSel.map(c => c.replace(/^[A-Z]{1,3}\d{1,3}\./, "")).join("+");
   const maxL = Math.max(1, ...GD.rows.map(g => GLV.reduce((n, [k], i) => g[k] ? i + 1 : n, 0)));
   const L = Math.min(ST.glv || maxL, 4);
-  const c = goalCalc(GD, gym, chF, L), x = c.all, Yr = goalYear(GD, Y, gym, chF), T = Yr.T;
+  if (!ST.grng || ST.grng.ym !== gym) ST.grng = { ym: gym, s: 1, e: 0 };
+  const c = goalCalc(GD, gym, chF, L, ST.grng), x = c.all, Yr = goalYear(GD, Y, gym, chF, ST.grng), T = Yr.T;
+  const rS = c.R0 ? c.R0.s : 1, rE = c.R0 ? c.R0.e : 0;
   $("#stg5s").textContent = x.aS != null ? `${gIcon(x.aS)} 예상 ${(x.aS * 100).toFixed(0)}%` : "";
   const ov = gUnit(), uLbl = { 1: "원", 1000: "천원", 1000000: "백만원" };
   const mOpts = Array.from({ length: 12 }, (_, i) => `${Y}-${String(i + 1).padStart(2, "0")}`);
@@ -1717,6 +1725,7 @@ function renderGoal() {
     <label class="f" style="flex-direction:row;align-items:center;gap:6px">연도 <select id="gY">${yOpts.map(y => `<option ${+y === Y ? "selected" : ""}>${y}</option>`).join("")}</select></label>
     <label class="f" style="flex-direction:row;align-items:center;gap:6px">월 <select id="gM">${mOpts.map(m => `<option value="${m}" ${m === gym ? "selected" : ""}>${+m.slice(5)}월${m === baseYm ? " (현재)" : ARC[m] ? " 📦" : ""}</option>`).join("")}</select></label>
     ${mChk("gChM", chs, gSel)}
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">기간 <select id="gS">${Array.from({ length: c.mdays }, (_, i) => `<option value="${i + 1}" ${i + 1 === rS ? "selected" : ""}>${i + 1}일</option>`).join("")}</select> ~ <select id="gE"><option value="0" ${!rE ? "selected" : ""}>자동 (채널별 마지막 일자)</option>${Array.from({ length: c.mdays }, (_, i) => `<option value="${i + 1}" ${i + 1 === rE ? "selected" : ""}>${i + 1}일</option>`).join("")}</select></label>
     <label class="f" style="flex-direction:row;align-items:center;gap:6px">보는 단계 <select id="gL">${GLV.map(([, l], i) => `<option value="${i + 1}" ${i + 1 === L ? "selected" : ""}>${l}까지</option>`).join("")}</select></label>
     <label class="f" style="flex-direction:row;align-items:center;gap:6px">목표 금액 단위 <select id="gU"><option value="0" ${!ov ? "selected" : ""}>자동 (${uLbl[GD.unit] || GD.unit})</option>${[1, 1000, 1000000].map(u => `<option value="${u}" ${ov === u ? "selected" : ""}>${uLbl[u]}</option>`).join("")}</select></label>
     <span class="sp"></span><button type="button" class="sec" id="gTpl">📋 목표 양식 복사</button><button type="button" id="gDl">엑셀 다운로드</button></div><span class="muted" id="gMsg"></span>`;
@@ -1726,6 +1735,9 @@ function renderGoal() {
   if (GD.noCls && GD.noCls.size) wn.push(`분류(대·소·세분류 중 하나라도)가 비는 SKU 목표 ${GD.noCls.size}개 (총매출 ${mil1([...GD.noCls.values()].reduce((s, o) => s + o.s, 0))}백만) → 빈 단계는 (미분류)로 잡힘 (대·소는 목표 파일 값으로 채움, 세분류는 제품분류에서만): ${[...GD.noCls].slice(0, 5).map(([c, o]) => esc(c + " " + (o.name || ""))).join(", ")}${GD.noCls.size > 5 ? " 외" : ""} — 제품분류 보완하면 자동 반영`);
   if (GD.chk && GD.chk.bad.length) wn.push(`목표 파일의 비용·공헌이익이 툴 계산(비용=DC+장려금+판관비, CM=총매출−비용−변동원가−운송비)과 다른 행 ${GD.chk.bad.length}개 / ${GD.chk.n}행: ${GD.chk.bad.slice(0, 5).map(b => esc(`${b.row}행 ${b.code} ${b.name || ""}`) + ` (비용 ${b.dC > 0 ? "+" : ""}${Math.round(b.dC).toLocaleString()}원, CM ${b.dM > 0 ? "+" : ""}${Math.round(b.dM).toLocaleString()}원)`).join(", ")}${GD.chk.bad.length > 5 ? " 외" : ""} — 툴은 계산값 사용`);
   if (GD.clsDiff && GD.clsDiff.size) wn.push(`목표 파일과 제품분류의 대·소카테고리가 다른 SKU ${GD.clsDiff.size}개 → 실적과 맞추려고 제품분류 기준 사용: ${[...GD.clsDiff].slice(0, 5).map(([cd, o]) => esc(`${cd} ${o.name || ""} (목표 ${o.f} / 제품분류 ${o.p})`)).join(", ")}${GD.clsDiff.size > 5 ? " 외" : ""}`);
+  if (c.rngNoDay) wn.push(`이 달 실적에 일자가 없어서 기간 지정이 안 돼요 → 월 전체로 계산`);
+  if (c.src && c.dL.length > 1 && c.dMin !== c.dAll) wn.push(`채널별 경과일이 달라요: ${c.dL.map(([ch, d]) => ch + " " + d + "일").join(", ")} → 「기간」 종료일을 ${c.dMin}일로 맞추면 같은 기간으로 비교돼요 (월말 예상은 채널별 경과일로 따로 늘려서 계산 중)`);
+  if (c.R0 && c.R0.s > 1) wn.push(`시작일 ${c.R0.s}일 지정 → 실적·진척은 ${c.R0.s}일부터 합계, 월말 예상 = 기간 일평균 × 월일수, 필요 일평균·차트 예상선은 표시 안 함`);
   if (!c.src) wn.push(`${gym} 실적 없음 — ${gym === baseYm ? "1단계에서 계산하면 나와요" : "📦 보관함에 이 달이 없어요"}`);
   if (T.miss.length) wn.push(`보관함 없는 지난 달: ${T.miss.map(m => m + "월").join(", ")} → YTD 비교(실적·목표 둘 다)에서 빠지고, 연말 예상엔 목표로 대체 (그 달 결과를 보관함에 저장하면 반영)`);
   if (c.src && c.unS > 0 && x.sales > 0) wn.push(`목표 없는 분류의 실적 ${mil1(c.unS)}백만 — 합계·진척률에 포함 (목표는 0), 표 맨 아래 '(목표 없음)' 행`);
@@ -1734,7 +1746,7 @@ function renderGoal() {
   if (wn.length) h += `<div class="warnbox" style="margin-top:6px">${wn.map(w => `<div>⚠️ ${esc(w)}</div>`).join("")}</div>`;
   // KPI (월)
   const k = (lbl, v, sub, cls = "", bar = "") => `<div class="kpi ${cls}"><small>${lbl}</small><div class="${v < 0 ? "neg" : ""}">${v == null ? "-" : mil1(v)}<em>백만</em></div>${sub ? `<span class="sb">${sub}</span>` : ""}${bar}</div>`;
-  const mm = +gym.slice(5), dTxt = c.src ? `${x.d}/${c.mdays}일` : "실적 없음";
+  const mm = +gym.slice(5), dTxt = !c.src ? "실적 없음" : (c.R0 ? `${c.R0.s}~${c.R0.s + x.d - 1}일 · ` : "") + (c.dL.length > 1 && c.dMin !== c.dAll ? `${c.dMin}~${c.dAll}/${c.mdays}일 ⚠` : `${x.d}/${c.mdays}일`);
   h += `<h3 style="margin:14px 0 4px;color:var(--navy)">📅 ${Y}년 ${mm}월 <span class="muted" style="font-weight:400;font-size:12px">경과 ${dTxt} · 시간 진척 ${pct(x.time)}${c.src ? ` · ${c.src.kind === "live" ? "현재 계산" : "보관함 " + esc(c.src.savedAt)}` : ""}</span></h3>
   <div class="kpis top" style="grid-template-columns:repeat(5,1fr)">
     ${k("월 목표 (총매출)", x.hasS ? x.S : null, `비용율 목표 ${pct(x.crT)} · CM 목표 ${x.hasCM ? mil1(x.CM) : "-"}`)}
@@ -1782,10 +1794,12 @@ function renderGoal() {
   el.innerHTML = h;
   $("#gY").onchange = e => { ST.gym = `${e.target.value}-${gym.slice(5)}`; renderGoal(); };
   $("#gM").onchange = e => { ST.gym = e.target.value; renderGoal(); };
+  $("#gS").onchange = e => { ST.grng = { ym: gym, s: +e.target.value, e: Math.max(rE, rE ? +e.target.value : 0) }; renderGoal(); };
+  $("#gE").onchange = e => { const v = +e.target.value; ST.grng = { ym: gym, s: v && v < rS ? v : rS, e: v }; renderGoal(); };
   mChkBind("gChM", chs, gSel, s => { ST.gchs = s; ST.gch = s && s.length === 1 ? s[0] : "전체"; renderGoal(); });
   $("#gL").onchange = e => { ST.glv = +e.target.value; renderGoal(); };
   $("#gU").onchange = e => { ls.set("dc_gunit", e.target.value); render(); };
-  $("#gDl").onclick = () => goalDownload(c, Yr, L, chFile);
+  $("#gDl").onclick = () => goalDownload(c, Yr, L, chFile + (c.R0 ? `_${c.R0.s}-${c.R0.e}일` : ""));
   bindGoalTpl();
 }
 function bindGoalTpl() {
