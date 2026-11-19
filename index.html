@@ -679,22 +679,28 @@ const chArg = () => ST.ch === "전체" && ST._chs ? ST._chs : ST.ch;   // 목표
 const chMatch = (chF, c) => chF === "전체" ? true : chF instanceof Set ? [...chF].some(x => gk(x) === gk(c)) : gk(c) === gk(chF);
 const chLab = () => ST.ch !== "전체" ? ST.ch : ST._chs ? `선택 채널 ${ST._chs.size}개 (${[...ST._chs].join(", ")})` : "전체 채널";
 const chTag = () => ST.ch === "전체" && ST._chs ? [...ST._chs].map(c => c.replace(/^[A-Z]{1,3}\d{1,3}\./, "")).join("+") : ST.ch;
-function chMulti(chs) {
-  const on = c => chOk(c), n = chs.filter(on).length;
-  const lab = ST.ch !== "전체" ? ST.ch : !ST._chs ? "전체" : n === 0 ? "선택 없음" : `${n}개 선택`;
-  return `<label class="f" style="flex-direction:row;align-items:center;gap:6px">채널 <details class="chm" id="chM" ${ST._chOpen ? "open" : ""}><summary>${esc(lab)}</summary><div class="chmBox">
-    <label><input type="checkbox" data-chall ${!ST._chs && ST.ch === "전체" ? "checked" : ""}> <b>전체</b></label>
+// 채널 체크박스 드롭다운 (공용). sel = null(전체) 또는 선택 채널 배열
+const MCOPEN = {};
+function mChk(id, chs, sel) {
+  const on = c => !sel || sel.includes(c), n = chs.filter(on).length;
+  const lab = !sel ? "전체" : n === 1 ? chs.find(on) : n === 0 ? "선택 없음" : `${n}개 선택`;
+  return `<label class="f" style="flex-direction:row;align-items:center;gap:6px">채널 <details class="chm" id="${id}" ${MCOPEN[id] ? "open" : ""}><summary>${esc(lab)}</summary><div class="chmBox">
+    <label><input type="checkbox" data-chall ${!sel ? "checked" : ""}> <b>전체</b></label>
     ${chs.map(c => `<label><input type="checkbox" data-chm="${esc(c)}" ${on(c) ? "checked" : ""}> ${esc(c)}</label>`).join("")}
   </div></details></label>`;
 }
-function chMultiBind(chs) {
-  const d = $("#chM"); if (!d) return;
-  d.ontoggle = () => { ST._chOpen = d.open; };
-  const set = list => { const s = chs.filter(c => list.includes(c)); if (!s.length || s.length === chs.length) { ST.ch = "전체"; ST._chs = null; } else if (s.length === 1) { ST.ch = s[0]; ST._chs = null; } else { ST.ch = "전체"; ST._chs = new Set(s); } ST._chOpen = true; render(); };
+// onSet(배열|null): 모두/없음 → null(전체). '전체' 상태에서 한 채널 클릭 → 그 채널만
+function mChkBind(id, chs, sel, onSet) {
+  const d = document.getElementById(id); if (!d) return;
+  d.ontoggle = () => { MCOPEN[id] = d.open; };
+  const set = list => { const s = chs.filter(c => list.includes(c)); MCOPEN[id] = true; onSet(!s.length || s.length === chs.length ? null : s); };
   d.querySelector("[data-chall]").onchange = () => set(chs);
-  d.querySelectorAll("[data-chm]").forEach(b => b.onchange = () => { const cur = chs.filter(chOk); const c = b.dataset.chm; const allNow = ST.ch === "전체" && !ST._chs; set(allNow ? [c] : b.checked ? [...cur, c] : cur.filter(x => x !== c)); });
+  d.querySelectorAll("[data-chm]").forEach(b => b.onchange = () => { const c = b.dataset.chm, cur = sel ? chs.filter(x => sel.includes(x)) : null; set(!cur ? [c] : b.checked ? [...cur, c] : cur.filter(x => x !== c)); });
 }
-document.addEventListener("click", e => { const d = document.getElementById("chM"); if (d && d.open && !d.contains(e.target)) { d.open = false; ST._chOpen = false; } });
+document.addEventListener("click", e => { document.querySelectorAll("details.chm[open]").forEach(d => { if (!d.contains(e.target)) { d.open = false; MCOPEN[d.id] = false; } }); });
+const chSelArr = chs => ST.ch === "전체" && !ST._chs ? null : chs.filter(chOk);
+const chMulti = chs => mChk("chM", chs, chSelArr(chs));
+const chMultiBind = chs => mChkBind("chM", chs, chSelArr(chs), s => { if (!s) { ST.ch = "전체"; ST._chs = null; } else if (s.length === 1) { ST.ch = s[0]; ST._chs = null; } else { ST.ch = "전체"; ST._chs = new Set(s); } render(); });
 const filt = rows => rows.filter(r => chOk(r.ch) &&(ST.big === "전체" || catOf(r.big) === ST.big) && (ST.small === "전체" || catOf(r.small) === ST.small) && (ST.evt === "전체" || catOf(r.evt) === ST.evt));
 const sel = (id, lbl, opts, cur) => `<label class="f" style="flex-direction:row;align-items:center;gap:6px">${lbl} <select id="${id}">${opts.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
 
@@ -1647,7 +1653,7 @@ const pbar = (p, t) => p == null ? "" : `<div class="pbar" title="진척 ${pct(p
 function cumChart(c, GD, chF) {
   const x = c.all; if (!c.src || !x.hasS) return "";
   const pats = [...x.pats.values()], dd = new Map();
-  for (const r of c.src.days) { if (r.day == null || !(chF === "전체" || gk(r.ch) === gk(chF)) || !pats.some(p => gHit(p, r))) continue; dd.set(r.day, (dd.get(r.day) || 0) + (r.sales || 0)); }
+  for (const r of c.src.days) { if (r.day == null || !chMatch(chF, r.ch) ||!pats.some(p => gHit(p, r))) continue; dd.set(r.day, (dd.get(r.day) || 0) + (r.sales || 0)); }
   const N = c.mdays, d0 = x.d; if (!d0) return "";
   const cum = []; let a = 0; for (let d = 1; d <= d0; d++) { a += dd.get(d) || 0; cum.push(a); }
   const W = 1100, H = 260, L = 56, Rr = 70, Tp = 16, B = 28, mx = Math.max(x.S, x.fS || 0, a) * 1.05 || 1;
@@ -1696,7 +1702,10 @@ function renderGoal() {
   let gym = ST.gym || baseYm; if (!/^\d{4}-\d{2}$/.test(gym || "")) gym = `${yrs[0] || new Date().getFullYear()}-01`;
   const Y = +gym.slice(0, 4);
   const chs = uniq([...GD.rows.map(g => g.ch).filter(Boolean), ...(R ? R.chs : [])]);
-  const chF = ST.gch && (ST.gch === "전체" || chs.includes(ST.gch)) ? ST.gch : "전체";
+  if (!ST.gchs && ST.gch && ST.gch !== "전체") ST.gchs = [ST.gch];   // 예전 단일 선택값 이어받기
+  let gSel = (ST.gchs || []).filter(c => chs.includes(c)); if (!gSel.length) gSel = null;
+  const chF = !gSel ? "전체" : gSel.length === 1 ? gSel[0] : new Set(gSel);
+  const chT = !gSel ? "전체" : gSel.join(", "), chFile = !gSel ? "전체" : gSel.map(c => c.replace(/^[A-Z]{1,3}\d{1,3}\./, "")).join("+");
   const maxL = Math.max(1, ...GD.rows.map(g => GLV.reduce((n, [k], i) => g[k] ? i + 1 : n, 0)));
   const L = Math.min(ST.glv || maxL, 4);
   const c = goalCalc(GD, gym, chF, L), x = c.all, Yr = goalYear(GD, Y, gym, chF), T = Yr.T;
@@ -1707,7 +1716,7 @@ function renderGoal() {
   let h = `<div class="toolbar" style="margin-top:0">
     <label class="f" style="flex-direction:row;align-items:center;gap:6px">연도 <select id="gY">${yOpts.map(y => `<option ${+y === Y ? "selected" : ""}>${y}</option>`).join("")}</select></label>
     <label class="f" style="flex-direction:row;align-items:center;gap:6px">월 <select id="gM">${mOpts.map(m => `<option value="${m}" ${m === gym ? "selected" : ""}>${+m.slice(5)}월${m === baseYm ? " (현재)" : ARC[m] ? " 📦" : ""}</option>`).join("")}</select></label>
-    ${sel("gCh", "채널", ["전체", ...chs], chF)}
+    ${mChk("gChM", chs, gSel)}
     <label class="f" style="flex-direction:row;align-items:center;gap:6px">보는 단계 <select id="gL">${GLV.map(([, l], i) => `<option value="${i + 1}" ${i + 1 === L ? "selected" : ""}>${l}까지</option>`).join("")}</select></label>
     <label class="f" style="flex-direction:row;align-items:center;gap:6px">목표 금액 단위 <select id="gU"><option value="0" ${!ov ? "selected" : ""}>자동 (${uLbl[GD.unit] || GD.unit})</option>${[1, 1000, 1000000].map(u => `<option value="${u}" ${ov === u ? "selected" : ""}>${uLbl[u]}</option>`).join("")}</select></label>
     <span class="sp"></span><button type="button" class="sec" id="gTpl">📋 목표 양식 복사</button><button type="button" id="gDl">엑셀 다운로드</button></div><span class="muted" id="gMsg"></span>`;
@@ -1720,7 +1729,7 @@ function renderGoal() {
   if (!c.src) wn.push(`${gym} 실적 없음 — ${gym === baseYm ? "1단계에서 계산하면 나와요" : "📦 보관함에 이 달이 없어요"}`);
   if (T.miss.length) wn.push(`보관함 없는 지난 달: ${T.miss.map(m => m + "월").join(", ")} → YTD 비교(실적·목표 둘 다)에서 빠지고, 연말 예상엔 목표로 대체 (그 달 결과를 보관함에 저장하면 반영)`);
   if (c.src && c.unS > 0 && x.sales > 0) wn.push(`목표 없는 분류의 실적 ${mil1(c.unS)}백만 — 합계·진척률에 포함 (목표는 0), 표 맨 아래 '(목표 없음)' 행`);
-  if (!c.nG) wn.push(`${gym} 목표가 없어요 (${chF === "전체" ? "" : chF + " · "}연도 ${Y})`);
+  if (!c.nG) wn.push(`${gym} 목표가 없어요 (${chT === "전체" ? "" : chT + " · "}연도 ${Y})`);
   if (x.hasS && x.sales && x.S && (x.sales / x.S > 50 || x.sales / x.S < 0.002)) wn.push(`목표와 실적 규모가 너무 달라요 (진척 ${pct(x.pS)}) — 목표 금액 단위(원/천원/백만원)를 확인하세요`);
   if (wn.length) h += `<div class="warnbox" style="margin-top:6px">${wn.map(w => `<div>⚠️ ${esc(w)}</div>`).join("")}</div>`;
   // KPI (월)
@@ -1739,7 +1748,7 @@ function renderGoal() {
     ${k("CM 실적", x.cm, `진척 ${pct(x.pCM)} vs 시간 ${pct(x.time)} · CM율 <b class="${x.cmrT != null && x.cmr - x.cmrT <= -0.0005 ? "neg" : ""}">${pct(x.cmr)}</b>${x.cmrT != null ? ` vs 목표 ${pct(x.cmrT)} (${dpp(x.cmr - x.cmrT)})` : ""}`, "", pbar(x.pCM, x.time))}
     ${k("CM 월말 예상", x.fCM, `<b style="color:${gClr(x.aCM)}">${gIcon(x.aCM)} 목표 대비 ${pct(x.aCM)}</b>${x.hasCM && x.fCM != null ? ` (${x.fCM - x.CM >= 0 ? "+" : ""}${mil1(x.fCM - x.CM)})` : ""}`, "cm")}
   </div>`;
-  h += `<div class="dgrid"><section class="card wide"><h2>일 누적 실적 vs 목표 <small>${mm}월 · ${esc(chF)} · 점선 = 목표 페이스 / 월말 예상</small></h2>${cumChart(c, GD, chF) || `<div class="empty" style="padding:16px">실적 또는 총매출 목표가 없어요</div>`}</section></div>`;
+  h += `<div class="dgrid"><section class="card wide"><h2>일 누적 실적 vs 목표 <small>${mm}월 · ${esc(chT)} · 점선 = 목표 페이스 / 월말 예상</small></h2>${cumChart(c, GD, chF) || `<div class="empty" style="padding:16px">실적 또는 총매출 목표가 없어요</div>`}</section></div>`;
   // 분류별 표
   const gr = c.groups, lv = GLV.slice(0, L);
   const td = (v, cls = "") => `<td class="n ${cls}">${v}</td>`;
@@ -1759,7 +1768,7 @@ function renderGoal() {
     const note = o.st === "fut" ? "예정" : o.st === "cur" ? `이번 달 · ${a.d}/${o.mdays}일 실적 ${mil1(a.sales)} → 월말 예상` : has ? (o.part ? `⚠ 보관함 (${o.part})` : "보관함") : (o.hasG ? '<span class="neg">보관함 없음</span>' : "");
     return `<tr class="${o.st}"><td><b>${o.m}월</b></td>${td(a.hasS ? mil1(a.S) : "-")}${td(v != null ? mil1(v) : "-")}${td(`<b style="color:${gClr(a.hasS && v != null ? v / a.S : null)}">${a.hasS && v != null && a.S ? pct(v / a.S) : "-"}</b>`)}${td(pct(a.crT))}${td(o.st !== "fut" && has ? pct(a.cr) : "-")}${td(a.hasCM ? mil1(a.CM) : "-")}${td(vc != null ? mil1(vc) : "-", vc < 0 ? "neg" : "")}${td(a.hasCM && vc != null && a.CM > 0 ? pct(vc / a.CM) : "-")}<td class="muted">${note}</td></tr>`;
   }).join("");
-  h += `<section class="card" style="margin-top:12px"><h2>${Y}년 연간 진척 <small>${esc(chF)} · 지난 달 = 실적, 이번 달 = 월말 예상, 남은 달 = 목표</small></h2>
+  h += `<section class="card" style="margin-top:12px"><h2>${Y}년 연간 진척 <small>${esc(chT)} ·지난 달 = 실적, 이번 달 = 월말 예상, 남은 달 = 목표</small></h2>
     <div class="kpis top" style="margin-top:4px">
       ${k("연간 목표 (총매출)", T.S || null, `비용율 목표 ${pct(T.crT)} · CM 목표 ${T.CM ? mil1(T.CM) : "-"}`)}
       ${k("YTD 실적 (총매출)", T.ytdA, `연간 진척 <b>${pct(T.pS)}</b> · 지금까지 목표 대비 <b style="color:${gClr(T.ytdT ? T.ytdA / T.ytdT : null)}">${T.ytdT ? pct(T.ytdA / T.ytdT) : "-"}</b>`, "", pbar(T.pS, T.pT))}
@@ -1773,10 +1782,10 @@ function renderGoal() {
   el.innerHTML = h;
   $("#gY").onchange = e => { ST.gym = `${e.target.value}-${gym.slice(5)}`; renderGoal(); };
   $("#gM").onchange = e => { ST.gym = e.target.value; renderGoal(); };
-  $("#gCh").onchange = e => { ST.gch = e.target.value; renderGoal(); };
+  mChkBind("gChM", chs, gSel, s => { ST.gchs = s; ST.gch = s && s.length === 1 ? s[0] : "전체"; renderGoal(); });
   $("#gL").onchange = e => { ST.glv = +e.target.value; renderGoal(); };
   $("#gU").onchange = e => { ls.set("dc_gunit", e.target.value); render(); };
-  $("#gDl").onclick = () => goalDownload(c, Yr, L, chF);
+  $("#gDl").onclick = () => goalDownload(c, Yr, L, chFile);
   bindGoalTpl();
 }
 function bindGoalTpl() {
