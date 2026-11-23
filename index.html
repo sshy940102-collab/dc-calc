@@ -643,9 +643,75 @@ const COLS = {
     ["jCls", "Prom_장려금분류"], ["pCls", "Prom_판관비분류"], ["big", "대분류"], ["small", "소분류"], ["evt", "세분류"], ["tax", "면과세"], ["skuR", "SKU구성비", 2], ["catJ", "CAT(장려금)", 2], ["catP", "CAT(판관비)", 2],
     ["inPrice", "납품가(EA)", 1], ["outPrice", "출고가(EA)", 1], ["vcU", "변동원가(EA)", 1], ["trU", "운송비(EA)", 1], ["sales", "총매출", 1], ["dc", "DC", 1],
     ["jPct", "장려금_분배기준(%)", 1], ["jAmt", "장려금_분배기준", 1], ["sPct", "장려금_SKU기준(%)", 1], ["sAmt", "장려금_SKU기준(금액)", 1], ["jTot", "장려금계", 1],
-    ["log", "물류비", 1], ["fee", "代수수료", 1], ["pDist", "판관비_분배", 1], ["pSku", "판관비_SKU", 1], ["pTot", "판관비계", 1], ["cost", "비용계", 1], ["vc", "변동원가계", 1], ["tr", "운송비계", 1], ["cm", "공헌이익(CM)", 1]]
+    ["log", "물류비", 1], ["fee", "代수수료", 1], ["pDist", "판관비_분배", 1], ["pSku", "판관비_SKU", 1], ["pTot", "판관비계", 1], ["cost", "비용계", 1], ["vc", "변동원가계", 1], ["tr", "운송비계", 1], ["cm", "공헌이익(CM)", 1]],
+  sdet: [["route", "경로구분"], ["team", "팀구분"], ["ch", "경로세부1"], ["sub2", "경로세부2"], ["code", "SKU코드"], ["name", "SKU명"], ["big", "대카테고리"], ["small", "소카테고리"],
+    ["sales", "총매출", 1], ["dc", "DC", 1], ["jTot", "장려금", 1], ["pTot", "판관비", 1], ["cost", "비용", 1], ["vc", "변동원가", 1], ["tr", "운송비", 1], ["cm", "공헌이익", 1]]
 };
-const TABS = [["dash", "📊 대시보드"], ["mom", "📅 전월 동기간 비교"], ["rpt", "📝 보고서"], ["rca", "🔍 Rolling 차이 분석"], ["sum", "채널 요약"], ["big", "대카테고리별"], ["small", "소카테고리별"], ["evt", "세분류별"], ["prod", "제품별"], ["day", "일자별"], ["det", "상세(엑셀 동일)"]];
+const TABS = [["dash", "📊 대시보드"], ["mom", "📅 전월 동기간 비교"], ["rpt", "📝 보고서"], ["rca", "🔍 Rolling 차이 분석"], ["sum", "채널 요약"], ["big", "대카테고리별"], ["small", "소카테고리별"], ["evt", "세분류별"], ["prod", "제품별"], ["day", "일자별"], ["sdet", "상세(요약)"], ["det", "상세(엑셀 동일)"]];
+
+// 상세(요약): 채널×SKU 기간 누계 (시작일~종료일). 경로구분·팀구분·경로세부2는 목표(Rolling) 파일에서 (채널+SKU → 채널 순)
+// 고정금액(장려금_분배기준·SKU금액, 판관비_분배·SKU)은 기본 '일할 맞춤' = 월 금액 × 기간일수 ÷ 월일수 (전월 동기간 비교와 같은 방식)
+let SDR = { s: 1, e: 0, fix: true };
+try { const s = JSON.parse(localStorage.getItem("dc_sdr") || "null"); if (s) SDR = { ...SDR, ...s }; } catch (x) { }
+function routeMap() {
+  const GD = goalData(), byC = new Map(), byCC = new Map();
+  if (!GD || GD.layout !== "sku") return { byC, byCC };
+  for (const g of GD.rows) {
+    const o = { route: g.route || "", team: g.team || "", sub2: g.sub2 || "" }; if (!o.route && !o.team && !o.sub2) continue;
+    const k = gk(g.ch); if (!byCC.has(k + "|" + g.code)) byCC.set(k + "|" + g.code, o);
+    const c = byC.get(k) || {}; for (const f of ["route", "team", "sub2"]) if (!c[f] && o[f]) c[f] = o[f]; byC.set(k, c);
+  }
+  return { byC, byCC };
+}
+function sdetData(R) {
+  const md = R.mdays || 31, M = routeMap();
+  const lab = (ch, code) => { const a = M.byCC.get(gk(ch) + "|" + code) || {}, b = M.byC.get(gk(ch)) || {}; const v = f => a[f] || b[f] || "-"; return { route: v("route"), team: v("team"), sub2: v("sub2") }; };
+  let rows, info;
+  if (R.archived) { rows = filt(R.rows); info = { arc: true }; }
+  else {
+    const all = R.rows, maxD = Math.max(0, ...all.map(r => r.day || 0)) || md;
+    const s = Math.min(Math.max(1, SDR.s || 1), maxD), e = Math.max(s, Math.min(SDR.e || maxD, md));
+    const full = s === 1 && e >= maxD;
+    let win = all.filter(r => r.day == null ? full : r.day >= s && r.day <= e);
+    const N = {}, Lc = {};
+    for (const ch of R.chs) { const pr = R.prorate && R.prorate[ch]; N[ch] = pr ? Math.round(pr * md) : maxD; Lc[ch] = Math.max(0, Math.min(e, N[ch]) - s + 1); }
+    const fixRaw = fixOf(total(win));
+    if (SDR.fix && !full) win = momScale(all, win, R.prorate || {}, md, Lc);
+    rows = filt(win); info = { s, e, maxD, full, N, fixRaw, fixAdj: fixOf(total(win)) };
+  }
+  const out = agg(rows, r => r.ch + "|" + r.code, r => ({ ch: r.ch, code: r.code, name: r.name, big: catOf(r.big), small: catOf(r.small), ...lab(r.ch, r.code) }));
+  out.sort((a, b) => (a.ch > b.ch) - (a.ch < b.ch) || (b.sales - a.sales));
+  out.info = info; return out;
+}
+function sdetBar(R, info) {
+  if (info.arc) return `<div class="help" style="margin:0 0 8px">📦 보관함 보기는 일자별 SKU 비용이 저장돼 있지 않아 <b>월 전체</b>만 보여요 (기간 조회는 현재 데이터에서)</div>`;
+  const ym = R.archived || $("#ym").value || "", mo = +(ym.split("-")[1] || 0);
+  const opt = (id, cur) => `<select id="${id}">${Array.from({ length: info.maxD }, (_, i) => i + 1).map(d => `<option value="${d}" ${d === cur ? "selected" : ""}>${mo ? mo + "/" : ""}${d}</option>`).join("")}</select>`;
+  const chN = [...new Set(Object.values(info.N))];
+  const fx = !info.full && SDR.fix ? `고정비 일할 맞춤 ${mil1(info.fixRaw)} → ${mil1(info.fixAdj)}백만 (월 금액 × 기간일수 ÷ ${R.mdays}일)` : info.full ? "전체 기간 = 고정비 조정 없음" : `고정비 = 기간 안 행 그대로 ${mil1(info.fixRaw)}백만`;
+  return `<div class="toolbar" style="margin:0 0 8px">
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">기간 ${opt("sdS", info.s)} ~ ${opt("sdE", info.e)}</label>
+    <button type="button" id="sdAll">전체 기간</button>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">고정비 <select id="sdFix"><option value="1" ${SDR.fix ? "selected" : ""}>일할 맞춤 (기간일수÷월일수)</option><option value="0" ${SDR.fix ? "" : "selected"}>기간 안 행 그대로</option></select></label>
+    <button type="button" id="sdCp">📋 표 복사</button>
+    <span class="muted">${mo ? mo + "/" : ""}${info.s}~${info.e}일 누계 · ${fx}${chN.length > 1 ? ` · ⚠ 채널별 경과일 다름(${Math.min(...chN)}~${Math.max(...chN)}일)` : ""}</span>
+  </div>`;
+}
+function sdetAoa(data) {
+  const cols = COLS.sdet, t = total(data);
+  const val = (r, k, ty) => ty === 1 ? Math.round(r[k] || 0) : (r[k] ?? "");
+  return [cols.map(c => c[1]), ...data.map(r => cols.map(([k, , ty]) => val(r, k, ty))), cols.map(([k, , ty], i) => i === 0 ? "합계" : ty === 1 ? val(t, k, 1) : "")];
+}
+function sdetBind() {
+  const save = () => { try { localStorage.setItem("dc_sdr", JSON.stringify(SDR)); } catch (x) { } render(); };
+  const S = $("#sdS"), E = $("#sdE");
+  if (S) S.onchange = () => { SDR.s = +S.value; if (SDR.e && SDR.e < SDR.s) SDR.e = SDR.s; save(); };
+  if (E) E.onchange = () => { SDR.e = +E.value; if (SDR.e < SDR.s) SDR.s = SDR.e; save(); };
+  const A = $("#sdAll"); if (A) A.onclick = () => { SDR.s = 1; SDR.e = 0; save(); };
+  const F = $("#sdFix"); if (F) F.onchange = () => { SDR.fix = F.value === "1"; save(); };
+  const C = $("#sdCp"); if (C) C.onclick = function () { copyBig(toTsv(sdetAoa(SDCUR || [])), this); };
+}
+let SDCUR = null;
 
 function dataFor(tab, rows) {
   if (tab === "sum") return agg(rows, r => r.ch, r => ({ ch: r.ch }));
@@ -659,7 +725,7 @@ function dataFor(tab, rows) {
 
 // 화면 표(상세 제외): 금액 옆 (총매출 대비 %) 합쳐 표시 — 다운로드는 COLS 그대로(금액·율 분리)
 const RATEK = new Set(["dc", "jTot", "pTot", "cost", "vc", "tr", "cm"]);
-const viewCols = tab => tab !== "det" ? COLS[tab].filter(c => c[2] !== 2).map(c => RATEK.has(c[0]) ? [c[0], c[1] + "(%)", 3] : c) : COLS[tab];
+const viewCols = tab => tab !== "det" && tab !== "sdet" ?COLS[tab].filter(c => c[2] !== 2).map(c => RATEK.has(c[0]) ? [c[0], c[1] + "(%)", 3] : c) : COLS[tab];
 function cell(v, t, k, r) {
   if (t === 3) { const b = cell(v, 1, k), x = r && r.sales && v != null ? v / r.sales : null; return x == null ? b : b.replace(/<\/td>$/, ` <span style="color:var(--muted,#888);font-size:.92em">(${pct(x)})</span></td>`); }
   if (t === 1) { const n = v == null ? null : (Math.abs(v) < 1000 && k !== "qty" && k !== "ediq" && v % 1 ? +v.toFixed(2) : Math.round(v)); return `<td class="n${v < 0 ? " neg" : ""}">${n == null ? '<span class="flag">없음</span>' : fmt(n, (Math.abs(v) < 1000 && v % 1) ? 2 : 0)}</td>`; }
@@ -751,16 +817,19 @@ function render() {
   }
   if (ST.tab === "rca") { MOMR = R; h += `<div class="dgrid"><section class="card wide" id="rcaCard">${rcaHtml(R)}</section></div>`; finishRender(h); rcaBind(); return; }
   if (ST.tab === "rpt") { MOMR = R; h += `<div class="dgrid"><section class="card wide" id="rptCard">${rptHtml(R)}</section></div>`; finishRender(h); rptBind(); return; }
-  let data = ST.tab === "day" && R.days ? dataFor("day", filt(R.days)) : dataFor(ST.tab, rowsF);
+  let data = ST.tab === "day" && R.days ? dataFor("day", filt(R.days)) : ST.tab === "sdet" ? sdetData(R) : dataFor(ST.tab, rowsF);
+  if (ST.tab === "sdet") h += sdetBar(R, data.info);
   if (ST.q && ST.tab !== "sum" && ST.tab !== "day") { const q = ST.q.toLowerCase(); data = data.filter(r => String(r.code ?? "").includes(q) || String(r.name ?? "").toLowerCase().includes(q) || ["evt", "big", "small"].some(k => String(r[k] ?? "").toLowerCase().includes(q))); }
   const cols = viewCols(ST.tab); const s = ST.sort[ST.tab];
   if (s) data = [...data].sort((a, b) => { const x = a[s.k], y = b[s.k]; if (x == null) return 1; if (y == null) return -1; return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "ko")) * s.d; });
+  if (ST.tab === "sdet") SDCUR = data;
   const LIM = 3000; const shown = data.slice(0, LIM);
   h += `<div class="tw"><table><thead><tr>${cols.map(([k, l]) => `<th data-k="${k}">${l}${s && s.k === k ? (s.d > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead><tbody>`;
   h += shown.map(r => `<tr>${cols.map(([k, , t]) => cell(r[k], t, k, r)).join("")}</tr>`).join("");
   { const tt = total(data); h +=`<tr class="tot">${cols.map(([k, , t], i) => i === 0 ? `<td>합계</td>` : ((t === 1 || t === 3) && NUMK.includes(k)) ? cell(tt[k], t, k, tt) : (t === 2 && tt[k] !== undefined) ? cell(tt[k], 2, k) : "<td></td>").join("")}</tr>`; }
   h += `</tbody></table>${data.length > LIM ? `<div class="empty">화면엔 ${LIM.toLocaleString()}행까지만 표시 (전체 ${data.length.toLocaleString()}행은 엑셀 다운로드)</div>` : ""}</div>`;
   finishRender(h);
+  if (ST.tab === "sdet") sdetBind();
 }
 
 function finishRender(h) {
@@ -1491,7 +1560,7 @@ function parseGoal(g) {
     if (sku >= 0 && sal >= 0 && mon >= 0 && (dcI >= 0 || jI >= 0 || pI >= 0)) {
       out.layout = "sku"; out.unit = unitOf(h[sal]); const nmI = f(/^(SKU명|제품명|품명|자재명)$/);
       // Rolling 양식: 비용·공헌이익 열이 있으면 툴 계산값과 대조 (행 단위, 10원 넘게 차이 나면 경고)
-      const cI = f(/^비용(계)?$/), cmI = f(/^(공헌이익|CM)(\(.*\))?$/i), tmI = f(/^팀(구분|명)?$/); out.chk = { n: 0, bad: [] };
+      const cI = f(/^비용(계)?$/), cmI = f(/^(공헌이익|CM)(\(.*\))?$/i), tmI = f(/^팀(구분|명)?$/), rtI = f(/^경로구분$/), s2I = f(/^경로세부2$/); out.chk = { n: 0, bad: [] };
       const M = new Map(), N = c => c >= 0 ? num(rr0[c]) ?? 0 : 0; let rr0;
       for (let j = i + 1; j < g.length; j++) {
         const rr = g[j]; if (!rr) continue; rr0 = rr; const cd = code(rr[sku]); if (!cd || SUB.test(norm(cd))) continue;
@@ -1499,7 +1568,7 @@ function parseGoal(g) {
         const mo = goalMonth(rr[mon]); if (!mo) { out.bad++; continue; }
         const y = (yr >= 0 ? yearV(rr[yr]) : null) ?? mo.y, ch = ix.ch >= 0 ? canonCh(gTxt(rr[ix.ch])) : "";
         const k = [gk(ch), cd, y ?? "", mo.m].join("\u0001");
-        let e = M.get(k); if (!e) M.set(k, e = { ch, code: cd, name: nmI >= 0 ? gTxt(rr[nmI]) : "", y, m: mo.m, u: out.unit, s: 0, dc: 0, j: 0, p: 0, vc: 0, tr: 0, fBig: ix.big >= 0 ? gTxt(rr[ix.big]) : "", fSmall: ix.small >= 0 ? gTxt(rr[ix.small]) : "", team: tmI >= 0 ? gTxt(rr[tmI]) : "" });
+        let e = M.get(k); if (!e) M.set(k, e = { ch, code: cd, name: nmI >= 0 ? gTxt(rr[nmI]) : "", y, m: mo.m, u: out.unit, s: 0, dc: 0, j: 0, p: 0, vc: 0, tr: 0, fBig: ix.big >= 0 ? gTxt(rr[ix.big]) : "", fSmall: ix.small >= 0 ? gTxt(rr[ix.small]) : "", team: tmI >= 0 ? gTxt(rr[tmI]) : "", route: rtI >= 0 ? gTxt(rr[rtI]) : "", sub2: s2I >= 0 && rr[s2I] !== 0 ? gTxt(rr[s2I]) : "" });   // "-"는 붙여넣기 파서가 0으로 읽음 → 빈칸(화면 "-")
         e.s += sv ?? 0; e.dc += N(dcI); e.j += N(jI); e.p += N(pI); e.vc += N(vI); e.tr += N(tI);
         if (cI >= 0 || cmI >= 0) {
           out.chk.n++; const cst = N(dcI) + N(jI) + N(pI), cmv = (sv ?? 0) - cst - N(vI) - N(tI);
@@ -2174,6 +2243,7 @@ function download() {
   XLSX.utils.book_append_sheet(wb, toSheet("evt", dataFor("evt", rowsF)), "세분류별");
   XLSX.utils.book_append_sheet(wb, toSheet("prod", dataFor("prod", rowsF)), "제품별");
   XLSX.utils.book_append_sheet(wb, toSheet("day", dataFor("day", R.days ? filt(R.days) : rowsF)), "일자별");
+  { const sd = sdetData(R), i = sd.info; XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sdetAoa(sd)), i.arc ? "상세(요약)" : `상세(요약) ${i.s}~${i.e}일`); }
   if (R.archived) { XLSX.writeFile(wb, `DC_CM_${R.archived}_보관함_${[chTag(), ST.big, ST.small, ST.evt].filter(x => x !== "전체").join("_") || "전체"}.xlsx`.replace(/[\\/:*?"<>|]/g, "")); return; }
   XLSX.utils.book_append_sheet(wb, toSheet("det", rowsF), "상세");
   const W = R.W; const wr = [["구분", "제품코드", "제품명"]];
