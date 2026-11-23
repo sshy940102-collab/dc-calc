@@ -666,12 +666,18 @@ function routeMap() {
 function sdetData(R) {
   const md = R.mdays || 31, M = routeMap();
   const lab = (ch, code) => { const a = M.byCC.get(gk(ch) + "|" + code) || {}, b = M.byC.get(gk(ch)) || {}; const v = f => a[f] || b[f] || "-"; return { route: v("route"), team: v("team"), sub2: v("sub2") }; };
-  let rows, info;
-  if (R.archived) { rows = filt(R.rows); info = { arc: true }; }
-  else {
-    const all = R.rows, maxD = Math.max(0, ...all.map(r => r.day || 0)) || md;
+  let rows, info, all = R.rows;
+  // 보관함: SKU×일자(sd)에 비용 항목까지 있으면 기간 조회, 예전 저장분(9칸)이면 월 전체 + 재저장 안내
+  if (R.archived) {
+    const S = sdRows(R), miss = R.chs.filter(chOk).filter(ch => !S || !S.some(r => r.ch === ch && r.full));
+    if (miss.length) { rows = filt(R.rows); info = { arc: true, miss }; }
+    else all = S.filter(r => r.full);
+  }
+  if (!info) {
+    const maxD = Math.max(0, ...all.map(r => r.day || 0)) || md;
     const s = Math.min(Math.max(1, SDR.s || 1), maxD), e = Math.max(s, Math.min(SDR.e || maxD, md));
     const full = s === 1 && e >= maxD;
+    if (full && R.archived) all = R.rows;   // 보관함 전체 기간 = 월 합계 그대로 (일자 없는 행·반올림 차이 없이)
     let win = all.filter(r => r.day == null ? full : r.day >= s && r.day <= e);
     const N = {}, Lc = {};
     for (const ch of R.chs) { const pr = R.prorate && R.prorate[ch]; N[ch] = pr ? Math.round(pr * md) : maxD; Lc[ch] = Math.max(0, Math.min(e, N[ch]) - s + 1); }
@@ -684,7 +690,7 @@ function sdetData(R) {
   out.info = info; return out;
 }
 function sdetBar(R, info) {
-  if (info.arc) return `<div class="help" style="margin:0 0 8px">📦 보관함 보기는 일자별 SKU 비용이 저장돼 있지 않아 <b>월 전체</b>만 보여요 (기간 조회는 현재 데이터에서)</div>`;
+  if (info.arc) return `<div class="help" style="margin:0 0 8px">📦 이 보관함 자료는 예전 방식으로 저장돼서 <b>월 전체</b>만 보여요 — 재저장 필요 채널: <b>${info.miss.map(esc).join(", ")}</b><br>기간 조회하려면 그 달 매입 로우를 다시 계산해서 보관함에 한 번 더 저장해 주세요 (2026-11-23 이후 저장분부터 SKU×일자 비용 포함)</div>`;
   const ym = R.archived || $("#ym").value || "", mo = +(ym.split("-")[1] || 0);
   const opt = (id, cur) => `<select id="${id}">${Array.from({ length: info.maxD }, (_, i) => i + 1).map(d => `<option value="${d}" ${d === cur ? "selected" : ""}>${mo ? mo + "/" : ""}${d}</option>`).join("")}</select>`;
   const chN = [...new Set(Object.values(info.N))];
@@ -1029,11 +1035,18 @@ function momCalc(R) {
   }
   return { ym, pv, y, m, py, pm, off, chs, N, L, cut, mdC, mdP, cur: filt(cWin), prv: filt(pWin), fixRaw, fixAdj, skuC, skuP, missC, missP, cArc: !!R.archived };
 }
-// 보관 스냅샷의 SKU×일자(sd: [ch, code, day, sales, cm, jAmt, sAmt, pDist, pSku]) → 행 객체 (분류는 같은 스냅샷 rows에서)
+// 보관 스냅샷의 SKU×일자(sd: [ch, code, day, sales, cm, jAmt, sAmt, pDist, pSku, dc, jTot, pTot, vc, tr]) → 행 객체 (분류는 같은 스냅샷 rows에서)
+// 2026-11-23 전 저장분은 9칸(dc~tr 없음) → full=false (상세(요약) 기간 조회 불가, 재저장 필요)
+const SD_N = 14;
 function sdRows(s) {
   if (!s || !s.sd || !s.sd.length) return null;
   const info = new Map(s.rows.map(r => [r.ch + "|" + r.code, r]));
-  return s.sd.map(a => { const i = info.get(a[0] + "|" + a[1]) || {}; return { ch: a[0], code: a[1], name: i.name, big: i.big, small: i.small, evt: i.evt, day: a[2], sales: a[3] || 0, cm: a[4] || 0, jAmt: a[5] || 0, sAmt: a[6] || 0, pDist: a[7] || 0, pSku: a[8] || 0, jTot: 0, pTot: 0, cost: 0 }; });
+  return s.sd.map(a => {
+    const i = info.get(a[0] + "|" + a[1]) || {}, f = a.length >= SD_N;
+    const o = { ch: a[0], code: a[1], name: i.name, big: i.big, small: i.small, evt: i.evt, day: a[2], sales: a[3] || 0, cm: a[4] || 0, jAmt: a[5] || 0, sAmt: a[6] || 0, pDist: a[7] || 0, pSku: a[8] || 0, jTot: 0, pTot: 0, cost: 0, full: f };
+    if (f) { o.dc = a[9] || 0; o.jTot = a[10] || 0; o.pTot = a[11] || 0; o.vc = a[12] || 0; o.tr = a[13] || 0; o.cost = o.dc + o.jTot + o.pTot; }
+    return o;
+  });
 }
 // 분류 key별 SKU 증감 툴팁 HTML (감소 TOP5 · 증가 TOP5)
 let MOMTIP = [];
@@ -2490,10 +2503,10 @@ function makeSnap(R, ym) {
   const days = agg(R.rows.filter(r => r.day != null), r => [r.ch, r.big, r.small, r.evt, r.day].join("|"), r => ({ ch: r.ch, big: r.big, small: r.small, evt: r.evt, day: r.day }))
     .map(a => ({ ch: a.ch, big: a.big, small: a.small, evt: a.evt, day: a.day, ...pick(a) }));
   const d = new Date(); const savedAt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  // SKU×일자 (전월 동기간 비교 SKU 툴팁용) — 용량 줄이려고 배열 [ch, code, day, sales, cm, jAmt, sAmt, pDist, pSku]
-  const sm = new Map();
-  for (const r of R.rows) { if (r.day == null) continue; const k = r.ch + "|" + r.code + "|" + r.day; let a = sm.get(k); if (!a) sm.set(k, a = [r.ch, r.code, r.day, 0, 0, 0, 0, 0, 0]); a[3] += r.sales || 0; a[4] += r.cm || 0; a[5] += r.jAmt || 0; a[6] += r.sAmt || 0; a[7] += r.pDist || 0; a[8] += r.pSku || 0; }
-  const sd = [...sm.values()].map(a => { for (let i = 3; i < 9; i++) a[i] = Math.round(a[i]); return a; });
+  // SKU×일자 (전월 동기간 비교 SKU 툴팁 · 상세(요약) 기간 조회용) — 용량 줄이려고 배열 [ch, code, day, sales, cm, jAmt, sAmt, pDist, pSku, dc, jTot, pTot, vc, tr]
+  const sm = new Map(), SK = ["sales", "cm", "jAmt", "sAmt", "pDist", "pSku", "dc", "jTot", "pTot", "vc", "tr"];
+  for (const r of R.rows) { if (r.day == null) continue; const k = r.ch + "|" + r.code + "|" + r.day; let a = sm.get(k); if (!a) sm.set(k, a = [r.ch, r.code, r.day, ...SK.map(() => 0)]); SK.forEach((n, i) => a[3 + i] += r[n] || 0); }
+  const sd = [...sm.values()].map(a => { for (let i = 3; i < SD_N; i++) a[i] = Math.round(a[i]); return a; });
   return { ym, savedAt, chs: R.chs, mdays: R.mdays, prorate: R.prorate, rows, days, sd };
 }
 function snapRes(s) {
@@ -2558,7 +2571,7 @@ function arcRename(mp, arcOnly) {
     const mergeBy = (list, key) => { const m = new Map(); for (const r0 of list) { const r = { ...r0, ch: to(r0.ch) }, k = key(r), p = m.get(k); if (!p) m.set(k, r); else NUMK.forEach(f => p[f] = (p[f] || 0) + (r[f] || 0)); } return [...m.values()]; };
     s.rows = mergeBy(s.rows, r => r.ch + "|" + r.code);
     s.days = mergeBy(s.days, r => [r.ch, r.big, r.small, r.evt, r.day].join("|"));
-    if (s.sd) { const m = new Map(); for (const a0 of s.sd) { const a = [to(a0[0]), ...a0.slice(1)], k = a[0] + "|" + a[1] + "|" + a[2], p = m.get(k); if (!p) m.set(k, a); else for (let i = 3; i < 9; i++) p[i] = (p[i] || 0) + (a[i] || 0); } s.sd = [...m.values()]; }
+    if (s.sd) { const m = new Map(); for (const a0 of s.sd) { const a = [to(a0[0]), ...a0.slice(1)], k = a[0] + "|" + a[1] + "|" + a[2], p = m.get(k); if (!p) m.set(k, a); else for (let i = 3; i < Math.min(p.length, a.length); i++) p[i] = (p[i] || 0) + (a[i] || 0); if (p.length !== a.length) p.length = 9; } s.sd = [...m.values()]; }
     const pr = {}; for (const [c, v] of Object.entries(s.prorate || {})) pr[to(c)] ??= v; s.prorate = pr;
     s.chs = [...new Set(chs)];
   }
