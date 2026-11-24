@@ -209,6 +209,7 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
     <h2>① 피벗 붙여넣기 <small>엑셀 피벗을 그대로 복사</small></h2>
     <div class="help">
       피벗에서 <b>연도 행(26년·27년)부터 머리글(부문·팀·채널…·값·1월~12월)과 데이터 끝까지</b> 통째로 복사(Ctrl+C) → 아래 칸에 붙여넣기(Ctrl+V) → <b>분석하기</b><br>
+      · <b>세로형 표</b>도 OK: 머리글(연도·월·부문·팀·채널·SKU·SKU명·대분류·소분류·총매출·DC·장려금·판관비·비용계·변동원가·공헌이익)부터 끝까지 복사 → 같은 키는 자동 합산<br>
       · 값 열은 <b>총매출·DC·장려금·판관비·비용·변동원가·공헌이익</b> 금액만 사용 (예전 양식 매출차감도 인식 · 율·총매출2 행은 자동으로 무시, 율은 금액으로 다시 계산)<br>
       · <b>DC·장려금</b>을 넣으면 매출차감 = DC + 장려금으로 자동 계산, 7 보고서에 DC율·장려금율이 따로 나와요 · 새 양식으로 바꿀 땐 「🗑 저장된 자료 지우기」 후 붙여넣기<br>
       · <b>판촉비용 = 비용</b>(매출차감+판관비) · <b>CM = 공헌이익(운송비제외)</b> · 연간 = 반기(또는 월) 합계<br>
@@ -555,8 +556,46 @@ function splitTSV(text) {
 const MON_RE = /^(\d{1,2})\s*(월|M)?$/i;
 const monN = s => { const m = String(s).match(MON_RE); return m && +m[1] >= 1 && +m[1] <= 12 ? +m[1] : null; };
 const isMonthly = X => !!X && X.subs.length > 1 && X.subs.every(s => /^\d{1,2}월$/.test(s));
+/* 세로형 표(연도·월이 행, 값 항목이 열) → 피벗 모양 행으로 변환. 아니면 null */
+function flatToPivot(rows) {
+  const isY = c => /^(연도|년도|연|년|Year)$/i.test(cl(c)), isM = c => /^(월|Month)$/i.test(cl(c));
+  let hi = -1;
+  for (let i = 0; i < Math.min(rows.length, 40) && hi < 0; i++) if (rows[i].some(isY) && rows[i].some(isM)) hi = i;
+  if (hi < 0) return null;
+  const H = rows[hi].map(c => cl(c)), yc = H.findIndex(isY), mc = H.findIndex(isM);
+  const valC = [], dimC = [];
+  H.forEach((h, c) => { if (c === yc || c === mc || !h) return; const nm = h.replace(/\(.*?\)|（.*?）/g, "").trim(), mk = mkey(nm); if (mk.k) valC.push({ c, nm }); else if (!mk.rate) dimC.push(c); });
+  if (!valC.some(v => mkey(v.nm).k === "S")) return null;
+  // 차원 순서: 부문·팀·채널 → 대분류 → 소분류 → 나머지 (SKU 코드+명은 한 칸으로)
+  const pick = re => dimC.filter(c => re.test(H[c]));
+  const skuCode = dimC.find(c => /^(SKU|제품번호|제품코드|자재(코드|번호)?)$/i.test(H[c])), skuName = dimC.find(c => /^(SKU|제품|자재)\s*명$|^(제품|SKU)\s*Name$/i.test(H[c]));
+  const used = new Set(), ord = [];
+  for (const re of [/부문/, /^팀/, /채널/, /대분류|대카테고리/, /소분류|소카테고리/]) for (const c of pick(re)) if (!used.has(c) && c !== skuCode && c !== skuName) { used.add(c); ord.push(c); }
+  const rest = dimC.filter(c => !used.has(c) && c !== skuCode && c !== skuName);
+  const hasSku = skuCode != null || skuName != null;
+  const dims = [...ord.map(c => H[c]), ...rest.map(c => H[c]), ...(hasSku ? ["SKU"] : [])];
+  const yLab = v => { v = cl(v); return /^\d{2}$/.test(v) ? v + "년" : v; };
+  const cols = new Map(), agg = new Map();
+  for (let i = hi + 1; i < rows.length; i++) {
+    const r = rows[i]; if (!r.some(c => cl(c))) continue;
+    const y = yLab(r[yc]), m = monN(cl(r[mc])); if (!y || !m) continue;
+    const ck = y + "|" + m; if (!cols.has(ck)) cols.set(ck, { y, m });
+    const dv = [...ord.map(c => cl(r[c])), ...rest.map(c => cl(r[c]))];
+    if (hasSku) dv.push([skuCode != null ? cl(r[skuCode]) : "", skuName != null ? cl(r[skuName]) : ""].filter(Boolean).join(" "));
+    const dk = dv.join("\u0001");
+    let A = agg.get(dk); if (!A) { A = { dv, v: {} }; agg.set(dk, A); }
+    for (const { c, nm } of valC) { const x = num(r[c]); if (x == null) continue; const o = A.v[nm] || (A.v[nm] = {}); o[ck] = (o[ck] || 0) + x; }
+  }
+  const C = [...cols.entries()].sort((a, b) => { const ya = parseInt(a[1].y.replace(/\D/g, "")), yb = parseInt(b[1].y.replace(/\D/g, "")); return ya - yb || a[1].m - b[1].m; });
+  const pad = dims.map(() => "");
+  const out = [[...pad, "", ...C.map(([, o]) => o.y)], [...dims, "값", ...C.map(([, o]) => o.m + "월")]];
+  const live = valC.filter(({ nm }) => [...agg.values()].some(A => A.v[nm]));   // 수식 텍스트 등 숫자 없는 열 제외
+  for (const A of agg.values()) for (const { nm } of live) out.push([...A.dv, nm, ...C.map(([k]) => A.v[nm] && A.v[nm][k] != null ? String(A.v[nm][k]) : "")]);
+  return out;
+}
 function parse(text) {
-  const rows = splitTSV(text);
+  let rows = splitTSV(text);
+  if (!rows.slice(0, 40).some(r => r.some(c => /^(Σ|∑)?\s*값$/.test(cl(c))))) { const F = flatToPivot(rows); if (F) rows = F; }
   let hi = -1, vi = -1;
   for (let i = 0; i < Math.min(rows.length, 40) && hi < 0; i++) { const j = rows[i].findIndex(c => /^(Σ|∑)?\s*값$/.test(cl(c))); if (j >= 0) { hi = i; vi = j; } }
   if (vi < 0) for (let i = 0; i < rows.length && vi < 0; i++) { const j = rows[i].findIndex(c => /^합계\s*[:：]/.test(cl(c))); if (j >= 0) { vi = j; hi = i - 1; } }
