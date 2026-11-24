@@ -343,7 +343,8 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
   <div class="toolbar">
     <span class="grp rptch" id="rptChips"></span>
     <label class="f">보는 줄<select id="rptLv"><option value="all">전체 (합계+대분류)</option><option value="cat">채널×대분류만</option><option value="sum">합계 줄만</option></select></label>
-    <label class="f">검색<input type="text" id="rptQ" placeholder="팀·채널·대분류 일부" style="width:150px"></label>
+    <span id="rptSel" style="display:contents"></span>
+    <button class="sec" id="rptSelClr" style="align-self:flex-end" title="조회 조건 모두 풀기">↺</button>
     <label style="display:flex;gap:4px;align-items:center;font-size:12px;align-self:flex-end"><input type="checkbox" id="rptUnchk"> 확인 안 한 것만</label>
   </div>
   <div class="rptpg" id="rptProg"></div>
@@ -2013,7 +2014,23 @@ function impXlsx(mix) {
 }
 function pzFileName(sfx) { return `증감요인분석_${(ST.mode === "p" ? "제품" : "채널")}_${sfx}_${new Date().toISOString().slice(0, 10)}.xlsx`.replace(/[\\\/:*?"<>|]/g, "_"); }
 /* ---------- 7. 보고서: 26년 vs 27년 Account × Category (연간 누계) ---------- */
-const RPT = { data: null, open: new Set(), memo: {}, f: "all", lv: "all", q: "", unchk: false };
+const RPT = { data: null, open: new Set(), memo: {}, f: "all", lv: "all", sel: ["", "", "", "", ""], unchk: false };
+/* 목록 조회 박스 (부문 → 팀 → 채널 → 대분류 → 소분류, 위 선택에 맞춰 아래 목록 좁힘) */
+function rptSelBox() {
+  const box = $("#rptSel"); if (!box) return;
+  const R = rptData(); if (!R) { box.innerHTML = ""; return; }
+  const I = R.I, idx = [I.b, I.t, I.c, I.big, I.sm], nm = ["부문", "팀", "채널", "대분류", "소분류"], S = RPT.sel;
+  const cmpS = (a, b) => String(a).localeCompare(String(b), "ko", { numeric: true });
+  let Ls = R.X.leaves; const H = [];
+  idx.forEach((ix, k) => {
+    if (ix < 0) { S[k] = ""; return; }
+    const opts = [...new Set(Ls.map(L => L.d[ix]))].sort(cmpS);
+    if (S[k] && !opts.includes(S[k])) S[k] = "";
+    H.push(`<label class="f">${esc(R.X.dims[ix] || nm[k])}<select data-rsel="${k}" style="max-width:150px"><option value="">전체</option>${opts.map(o => `<option${o === S[k] ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`);
+    if (S[k]) Ls = Ls.filter(L => L.d[ix] === S[k]);
+  });
+  box.innerHTML = H.join("");
+}
 const RPT_LB = { "1": "① 비용율↑·매출↓", "2": "② 비용율↑·매출 정체", "3": "③ 매출↓로 CM↓", G: "🟢 추진방향", E: "기타", N: "🆕 신규", X: "⛔ 종료" };
 const RPT_LV = ["전체", "부문합", "팀계", "채널합", "대분류"];
 const p1 = x => x == null || !isFinite(x) ? "-" : (Math.round(x * 1000) / 10).toFixed(1) + "%";
@@ -2124,7 +2141,12 @@ const rptMemo = k => RPT.memo[k] || { t: "", ok: false };
 function rptPass(n, ignoreF) {
   if (RPT.lv === "cat" && n.lv !== 4) return false;
   if (RPT.lv === "sum" && n.lv === 4) return false;
-  if (RPT.q) { const s = [...n.org, n.cat].join(" ").toLowerCase(); if (!RPT.q.toLowerCase().split(/\s+/).every(w => s.includes(w))) return false; }
+  { const S = RPT.sel, I = rptData().I;   // 목록 조회: 부문·팀·채널 = 그 범위 + 상위 합계 줄(맥락), 대분류·소분류 = 채널×대분류 줄만
+    const oi = [I.b, I.t, I.c];
+    for (let k = 0; k < 3; k++) if (S[k] && (n.lv > k ? n.org[k] !== S[k] : !n.L.some(L => L.d[oi[k]] === S[k]))) return false;
+    if ((S[3] || S[4]) && n.lv !== 4) return false;
+    if (S[3] && n.cat !== S[3]) return false;
+    if (S[4] && !n.L.some(L => L.d[I.sm] === S[4])) return false; }
   if (RPT.unchk && rptMemo(n.key).ok) return false;
   if (ignoreF) return true;
   const f = RPT.f;
@@ -2142,6 +2164,7 @@ function renderRpt() {
   const bi = $("#rptBase"); if (bi && !bi.value) { let s = ""; try { s = localStorage.getItem("cc2_rptBase") || ""; } catch (e) {} bi.value = s || (DC0 ? `${yl(DC0.y0)} 1~9월 Actual + 10~12월 계획, ${yl(DC0.y1)} 사업계획 최종` : ""); }
   const R = rptData();
   if (!R) { out.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; $("#rptChips").innerHTML = ""; $("#rptProg").innerHTML = ""; return; }
+  rptSelBox();
   const base = R.rows.filter(n => rptPass(n, true)), cnt = k => base.filter(n => rptFk(n, k)).length;
   $("#rptChips").innerHTML = [["all", "전체"], ["D", "진단 ①②③"], ["1", "①"], ["2", "②"], ["3", "③"], ["G", "🟢 추진방향"], ["W", "⚠️ 검증"], ["E", "기타"], ["NX", "신규·종료"], ["IO", "🔄 SKU IN·OUT 있음"]].map(([k, n]) => `<button class="${RPT.f === k ? "on" : "sec"}" data-rptf="${k}">${n} ${cnt(k)}</button>`).join("");
   $("#rptProg").innerHTML = `<span id="rptPg1">${rptProg()}</span>` + (R.mon ? ` · <span class="muted">${esc(yl(R.y0))} ${R.nA}개월 vs ${esc(yl(R.y1))} ${R.nB}개월 누계${R.nA !== R.nB ? ' <span class="neg">⚠ 개월수 다름</span>' : ""}</span>` : "") + (rptSp() ? "" : ` · <span class="neg">⚠ DC·장려금 분리 열이 없어 ${rptDp() ? "차감율·판관비율" : "비용율"}로 표시</span>`);
@@ -2151,14 +2174,14 @@ function renderRpt() {
     <td class="n">${m.st ? "-" : `${fD1(m.eS)} / ${fD1(m.eC)} / ${fD1(m.eV)}`}</td>`;
   const H = [];
   for (const n of rows) {
-    const oc = rptOrgCells(n), mm = rptMemo(n.key), im = rptImp(n), isO = RPT.open.has(n.key);
+    const smS = RPT.sel[4], oc = rptOrgCells(n), mm = rptMemo(n.key), im = rptImp(n), isO = !!smS || RPT.open.has(n.key);
     H.push(`<tr class="lv${n.lv}" data-rk="${esc(n.key)}"><td><span class="dg d${n.dg}">${esc(rptDgTxt(n))}</span></td>${oc.map((v, i) => `<td>${n.lv === 4 && i === 3 ? `<span class="tg">${isO ? "▾" : "▸"}</span> ` : ""}${esc(v)}</td>`).join("")}${mcell(n.m)}
       <td class="tl">${rptLines(n).filter(Boolean).map(esc).join("<br>")}</td><td class="tl">${esc(im.t[4])}</td><td class="tl">${rptIOTxt(n).filter(Boolean).map(esc).join("<br>")}</td>
       <td class="memo"><textarea data-mk="${esc(n.key)}" placeholder="${n.dg === "G" ? "추진방향 작성" : "추진방향 / 확인 내용"}">${esc(mm.t)}</textarea></td><td style="text-align:center"><input type="checkbox" data-ck="${esc(n.key)}"${mm.ok ? " checked" : ""}></td></tr>`);
     if (n.lv === 4 && isO) {
-      const kids = rptKids(n.L, R.I.sm >= 0 ? R.I.sm : R.I.sku, R.X).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM);
+      const kids = rptKids(n.L, R.I.sm >= 0 ? R.I.sm : R.I.sku, R.X).filter(s => !smS || s.k === smS).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM);
       for (const s of kids) {
-        const sk = n.key + "\u0002" + s.k, so = RPT.open.has(sk) && R.I.sm >= 0;
+        const sk = n.key + "\u0002" + s.k, so = (!!smS || RPT.open.has(sk)) && R.I.sm >= 0;
         H.push(`<tr class="dd" data-rk="${esc(sk)}" style="cursor:${R.I.sm >= 0 ? "pointer" : "default"}"><td></td><td colspan="3"></td><td>${R.I.sm >= 0 ? `<span class="tg">${so ? "▾" : "▸"}</span> ` : ""}└ ${esc(s.k)}</td>${mcell(s.m)}<td colspan="5"></td></tr>`);
         if (so) for (const q of rptKids(s.L, R.I.sku, R.X).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM))
           H.push(`<tr class="dd2"><td></td><td colspan="3"></td><td style="padding-left:30px">· ${q.m.st === "N" ? "🆕 " : q.m.st === "X" ? "⛔ " : ""}${esc(q.k)}</td>${mcell(q.m)}<td colspan="5"></td></tr>`);
@@ -2419,7 +2442,8 @@ $("#insOut").addEventListener("click", e => {
 idb.get("rptMemo").then(o => { RPT.memo = o || {}; if (document.body.dataset.stage == 7) renderRpt(); });
 $("#rptChips").onclick = e => { const b = e.target.closest("button[data-rptf]"); if (!b) return; RPT.f = b.dataset.rptf; renderRpt(); };
 $("#rptLv").onchange = e => { RPT.lv = e.target.value; renderRpt(); };
-$("#rptQ").oninput = e => { RPT.q = e.target.value.trim(); renderRpt(); };
+$("#rptSel").onchange = e => { const s = e.target.closest("select[data-rsel]"); if (!s) return; const k = +s.dataset.rsel; RPT.sel[k] = s.value; renderRpt(); };   // 아래 선택은 새 범위에 없을 때만 자동 해제
+$("#rptSelClr").onclick = () => { RPT.sel = ["", "", "", "", ""]; renderRpt(); };
 $("#rptUnchk").onchange = e => { RPT.unchk = e.target.checked; renderRpt(); };
 $("#rptBase").onchange = e => { try { localStorage.setItem("cc2_rptBase", e.target.value.trim()); } catch (x) {} };
 $("#rptOut").addEventListener("input", e => { const t = e.target.closest("textarea[data-mk]"); if (!t) return; const k = t.dataset.mk; RPT.memo[k] = Object.assign(rptMemo(k), { t: t.value }); rptSave(); { const p = $("#rptPg1"); if (p) p.innerHTML = rptProg(); } });
