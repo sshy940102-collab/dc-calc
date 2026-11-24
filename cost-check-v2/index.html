@@ -2125,15 +2125,20 @@ function rptIO(n) {
   if (n._io) return n._io;
   const R = rptData(), I = R.I, e = 1e-9, g = new Map();
   for (const L of n.L) { const k = [I.b, I.t, I.c, I.sku].map(i => i >= 0 ? L.d[i] : "").join("\u0001"); (g.get(k) || g.set(k, []).get(k)).push(L); }
-  const o = { I: { n: 0, dS: 0, dM: 0 }, O: { n: 0, dS: 0, dM: 0 }, K: { n: 0, dS: 0, dM: 0 } };
+  const o = { I: { n: 0, dS: 0, dM: 0, sk: new Map() }, O: { n: 0, dS: 0, dM: 0, sk: new Map() }, K: { n: 0, dS: 0, dM: 0, sk: new Map() } };
   for (const Ls of g.values()) {
     const a = rptSum(Ls, R.X, R.y0), b = rptSum(Ls, R.X, R.y1), z = Math.abs(a.S) <= e && Math.abs(b.S) <= e;
     const t = z ? o.K : a.S <= e ? o.I : b.S <= e ? o.O : o.K;
-    if (!z) t.n++; t.dS += b.S - a.S; t.dM += b.M - a.M;
+    t.dS += b.S - a.S; t.dM += b.M - a.M;
+    if (!z) { const nm = I.sku >= 0 ? Ls[0].d[I.sku] : "", s = t.sk.get(nm) || { dS: 0, dM: 0 }; s.dS += b.S - a.S; s.dM += b.M - a.M; t.sk.set(nm, s); }
   }
+  for (const t of [o.I, o.O, o.K]) { t.n = t.sk.size; t.top = [...t.sk.entries()].sort((x, y) => Math.abs(y[1].dS) - Math.abs(x[1].dS)); }   // 개수 = 서로 다른 SKU 수, 대표 = 매출 영향 큰 순
   return n._io = o;
 }
-const rptIOTxt = n => { const o = rptIO(n), f = (nm, x) => `${nm} ${x.n}개 · 매출 ${fD1(x.dS)} · CM ${fD1(x.dM)}`; return [o.I.n ? f("🆕 IN", o.I) : "", o.O.n ? f("⛔ OUT", o.O) : "", f("유지", o.K)]; };
+/* SKU 이름 요약: 앞 코드·끝 (입수)(거래처) 괄호들 빼고 20자까지 */
+const rptSkuNm = s => { let t = String(s || "").replace(/^\s*\d{5,}\s+/, "").replace(/(\s*[\(（][^()（）]*[\)）])+\s*$/, "").trim(); if (!t) t = String(s || ""); return t.length > 20 ? t.slice(0, 19) + "…" : t; };
+/* 줄 1 = IN, 줄 2 = OUT (유지는 표시 안 함) · 대표 SKU 2개 + 외 n */
+const rptIOTxt = n => { const o = rptIO(n), f = (nm, x) => `${nm} ${x.n}개 · 매출 ${fD1(x.dS)} · CM ${fD1(x.dM)} (${x.top.slice(0, 2).map(([k, v]) => `${rptSkuNm(k)} ${fD1(v.dS)}`).join(", ")}${x.n > 2 ? ` 외 ${x.n - 2}` : ""})`; return [o.I.n ? f("🆕 IN", o.I) : "", o.O.n ? f("⛔ OUT", o.O) : ""]; };
 const rptHasIO = n => { const o = rptIO(n); return o.I.n + o.O.n > 0; };
 const rptOrgCells = n => n.lv === 1 ? [n.org[0], "부문합", "부문합", "부문합"] : n.lv === 2 ? [n.org[0], n.org[1], "팀계", "팀계"] : n.lv === 3 ? [n.org[0], n.org[1], n.org[2], "채널합"] : [n.org[0], n.org[1], n.org[2], n.cat];
 const rptDgTxt = n => RPT_LB[n.dg] + (n.warn ? " ⚠️검증" : "");
@@ -2188,7 +2193,7 @@ function renderRpt() {
       }
     }
   }
-  out.innerHTML = rows.length ? `<table class="rpt"><thead><tr><th>진단</th><th>${esc(R.X.dims[R.I.b] || "부문")}</th><th>${esc(R.X.dims[R.I.t] || "팀")}</th><th>${esc(R.X.dims[R.I.c] || "채널")}</th><th>${esc(R.X.dims[R.I.big] || "대분류")}</th><th>총매출 ${esc(yl(R.y0))}→${esc(yl(R.y1))}</th><th>비용율</th><th>원가율</th><th>공헌이익</th><th>CM율</th><th title="매출효과 / 비용효과 / 원가효과 (합 = ΔCM)">Impact 매출/비용/원가</th><th title="매출·DC율·장려금율·판관비율·원가율 26→27 증감 (자동)">세부데이터</th><th>소분류 TOP3</th><th title="채널 안 SKU 기준 · IN = 26년 매출 없음, OUT = 27년 매출 없음 · IN+OUT+유지 = 줄 증감">SKU IN·OUT (매출·CM 증감)</th><th title="직접 작성 · 자동 저장">추진방향 (작성)</th><th>✅</th></tr></thead><tbody>${H.join("")}</tbody></table>` : '<div class="empty">조건에 맞는 줄이 없어요</div>';
+  out.innerHTML = rows.length ? `<table class="rpt"><thead><tr><th>진단</th><th>${esc(R.X.dims[R.I.b] || "부문")}</th><th>${esc(R.X.dims[R.I.t] || "팀")}</th><th>${esc(R.X.dims[R.I.c] || "채널")}</th><th>${esc(R.X.dims[R.I.big] || "대분류")}</th><th>총매출 ${esc(yl(R.y0))}→${esc(yl(R.y1))}</th><th>비용율</th><th>원가율</th><th>공헌이익</th><th>CM율</th><th title="매출효과 / 비용효과 / 원가효과 (합 = ΔCM)">Impact 매출/비용/원가</th><th title="매출·DC율·장려금율·판관비율·원가율 26→27 증감 (자동)">세부데이터</th><th>소분류 TOP3</th><th title="채널 안 SKU 기준 · IN = 26년 매출 없음, OUT = 27년 매출 없음 · 괄호 = 매출 영향 큰 대표 SKU 2개">SKU IN·OUT (매출·CM 증감)</th><th title="직접 작성 · 자동 저장">추진방향 (작성)</th><th>✅</th></tr></thead><tbody>${H.join("")}</tbody></table>` : '<div class="empty">조건에 맞는 줄이 없어요</div>';
 }
 let rptSaveT = null;
 const rptSave = () => { clearTimeout(rptSaveT); rptSaveT = setTimeout(() => idb.set("rptMemo", RPT.memo), 400); };
