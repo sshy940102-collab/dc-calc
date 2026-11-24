@@ -2187,9 +2187,9 @@ function renderRpt() {
       const kids = rptKids(n.L, R.I.sm >= 0 ? R.I.sm : R.I.sku, R.X).filter(s => !smS || s.k === smS).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM);
       for (const s of kids) {
         const sk = n.key + "\u0002" + s.k, so = (!!smS || RPT.open.has(sk)) && R.I.sm >= 0;
-        H.push(`<tr class="dd" data-rk="${esc(sk)}" style="cursor:${R.I.sm >= 0 ? "pointer" : "default"}"><td></td><td colspan="3"></td><td>${R.I.sm >= 0 ? `<span class="tg">${so ? "▾" : "▸"}</span> ` : ""}└ ${esc(s.k)}</td>${mcell(s.m)}<td colspan="5"></td></tr>`);
+        H.push(`<tr class="dd" data-rk="${esc(sk)}" style="cursor:${R.I.sm >= 0 ? "pointer" : "default"}"><td></td><td colspan="3"></td><td>${R.I.sm >= 0 ? `<span class="tg">${so ? "▾" : "▸"}</span> ` : ""}└ ${esc(s.k)}</td>${mcell(s.m)}<td class="tl">${rptLines({ m: s.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
         if (so) for (const q of rptKids(s.L, R.I.sku, R.X).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM))
-          H.push(`<tr class="dd2"><td></td><td colspan="3"></td><td style="padding-left:30px">· ${q.m.st === "N" ? "🆕 " : q.m.st === "X" ? "⛔ " : ""}${esc(q.k)}</td>${mcell(q.m)}<td colspan="5"></td></tr>`);
+          H.push(`<tr class="dd2"><td></td><td colspan="3"></td><td style="padding-left:30px">· ${q.m.st === "N" ? "🆕 " : q.m.st === "X" ? "⛔ " : ""}${esc(q.k)}</td>${mcell(q.m)}<td class="tl">${rptLines({ m: q.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
       }
     }
   }
