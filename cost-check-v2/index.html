@@ -53,7 +53,7 @@ button:disabled{opacity:.4;cursor:default}
 .modebar{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .stg{display:none}
-body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4,body[data-stage="5"] #stage5,body[data-stage="6"] #stage6,body[data-stage="7"] #stage7{display:block}
+body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4,body[data-stage="5"] #stage5,body[data-stage="6"] #stage6,body[data-stage="7"] #stage7,body[data-stage="8"] #stage8{display:block}
 /* 7 보고서 */
 .rpt td{vertical-align:top}
 .rpt tr.lv1 td{background:#dbe4f3;font-weight:700}
@@ -67,6 +67,7 @@ body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #
 .rpt .dg{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11.5px;font-weight:700;white-space:nowrap}
 .dg.d1,.dg.d2,.dg.d3{background:var(--redbg);color:var(--red)}.dg.dG{background:var(--okbg);color:var(--ok)}.dg.dE,.dg.dN,.dg.dX{background:#eef1f6;color:var(--sub)}
 .rpt .sub{display:block;font-size:11px;color:var(--sub);font-weight:400}
+.rs tr.g0 td{border-top:2px solid #1f3864}.rs td.k{font-weight:700;white-space:nowrap}.rs tr.b1 td{background:#dbe4f3}.rs tr.b1 td.k{font-weight:800}
 .rpt .tl{white-space:normal;min-width:190px;font-size:11.5px;line-height:1.45}
 .rptch button{padding:4px 10px;font-size:12px}
 .rptpg{font-size:12.5px;background:#fff;border-radius:10px;padding:8px 14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(15,23,42,.05)}
@@ -199,6 +200,7 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
   <button data-s="4" data-m="p"><b>6</b>INSIGHT</button>
   <span class="ngrp">📝 보고</span>
   <button data-s="7"><b>7</b>보고서</button>
+  <button data-s="8"><b>8</b>보고서(요약)</button>
 </nav>
 <main>
 <div id="modeBar" class="modebar" hidden></div>
@@ -325,7 +327,18 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
   <div class="ins" id="pzOut"></div>
 </section>
 
-<section id="stage7" class="stg">
+<section id="stage8" class="stg">
+  <div class="card" style="padding:14px 18px">
+    <h2>📋 보고서 (요약) <small>부문 → 팀 · 제품 없이 조직 합계만 · 26년 연간 vs 27년 연간 (누계) · 백만원</small></h2>
+    <div class="help">
+      지표 5줄 = 총매출 · 비용(%) · 원가(%) · 공헌이익 · CM율 &nbsp;|&nbsp; <b>비용율 Impact</b> = 팀 줄: 부문 Δ비용율 중 그 팀 몫 (팀 합 = 부문 Δ비용율) · 부문 줄: 부문 Δ비용율 자체<br>
+      몫 = 율효과(27 비중 × 자기 비용율 증감) + 믹스효과(비중 증감 × (자기 26 비용율 − 부문 26 비용율)) → 평균보다 비싼 팀이 커지면 +, 싼 팀이 커지면 − &nbsp;|&nbsp;
+      <b>Impact 내용</b> = 부문 줄은 팀별, 팀 줄은 채널별 ↑↓ (매출 금액 · 비용율·원가율 몫 %p · CM 금액) · 진단 기준은 7 보고서와 같음
+    </div>
+    <div class="row"><button id="rsXl">📥 요약 엑셀</button><span class="muted" style="align-self:center">엑셀 기준 문구는 7 보고서 탭 값 사용</span></div>
+  </div>
+  <div class="tw" id="rsOut" style="max-height:76vh"></div>
+</section><section id="stage7" class="stg">
   <div class="card" style="padding:14px 18px">
     <h2>📝 Account × Category 보고서 <small>26년 연간 vs 27년 연간 (누계) · 부문합 → 팀계 → 채널합 → 채널×대분류 · 백만원</small></h2>
     <div class="help">
@@ -2112,14 +2125,34 @@ function rptLines(n) {
   return L;
 }
 /* Impact: 숫자 5개 + 내용 5개 (총매출 줄=매출효과, 비용 줄=비용효과, 원가 줄=원가효과, 공헌이익 줄=ΔCM, CM% 줄=소분류 TOP3) */
-function rptImp(n) {
-  const m = n.m, top = rptTop(n);
-  const tt = top.length ? `CM${m.dM >= 0 ? "↑" : "↓"} 소분류: ` + top.map(x => `${x.k} ${fD1(x.v)}`).join(" · ") : "";
-  if (m.st) return { v: [null, null, null, m.dM, null], t: ["", "", "", m.st === "N" ? "ΔCM (신규)" : "ΔCM (종료)", tt] };
+function rptImp(n, scOrg) {   // scOrg = 요약 탭: 소분류 대신 하위 조직(팀·채널) 기준
+  const m = n.m, top = scOrg ? [] : rptTop(n);
+  const tt = scOrg ? (scOrg.M ? "CM " + scOrg.M : "") : top.length ? `CM${m.dM >= 0 ? "↑" : "↓"} 소분류: ` + top.map(x => `${x.k} ${fD1(x.v)}`).join(" · ") : "";
+  const sc = scOrg || rptSmCh(n);
+  if (m.st) return { v: [null, null, null, m.dM, null], t: [sc.S ? "매출 " + sc.S : "", "", "", m.st === "N" ? "ΔCM (신규)" : "ΔCM (종료)", tt] };
   const rest = m.eC - m.eQ - m.eJ - m.eP;
   const cs = rptSp() ? ` (DC ${fD1(m.eQ)} · 장려금 ${fD1(m.eJ)} · 판관 ${fD1(m.eP)}${Math.abs(rest) >= 0.05 ? ` · 기타 ${fD1(rest)}` : ""})` : rptDp() ? ` (차감 ${fD1(m.eD)} · 판관 ${fD1(m.eP)})` : "";
-  return { v: [m.eS, m.eC, m.eV, m.dM, null], t: ["매출효과", "비용효과" + cs, "원가효과", "ΔCM 합계" + (Math.abs(m.eX) >= 0.05 ? ` (기타 ${fD1(m.eX)})` : ""), tt] };
+  return { v: [m.eS, m.eC, m.eV, m.dM, null], t: ["매출효과" + (sc.S ? " | " + sc.S : ""), "비용효과" + cs + (sc.C ? " | 비용율 " + sc.C : ""), "원가효과" + (sc.V ? " | 원가율 " + sc.V : ""), "ΔCM 합계" + (Math.abs(m.eX) >= 0.05 ? ` (기타 ${fD1(m.eX)})` : ""), tt] };
 }
+/* Impact 내용용 소분류별 증감: 매출 = 금액, 비용·원가 = 이 줄 Δ율에 대한 기여 %p (소분류 합 = 줄 Δ율) · ↑ 2개 / ↓ 2개 */
+function rptSmCh(n) {
+  if (n._sc) return n._sc;
+  const R = rptData(), i = R.I.sm >= 0 ? R.I.sm : R.I.sku;
+  return n._sc = rptChg(n.m, rptKids(n.L, i, R.X));
+}
+/* kids [{k, m}] → ↑↓ 문구 (매출 금액, 비용율·원가율 기여 %p, CM 금액) */
+function rptChg(m, kids) {
+  const rows = kids.map(k => ({ k: k.k, s: k.m.dS, mm: k.m.dM, c: rptCK(k.m, m, "C"), v: rptCK(k.m, m, "V") }));
+  const pick = (key, th, fmt) => { const up = rows.filter(r => r[key] >= th).sort((a, b) => b[key] - a[key]).slice(0, 2), dn = rows.filter(r => r[key] <= -th).sort((a, b) => a[key] - b[key]).slice(0, 2);
+    return [up.length ? "↑ " + up.map(r => `${r.k} ${fmt(r[key])}`).join(", ") : "", dn.length ? "↓ " + dn.map(r => `${r.k} ${fmt(r[key])}`).join(", ") : ""].filter(Boolean).join(" / "); };
+  return { rows, S: pick("s", 0.05, fD1), C: m.st ? "" : pick("c", 0.0005, fPP), V: m.st ? "" : pick("v", 0.0005, fPP), M: pick("mm", 0.05, fD1) };
+}
+/* 율 기여도 (%p, 상위 P 기준) = 율효과 + 믹스효과 = (27 금액/P 27 매출 − 26 금액/P 26 매출) − (27 비중 − 26 비중) × P 26 율
+   → 평균보다 율 높은 품목 비중↑ = +, 낮은 품목 비중↑ = − · 하위 합 = P Δ율 (k = "C" 비용 / "V" 원가) */
+const rptCK = (m, P, k) => { const e = 1e-9, d = (x, S) => Math.abs(S) > e ? x / S : 0, w0 = d(m.a.S, P.a.S), w1 = d(m.b.S, P.b.S), r0 = Math.abs(P.a.S) > e ? P.a[k] / P.a.S : 0;
+  return d(m.b[k], P.b.S) - d(m.a[k], P.a.S) - (w1 - w0) * r0; };
+/* 비용율 Impact (채널 등 상위 기준 기여도) */
+const rptCI = (m, P) => rptCK(m, P, "C");
 /* SKU IN·OUT: 줄 안 SKU(채널 기준)를 IN(26 매출 없음)·OUT(27 매출 없음)·유지로 나눠 매출·CM 증감 (세 개 합 = 줄 증감) */
 function rptIO(n) {
   if (n._io) return n._io;
@@ -2175,25 +2208,25 @@ function renderRpt() {
   $("#rptProg").innerHTML = `<span id="rptPg1">${rptProg()}</span>` + (R.mon ? ` · <span class="muted">${esc(yl(R.y0))} ${R.nA}개월 vs ${esc(yl(R.y1))} ${R.nB}개월 누계${R.nA !== R.nB ? ' <span class="neg">⚠ 개월수 다름</span>' : ""}</span>` : "") + (rptSp() ? "" : ` · <span class="neg">⚠ DC·장려금 분리 열이 없어 ${rptDp() ? "차감율·판관비율" : "비용율"}로 표시</span>`);
   const rows = R.rows.filter(n => rptPass(n));
   const rate = (a, b, d) => `${p1(a)}→${p1(b)}<span class="sub${d != null && d > 5e-5 ? " neg" : ""}">${fPP(d)}</span>`;
-  const mcell = m => `<td class="n">${fN(m.a.S)}→${fN(m.b.S)}<span class="sub${m.dS < -0.05 ? " neg" : ""}">${m.st === "N" ? "신규" : m.st === "X" ? "종료" : g1(m.gS)} (${fD1(m.dS)})</span></td><td class="n">${rate(m.c0, m.c1, m.dc)}</td><td class="n">${rate(m.v0, m.v1, m.dv)}</td><td class="n">${fN(m.a.M)}→${fN(m.b.M)}<span class="sub${m.dM < -0.05 ? " neg" : ""}">${fD1(m.dM)}</span></td><td class="n">${p1(m.m0)}→${p1(m.m1)}<span class="sub${m.dm != null && m.dm < -5e-5 ? " neg" : ""}">${fPP(m.dm)}</span></td>
+  const mcell = (m, ci) => `<td class="n">${fN(m.a.S)}→${fN(m.b.S)}<span class="sub${m.dS < -0.05 ? " neg" : ""}">${m.st === "N" ? "신규" : m.st === "X" ? "종료" : g1(m.gS)} (${fD1(m.dS)})</span></td><td class="n">${rate(m.c0, m.c1, m.dc)}${ci == null ? "" : `<span class="sub${ci > 5e-5 ? " neg" : ""}" title="채널 Δ비용율 중 이 항목 몫 (대분류 합 = 채널 Δ)">채널 기여 ${fPP(ci)}</span>`}</td><td class="n">${rate(m.v0, m.v1, m.dv)}</td><td class="n">${fN(m.a.M)}→${fN(m.b.M)}<span class="sub${m.dM < -0.05 ? " neg" : ""}">${fD1(m.dM)}</span></td><td class="n">${p1(m.m0)}→${p1(m.m1)}<span class="sub${m.dm != null && m.dm < -5e-5 ? " neg" : ""}">${fPP(m.dm)}</span></td>
     <td class="n">${m.st ? "-" : `${fD1(m.eS)} / ${fD1(m.eC)} / ${fD1(m.eV)}`}</td>`;
   const H = [];
   for (const n of rows) {
     const smS = RPT.sel[4], oc = rptOrgCells(n), mm = rptMemo(n.key), im = rptImp(n), isO = !!smS || RPT.open.has(n.key);
-    H.push(`<tr class="lv${n.lv}" data-rk="${esc(n.key)}"><td><span class="dg d${n.dg}">${esc(rptDgTxt(n))}</span></td>${oc.map((v, i) => `<td>${n.lv === 4 && i === 3 ? `<span class="tg">${isO ? "▾" : "▸"}</span> ` : ""}${esc(v)}</td>`).join("")}${mcell(n.m)}
-      <td class="tl">${rptLines(n).filter(Boolean).map(esc).join("<br>")}</td><td class="tl">${esc(im.t[4])}</td><td class="tl">${rptIOTxt(n).filter(Boolean).map(esc).join("<br>")}</td>
+    H.push(`<tr class="lv${n.lv}" data-rk="${esc(n.key)}"><td><span class="dg d${n.dg}">${esc(rptDgTxt(n))}</span></td>${oc.map((v, i) => `<td>${n.lv === 4 && i === 3 ? `<span class="tg">${isO ? "▾" : "▸"}</span> ` : ""}${esc(v)}</td>`).join("")}${mcell(n.m, n.lv === 4 ? rptCI(n.m, n.parent.m) : null)}
+      <td class="tl">${rptLines(n).filter(Boolean).map(esc).join("<br>")}</td><td class="tl">${(sc => [sc.S && "매출 " + sc.S, sc.C && "비용율 " + sc.C, sc.V && "원가율 " + sc.V, im.t[4]].filter(Boolean).map(esc).join("<br>"))(rptSmCh(n))}</td><td class="tl">${rptIOTxt(n).filter(Boolean).map(esc).join("<br>")}</td>
       <td class="memo"><textarea data-mk="${esc(n.key)}" placeholder="${n.dg === "G" ? "추진방향 작성" : "추진방향 / 확인 내용"}">${esc(mm.t)}</textarea></td><td style="text-align:center"><input type="checkbox" data-ck="${esc(n.key)}"${mm.ok ? " checked" : ""}></td></tr>`);
     if (n.lv === 4 && isO) {
       const kids = rptKids(n.L, R.I.sm >= 0 ? R.I.sm : R.I.sku, R.X).filter(s => !smS || s.k === smS).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM);
       for (const s of kids) {
         const sk = n.key + "\u0002" + s.k, so = (!!smS || RPT.open.has(sk)) && R.I.sm >= 0;
-        H.push(`<tr class="dd" data-rk="${esc(sk)}" style="cursor:${R.I.sm >= 0 ? "pointer" : "default"}"><td></td><td colspan="3"></td><td>${R.I.sm >= 0 ? `<span class="tg">${so ? "▾" : "▸"}</span> ` : ""}└ ${esc(s.k)}</td>${mcell(s.m)}<td class="tl">${rptLines({ m: s.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
+        H.push(`<tr class="dd" data-rk="${esc(sk)}" style="cursor:${R.I.sm >= 0 ? "pointer" : "default"}"><td></td><td colspan="3"></td><td>${R.I.sm >= 0 ? `<span class="tg">${so ? "▾" : "▸"}</span> ` : ""}└ ${esc(s.k)}</td>${mcell(s.m, rptCI(s.m, n.parent.m))}<td class="tl">${rptLines({ m: s.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
         if (so) for (const q of rptKids(s.L, R.I.sku, R.X).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM))
-          H.push(`<tr class="dd2"><td></td><td colspan="3"></td><td style="padding-left:30px">· ${q.m.st === "N" ? "🆕 " : q.m.st === "X" ? "⛔ " : ""}${esc(q.k)}</td>${mcell(q.m)}<td class="tl">${rptLines({ m: q.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
+          H.push(`<tr class="dd2"><td></td><td colspan="3"></td><td style="padding-left:30px">· ${q.m.st === "N" ? "🆕 " : q.m.st === "X" ? "⛔ " : ""}${esc(q.k)}</td>${mcell(q.m, rptCI(q.m, n.parent.m))}<td class="tl">${rptLines({ m: q.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
       }
     }
   }
-  out.innerHTML = rows.length ? `<table class="rpt"><thead><tr><th>진단</th><th>${esc(R.X.dims[R.I.b] || "부문")}</th><th>${esc(R.X.dims[R.I.t] || "팀")}</th><th>${esc(R.X.dims[R.I.c] || "채널")}</th><th>${esc(R.X.dims[R.I.big] || "대분류")}</th><th>총매출 ${esc(yl(R.y0))}→${esc(yl(R.y1))}</th><th>비용율</th><th>원가율</th><th>공헌이익</th><th>CM율</th><th title="매출효과 / 비용효과 / 원가효과 (합 = ΔCM)">Impact 매출/비용/원가</th><th title="매출·DC율·장려금율·판관비율·원가율 26→27 증감 (자동)">세부데이터</th><th>소분류 TOP3</th><th title="채널 안 SKU 기준 · IN = 26년 매출 없음, OUT = 27년 매출 없음 · 괄호 = 매출 영향 큰 대표 SKU 2개">SKU IN·OUT (매출·CM 증감)</th><th title="직접 작성 · 자동 저장">추진방향 (작성)</th><th>✅</th></tr></thead><tbody>${H.join("")}</tbody></table>` : '<div class="empty">조건에 맞는 줄이 없어요</div>';
+  out.innerHTML = rows.length ? `<table class="rpt"><thead><tr><th>진단</th><th>${esc(R.X.dims[R.I.b] || "부문")}</th><th>${esc(R.X.dims[R.I.t] || "팀")}</th><th>${esc(R.X.dims[R.I.c] || "채널")}</th><th>${esc(R.X.dims[R.I.big] || "대분류")}</th><th>총매출 ${esc(yl(R.y0))}→${esc(yl(R.y1))}</th><th>비용율</th><th>원가율</th><th>공헌이익</th><th>CM율</th><th title="매출효과 / 비용효과 / 원가효과 (합 = ΔCM)">Impact 매출/비용/원가</th><th title="매출·DC율·장려금율·판관비율·원가율 26→27 증감 (자동)">세부데이터</th><th title="소분류별 · 매출 = 증감 금액, 비용율·원가율 = 이 줄 증감 %p 중 그 소분류 몫 (합 = 줄 증감) · ↑↓ 각 2개 + CM 기여 TOP3">Impact 내용 (소분류)</th><th title="채널 안 SKU 기준 · IN = 26년 매출 없음, OUT = 27년 매출 없음 · 괄호 = 매출 영향 큰 대표 SKU 2개">SKU IN·OUT (매출·CM 증감)</th><th title="직접 작성 · 자동 저장">추진방향 (작성)</th><th>✅</th></tr></thead><tbody>${H.join("")}</tbody></table>` : '<div class="empty">조건에 맞는 줄이 없어요</div>';
 }
 let rptSaveT = null;
 const rptSave = () => { clearTimeout(rptSaveT); rptSaveT = setTimeout(() => idb.set("rptMemo", RPT.memo), 400); };
@@ -2243,14 +2276,14 @@ function rptXlsx(onlyShown) {
   const LVBG = ["", "DBE4F3", "E9EEF7", "F4F6FA", ""], DGBG = { "1": "FDECEC", "2": "FDECEC", "3": "FDECEC", G: "E8F5E9" };
   const list = onlyShown ? R.rows.filter(n => rptPass(n)) : R.rows;
   const y0 = yl(R.y0), y1 = yl(R.y1), base = ($("#rptBase") && $("#rptBase").value.trim()) || `${y0} vs ${y1}`;
-  const head = ["부문", "팀", "채널", "대분류", "지표", y0, y1, "증감", "증감율", "진단", "세부데이터", "추진방향", "확인", "Impact", "Impact 내용", "SKU IN·OUT", "구분"], nC = head.length;
+  const head = ["부문", "팀", "채널", "대분류", "지표", y0, y1, "증감", "증감율", "진단", "세부데이터", "추진방향", "확인", "Impact", "비용율 Impact(%p)", "Impact 내용", "SKU IN·OUT", "구분"], nC = head.length;
   const X = [], hr = 3; let r = hr;
   X.push(`<row r="1" ht="22" customHeight="1">${xCell(1, 0, `□ ${y0} 대비 ${y1} Account x Category 분석`, sty({ nb: 1, b: 1, sz: 13, c: "1F3864" }))}</row>`);
   X.push(`<row r="2">${xCell(2, nC - 1, `(기준 : ${base} / 단위 : 백만,%)`, sty({ nb: 1, c: "5B6577", h: "right" }))}</row>`);
   X.push(`<row r="${hr}" ht="30" customHeight="1">${head.map((h, i) => xCell(hr, i, h, sty({ b: 1, c: "FFFFFF", bg: "1F3864", h: "center", w: 1 }))).join("")}</row>`);
   const met = [["총매출", "S", 0], ["비용(%)", "c", 1], ["원가(%)", "v", 1], ["공헌이익", "M", 0], ["(%)", "m", 1]];
   for (const n of list) {
-    const m = n.m, bg = LVBG[n.lv], b = n.lv < 4 ? 1 : 0, oc = rptOrgCells(n), lines = rptLines(n), im = rptImp(n), mm = rptMemo(n.key), io = rptIOTxt(n);
+    const m = n.m, bg = LVBG[n.lv], b = n.lv < 4 ? 1 : 0, oc = rptOrgCells(n), lines = rptLines(n), im = rptImp(n), mm = rptMemo(n.key), io = rptIOTxt(n), ciX = n.lv === 4 ? Math.round(rptCI(n.m, n.parent.m) * 1000) / 10 : null;
     const ml = (mm.t || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean), memoL = ml.length > 5 ? [...ml.slice(0, 4), ml.slice(4).join(" / ")] : ml;
     met.forEach(([nm, k, isR], j) => { r++;
       const hide = j > 0, tc = (v, o) => xCell(r, o.col, v, sty({ b, bg, h: o.h || "center", c: hide && o.rep ? (bg || "FFFFFF") : o.c }));
@@ -2270,15 +2303,16 @@ function rptXlsx(onlyShown) {
         xCell(r, 11, memoL[j] || "", sty({ bg, h: "left" })),
         tc(mm.ok ? "✅" : "", { col: 12, rep: 1 }),
         xCell(r, 13, im.v[j] == null ? "" : Math.round(im.v[j] * 10) / 10, sty({ b, bg, nf: "dn", c: sgn(im.v[j]) })),
-        xCell(r, 14, im.t[j] || "", sty({ bg, h: "left" })),
-        xCell(r, 15, io[j] || "", sty({ bg, h: "left" })),
-        tc(RPT_LV[n.lv], { col: 16, rep: 1 })];
+        xCell(r, 14, ciX != null && j === 1 ? ciX : "", sty({ b, bg, nf: "pp", c: j === 1 ? sgn(ciX == null ? null : -ciX) : "" })),
+        xCell(r, 15, im.t[j] || "", sty({ bg, h: "left" })),
+        xCell(r, 16, io[j] || "", sty({ bg, h: "left" })),
+        tc(RPT_LV[n.lv], { col: 17, rep: 1 })];
       X.push(`<row r="${r}">${cells.join("")}</row>`); });
   }
-  const sh1 = xSheet(X, nC, r, hr, [11, 11, 13, 15, 9, 11, 11, 10, 9, 20, 46, 30, 6, 10, 56, 34, 8]);
+  const sh1 = xSheet(X, nC, r, hr, [11, 11, 13, 15, 9, 11, 11, 10, 9, 20, 46, 30, 6, 10, 11, 56, 34, 8]);
   // 시트2: 소분류·SKU 상세 (대분류 줄 기준, 평평한 표)
   const sp = rptSp(), dp = rptDp(), I = R.I;
-  const h2 = ["부문", "팀", "채널", "대분류", "소분류", "SKU", "단계", "SKU 구분", "진단(대분류)", `매출 ${y0}`, `매출 ${y1}`, "매출 증감", "증감율", `비용율 ${y0}`, `비용율 ${y1}`, "비용율 Δ",
+  const h2 = ["부문", "팀", "채널", "대분류", "소분류", "SKU", "단계", "SKU 구분", "진단(대분류)", `매출 ${y0}`, `매출 ${y1}`, "매출 증감", "증감율", `비용율 ${y0}`, `비용율 ${y1}`, "비용율 Δ", "비용율 기여(채널)",
     ...(sp ? ["DC율 Δ", "장려금율 Δ", "판관비율 Δ"] : dp ? ["차감율 Δ", "판관비율 Δ"] : []), `원가율 ${y0}`, `원가율 ${y1}`, "원가율 Δ", `CM ${y0}`, `CM ${y1}`, "CM 증감", `CM율 ${y0}`, `CM율 ${y1}`, "CM율 Δ", "매출효과", "비용효과", "원가효과"];
   const X2 = []; let r2 = 1;
   X2.push(`<row r="1" ht="30" customHeight="1">${h2.map((h, i) => xCell(1, i, h, sty({ b: 1, c: "FFFFFF", bg: "1F3864", h: "center", w: 1 }))).join("")}</row>`);
@@ -2286,7 +2320,7 @@ function rptXlsx(onlyShown) {
   const line2 = (n, sm, sku, step, m, bg) => { r2++; const st = (nf, v) => sty({ bg, nf, c: nf === "dn" || nf === "pp" || nf === "dp" ? (v == null || Math.abs(v) < (nf === "dp" ? 0.0005 : 0.05) ? "" : v < 0 ? "C00000" : "2E7D32") : "" });
     const gr = m.st === "N" ? "신규" : m.st === "X" ? "종료" : m.gS;
     const vals = [[n.org[0], "t"], [n.org[1], "t"], [n.org[2], "t"], [n.cat, "t"], [sm, "t"], [sku, "t"], [step, "t"], [step === "SKU" ? (m.st === "N" ? "🆕 IN" : m.st === "X" ? "⛔ OUT" : "유지") : "", "t"], [rptDgTxt(n), "t"], [r1v(m.a.S), "n"], [r1v(m.b.S), "n"], [r1v(m.dS), "dn"], [typeof gr === "number" ? Math.round(gr * 1000) / 1000 : gr, "dp"],
-      [m.c0, "p"], [m.c1, "p"], [pp(m.dc), "pp"], ...(sp ? [[pp(m.dq), "pp"], [pp(m.dj), "pp"], [pp(m.dp), "pp"]] : dp ? [[pp(m.dd), "pp"], [pp(m.dp), "pp"]] : []),
+      [m.c0, "p"], [m.c1, "p"], [pp(m.dc), "pp"], [pp(rptCI(m, n.parent.m)), "pp"], ...(sp ? [[pp(m.dq), "pp"], [pp(m.dj), "pp"], [pp(m.dp), "pp"]] : dp ? [[pp(m.dd), "pp"], [pp(m.dp), "pp"]] : []),
       [m.v0, "p"], [m.v1, "p"], [pp(m.dv), "pp"], [r1v(m.a.M), "n"], [r1v(m.b.M), "n"], [r1v(m.dM), "dn"], [m.m0, "p"], [m.m1, "p"], [pp(m.dm), "pp"], [m.st ? null : r1v(m.eS), "dn"], [m.st ? null : r1v(m.eC), "dn"], [m.st ? null : r1v(m.eV), "dn"]];
     X2.push(`<row r="${r2}">${vals.map(([v, nf], i) => xCell(r2, i, v, nf === "t" ? sty({ bg, h: "left", b: step === "소분류 합" ? 1 : 0 }) : st(nf, typeof v === "number" ? v : null))).join("")}</row>`); };
   for (const n of list.filter(n => n.lv === 4)) {
@@ -2296,18 +2330,92 @@ function rptXlsx(onlyShown) {
       for (const q of rptKids(s.L, I.sku, R.X).sort((x, y) => String(x.k).localeCompare(String(y.k), "ko", { numeric: true }))) line2(n, smI >= 0 ? s.k : "", q.k, "SKU", q.m, "");
     }
   }
-  const sh2 = xSheet(X2, h2.length, Math.max(r2, 1), 1, h2.map((h, i) => i < 4 ? 12 : i === 4 ? 16 : i === 5 ? 28 : i === 6 ? 9 : i === 7 ? 9 : i === 8 ? 18 : 10));
+  const sh2 = xSheet(X2, h2.length, Math.max(r2, 1), 1, h2.map((h, i) => i < 4 ? 12 : i === 4 ? 16 : i === 5 ? 28 : i === 6 ? 9 : i === 7 ? 9 : i === 8 ? 18 : i === 16 ? 12 : 10));
   return { blob: xBook([{ name: "보고서", ...sh1 }, { name: "소분류·SKU 상세", ...sh2 }], S.xml()), n: list.length, n2: r2 - 1, sheet1: sh1.xml };
 }
 
+/* ---------- 8 보고서(요약): 부문 → 팀, 지표 5줄 ---------- */
+const RS_MET = [["총매출", "S", 0], ["비용(%)", "c", 1], ["원가(%)", "v", 1], ["공헌이익", "M", 0], ["(%)", "m", 1]];
+function rsList() {
+  const R = rptData(); if (!R) return [];
+  const kidsOf = n => R.rows.filter(x => x.parent === n && x.lv < 4);
+  const tops = R.rows.filter(n => n.lv === 1).length ? R.rows.filter(n => n.lv === 1) : R.rows.filter(n => n.lv === 2);
+  const nm = x => x.lv === 1 ? x.org[0] : x.lv === 2 ? x.org[1] : x.org[2];
+  const ent = (n, top) => { const kids = kidsOf(n), sc = rptChg(n.m, kids.map(x => ({ k: nm(x), m: x.m })));
+    return { n, top, name: nm(n) + (top ? " (합)" : ""), ci: top ? n.m.dc : rptCI(n.m, n.parent.m), sc, im: rptImp(n, sc), lines: rptLines(n), key: "S|" + n.key }; };
+  const out = []; for (const t of tops) { out.push(ent(t, true)); for (const k of kidsOf(t)) out.push(ent(k, false)); }
+  return out;
+}
+const rsVal = (m, k, isR) => {
+  const a = isR ? m[k + "0"] : m.a[k], b = isR ? m[k + "1"] : m.b[k];
+  const d = isR ? m["d" + k] : m.b[k] - m.a[k];
+  const gr = isR ? null : m.st === "N" ? "신규" : m.st === "X" ? "종료" : Math.abs(m.a[k]) > 1e-9 ? (m.b[k] - m.a[k]) / Math.abs(m.a[k]) : null;
+  return { a, b, d, gr };
+};
+function renderRs() {
+  const out = $("#rsOut"); if (!out) return;
+  const E = rsList(); if (!E.length) { out.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; return; }
+  const R = rptData(), H = [];
+  for (const e of E) {
+    const m = e.n.m, mm = rptMemo(e.key);
+    RS_MET.forEach(([nm, k, isR], j) => {
+      const v = rsVal(m, k, isR), f = isR ? p1 : fN, fd = isR ? fPP : fD1;
+      const bad = isR ? (k === "m" ? v.d < -5e-5 : v.d > 5e-5) : v.d < -0.05;
+      H.push(`<tr class="${e.top ? "b1" : ""}${j === 0 ? " g0" : ""}">${j === 0 ? `<td class="k" rowspan="5">${esc(e.name)}</td>` : ""}<td>${nm}</td><td class="n">${f(v.a)}</td><td class="n">${f(v.b)}</td><td class="n${bad ? " neg" : ""}">${v.d == null ? "-" : fd(v.d)}</td><td class="n">${isR ? "-" : typeof v.gr === "string" ? v.gr : g1(v.gr)}</td>
+        <td class="n${j === 1 && e.ci > 5e-5 ? " neg" : ""}">${j === 1 && e.ci != null ? fPP(e.ci) : ""}</td>
+        ${j === 0 ? `<td rowspan="5"><span class="dg d${e.n.dg}">${esc(rptDgTxt(e.n))}</span></td>` : ""}<td class="tl">${esc(e.lines[j] || "")}</td>
+        <td class="n">${e.im.v[j] == null ? "" : fD1(e.im.v[j])}</td><td class="tl">${esc(e.im.t[j] || "")}</td>
+        ${j === 0 ? `<td class="memo" rowspan="5"><textarea data-mk="${esc(e.key)}" style="height:110px" placeholder="추진방향 작성">${esc(mm.t)}</textarea></td>` : ""}</tr>`);
+    });
+  }
+  out.innerHTML = `<table class="rpt rs"><thead><tr><th>구분</th><th>지표</th><th>${esc(yl(R.y0))}</th><th>${esc(yl(R.y1))}</th><th>증감</th><th>증감율</th><th title="팀 줄 = 부문 Δ비용율 중 그 팀 몫 (팀 합 = 부문) · 부문 줄 = 부문 Δ비용율">비용율 Impact</th><th>진단</th><th>세부데이터</th><th>Impact</th><th>Impact 내용</th><th>추진방향 (작성)</th></tr></thead><tbody>${H.join("")}</tbody></table>`;
+}
+function rsXlsx() {
+  const R = rptData(), S = xStyleBook(), sty = S.sty, E = rsList();
+  const y0 = yl(R.y0), y1 = yl(R.y1), base = ($("#rptBase") && $("#rptBase").value.trim()) || `${y0} 1~9월 Actual + 10~12월 계획, ${y1} 사업계획 최종`;
+  const head = ["구분", "지표", y0, y1, "증감", "증감율", "비용율 Impact(%p)", "진단", "세부데이터", "추진방향", "Impact", "Impact 내용", "레벨"], nC = head.length;
+  const X = [], hr = 3; let r = hr;
+  X.push(`<row r="1" ht="22" customHeight="1">${xCell(1, 0, `□ ${y0} 대비 ${y1} 부문·팀 요약`, sty({ nb: 1, b: 1, sz: 13, c: "1F3864" }))}</row>`);
+  X.push(`<row r="2">${xCell(2, nC - 1, `(기준 : ${base} / 단위 : 백만,%)`, sty({ nb: 1, c: "5B6577", h: "right" }))}</row>`);
+  X.push(`<row r="${hr}" ht="30" customHeight="1">${head.map((h, i) => xCell(hr, i, h, sty({ b: 1, c: "FFFFFF", bg: "1F3864", h: "center", w: 1 }))).join("")}</row>`);
+  const DGBG = { "1": "FDECEC", "2": "FDECEC", "3": "FDECEC", G: "E8F5E9" };
+  const sgn = (v, th) => typeof v !== "number" || Math.abs(v) < (th || 0.05) ? "" : v < 0 ? "C00000" : "2E7D32";
+  for (const e of E) {
+    const m = e.n.m, bg = e.top ? "DBE4F3" : "", b = e.top ? 1 : 0, mm = rptMemo(e.key);
+    const ml = (mm.t || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean), memoL = ml.length > 5 ? [...ml.slice(0, 4), ml.slice(4).join(" / ")] : ml;
+    RS_MET.forEach(([nm, k, isR], j) => { r++;
+      const v = rsVal(m, k, isR), hide = j > 0;
+      const d = v.d == null ? null : isR ? Math.round(v.d * 1000) / 10 : Math.round(v.d * 10) / 10;
+      const dd = isR && k !== "m" && d != null ? -d : d;   // 비용·원가율은 증가가 나쁨 → 빨강
+      const ci = j === 1 && e.ci != null ? Math.round(e.ci * 1000) / 10 : null;
+      const cells = [
+        xCell(r, 0, e.name, sty({ b, bg, c: hide ? (bg || "FFFFFF") : "" })),
+        xCell(r, 1, nm, sty({ b, bg, h: "center" })),
+        xCell(r, 2, v.a == null ? "" : isR ? v.a : Math.round(v.a * 10) / 10, sty({ b, bg, nf: isR ? "p" : "n" })),
+        xCell(r, 3, v.b == null ? "" : isR ? v.b : Math.round(v.b * 10) / 10, sty({ b, bg, nf: isR ? "p" : "n" })),
+        xCell(r, 4, d, sty({ b, bg, nf: isR ? "pp" : "dn", c: sgn(dd) })),
+        xCell(r, 5, isR ? "-" : typeof v.gr === "number" ? Math.round(v.gr * 1000) / 1000 : (v.gr || "-"), sty({ b, bg, nf: "dp", h: typeof v.gr === "number" ? "general" : "center", c: sgn(v.gr, 0.0005) })),
+        xCell(r, 6, ci == null ? "" : ci, sty({ b, bg, nf: "pp", c: sgn(ci == null ? null : -ci) })),
+        xCell(r, 7, rptDgTxt(e.n), sty({ b, bg: DGBG[e.n.dg] || bg, h: "center", c: hide ? (DGBG[e.n.dg] || bg || "FFFFFF") : (e.n.dg === "G" ? "2E7D32" : DGBG[e.n.dg] ? "C00000" : "") })),
+        xCell(r, 8, e.lines[j] || "", sty({ bg, h: "left" })),
+        xCell(r, 9, memoL[j] || "", sty({ bg, h: "left" })),
+        xCell(r, 10, e.im.v[j] == null ? "" : Math.round(e.im.v[j] * 10) / 10, sty({ b, bg, nf: "dn", c: sgn(e.im.v[j]) })),
+        xCell(r, 11, e.im.t[j] || "", sty({ bg, h: "left" })),
+        xCell(r, 12, e.top ? "부문" : "팀", sty({ bg, h: "center", c: hide ? (bg || "FFFFFF") : "" }))];
+      X.push(`<row r="${r}">${cells.join("")}</row>`); });
+  }
+  const sh = xSheet(X, nC, r, hr, [16, 9, 11, 11, 10, 9, 12, 20, 40, 34, 10, 70, 7]);
+  return { blob: xBook([{ name: "보고서(요약)", ...sh }], S.xml()), n: E.length, sheet: sh.xml };
+}
+
 /* ---------- 공통 ---------- */
-function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || s == 6 || s == 7 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || s == 6 || s == 7 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpShort(); } if (s == 6) renderPerBox(); if (s == 7) renderRpt(); window.scrollTo(0, 0); }
-function renderAll() { renderSum(); renderTbl(); renderIns(); renderPz(); RPT.data = null; if (document.body.dataset.stage == 7) renderRpt(); }
+function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || s == 6 || s == 7 || s == 8 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || s == 6 || s == 7 || s == 8 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpShort(); } if (s == 6) renderPerBox(); if (s == 7) renderRpt(); if (s == 8) renderRs(); window.scrollTo(0, 0); }
+function renderAll() { renderSum(); renderTbl(); renderIns(); renderPz(); RPT.data = null; if (document.body.dataset.stage == 7) renderRpt(); if (document.body.dataset.stage == 8) renderRs(); }
 /* 상단 KPI 카드: 지금 화면의 필터 범위 기준 (요약표=요약표 필터, 판정표=판정표 필터, 증감 요인·INSIGHT=공유 범위) */
 function updateKpi() {
   const box = $("#kpiBar"); if (!box) return;
   const s = document.body.dataset.stage;
-  if (!D || s == 1 || s == 6 || s == 7) { box.hidden = true; return; }
+  if (!D || s == 1 || s == 6 || s == 7 || s == 8) { box.hidden = true; return; }
   const F = s == 2 ? ST.sum.filt : s == 3 ? ST.filt : ST.ins.filt;
   const fk = Object.keys(F || {}).filter(k => F[k] && !(Array.isArray(F[k]) && !F[k].length)).map(Number).sort((a, b) => a - b);
   const Ls = D.leaves.filter(L => passF(L, F || {}));
@@ -2444,7 +2552,9 @@ $("#insOut").addEventListener("click", e => {
   const u = e.target.closest("[data-prup]"); if (u) { const k = +u.dataset.prup, F = ST.insPr || {}; Object.keys(F).forEach(j => { if (+j > k) delete F[j]; }); renderIns(); }
 });
 /* 7 보고서 이벤트 */
-idb.get("rptMemo").then(o => { RPT.memo = o || {}; if (document.body.dataset.stage == 7) renderRpt(); });
+idb.get("rptMemo").then(o => { RPT.memo = o || {}; if (document.body.dataset.stage == 7) renderRpt(); if (document.body.dataset.stage == 8) renderRs(); });
+$("#rsOut").addEventListener("input", e => { const t = e.target.closest("textarea[data-mk]"); if (!t) return; const k = t.dataset.mk; RPT.memo[k] = Object.assign(rptMemo(k), { t: t.value }); rptSave(); });
+$("#rsXl").onclick = () => { if (!DC0) { toast("자료가 없어요"); return; } const x = rsXlsx(); dlBlob(x.blob, `부문팀_요약보고서_${new Date().toISOString().slice(0, 10)}.xlsx`); toast(`${x.n}개 묶음 다운로드`); };
 $("#rptChips").onclick = e => { const b = e.target.closest("button[data-rptf]"); if (!b) return; RPT.f = b.dataset.rptf; renderRpt(); };
 $("#rptLv").onchange = e => { RPT.lv = e.target.value; renderRpt(); };
 $("#rptSel").onchange = e => { const s = e.target.closest("select[data-rsel]"); if (!s) return; const k = +s.dataset.rsel; RPT.sel[k] = s.value; renderRpt(); };   // 아래 선택은 새 범위에 없을 때만 자동 해제
