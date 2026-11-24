@@ -333,7 +333,7 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
     <div class="help">
       지표 5줄 = 총매출 · 비용(%) · 원가(%) · 공헌이익 · CM율 &nbsp;|&nbsp; <b>기여도(%p)</b> = 비용(%)·원가(%) 줄에 표시 · 팀 줄: 부문 Δ율 중 그 팀 몫 (팀 합 = 부문 Δ율) · 부문 줄: 부문 Δ율 자체<br>
       몫 = 율효과(27 비중 × 자기 비용율 증감) + 믹스효과(비중 증감 × (자기 26 비용율 − 부문 26 비용율)) → 평균보다 비싼 팀이 커지면 +, 싼 팀이 커지면 − &nbsp;|&nbsp;
-      <b>Impact 내용</b> = 부문 줄은 팀별, 팀 줄은 채널별 ↑↓ (매출 금액 · 비용율·원가율 몫 %p · CM 금액) · 진단 기준은 7 보고서와 같음
+      <b>Impact 내용</b> = 부문 줄은 팀별, 팀 줄은 채널별 ↑↓ (매출 금액 · 비용율·원가율 기여도 %p는 부문 기준 → 합 = 그 줄 기여도 · CM 금액) · 진단 기준은 7 보고서와 같음
     </div>
     <div class="row"><button id="rsXl">📥 요약 엑셀</button><span class="muted" style="align-self:center">엑셀 기준 문구는 7 보고서 탭 값 사용</span></div>
   </div>
@@ -343,9 +343,9 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
     <h2>📝 Account × Category 보고서 <small>26년 연간 vs 27년 연간 (누계) · 부문합 → 팀계 → 채널합 → 채널×대분류 · 백만원</small></h2>
     <div class="help">
       <b>진단</b> ① 비용율↑ + 매출↓ · ② 비용율↑ + 매출 증가율 &lt; 상위(채널합 등) 증가율 (상위가 역성장이면 0%) · ③ 비용율↓(동일) + 매출↓로 CM↓ &nbsp;|&nbsp;
-      <b>🟢 추진방향</b> 진단 아님 + 비용율↓(동일) + CM↑ (⚠️검증 = 매출 증가율이 상위보다 10%p 이상 높음) · 나머지 = 기타<br>
+      <b>추진방향</b> 진단 아님 + 비용율↓(동일) + CM↑ ((검증필요) = 매출 증가율이 상위보다 10%p 이상 높음) · 나머지 = 기타<br>
       <b>Impact</b> ΔCM = 매출효과(매출 증감 × 26년 CM율) + 비용효과(−비용율 증감 × 27년 매출) + 원가효과(−원가율 증감 × 27년 매출) · 대분류 줄 클릭 = 소분류 → SKU 펼치기<br>
-      <b>세부데이터</b> = 매출·DC율·장려금율·판관비율·원가율 증감 (자동) · <b>추진방향 (작성)</b> = 직접 쓰는 칸, 자동 저장 → 엑셀 추진방향 열 · <b>기여도(%p)</b> = 비용율·원가율 칸 아래: 채널 Δ율 중 그 대분류·소분류·SKU 몫 (비중 반영, 합 = 채널 Δ율) · <b>SKU IN·OUT</b> = 채널 안 SKU 기준 IN(26 매출 없음)·OUT(27 매출 없음)·유지
+      <b>비용세부항목</b> = 매출·DC율·장려금율·판관비율·원가율 증감 (자동) · <b>증감분석 (작성)</b> = 직접 쓰는 칸, 자동 저장 → 엑셀 증감분석 열 · <b>기여도(%p)</b> = 비용율·원가율 칸 아래: 채널 Δ율 중 그 대분류·소분류·SKU 몫 (비중 반영, 합 = 채널 Δ율) · <b>SKU IN·OUT</b> = 채널 안 SKU 기준 IN(26 매출 없음)·OUT(27 매출 없음)·유지
     </div>
     <div class="row">
       <label class="f" style="flex:1;min-width:360px">엑셀 기준 문구<input type="text" id="rptBase"></label>
@@ -2044,7 +2044,7 @@ function rptSelBox() {
   });
   box.innerHTML = H.join("");
 }
-const RPT_LB = { "1": "① 비용율↑·매출↓", "2": "② 비용율↑·매출 정체", "3": "③ 매출↓로 CM↓", G: "🟢 추진방향", E: "기타", N: "🆕 신규", X: "⛔ 종료", Z: "💸 매출 없음(비용만)" };
+const RPT_LB = { "1": "① 비용율↑·매출↓", "2": "② 비용율↑·매출 정체", "3": "③ 매출↓로 CM↓", G: "추진방향", E: "기타", N: "신규", X: "종료", Z: "매출없음(비용만)" };   // 출력용: 이모지 없이 보고서 표기
 /* 매출이 두 해 모두 0이어도 비용·원가·CM이 있으면 표시 (빼면 상위 비용율 기여 합이 안 맞음) */
 const rptLive = m => m.st !== "Z" || ["C", "V", "M"].some(k => Math.abs(m.a[k]) > 1e-9 || Math.abs(m.b[k]) > 1e-9);
 const RPT_LV = ["전체", "부문합", "팀계", "채널합", "대분류"];
@@ -2132,10 +2132,10 @@ function rptImp(n, scOrg) {   // scOrg = 요약 탭: 소분류 대신 하위 조
   const m = n.m, top = scOrg ? [] : rptTop(n);
   const tt = scOrg ? (scOrg.M ? "CM " + scOrg.M : "") : top.length ? `CM${m.dM >= 0 ? "↑" : "↓"} 소분류: ` + top.map(x => `${x.k} ${fD(x.v)}`).join(" · ") : "";
   const sc = scOrg || rptSmCh(n);
-  if (m.st) return { v: [null, null, null, m.dM, null], t: [sc.S ? "매출 " + sc.S : "", "", "", m.st === "N" ? "ΔCM (신규)" : m.st === "Z" ? "ΔCM (매출 없음)" : "ΔCM (종료)", tt] };
+  if (m.st) return { v: [null, null, null, m.dM, null], t: [sc.S ? "매출 " + sc.S : "", "", "", m.st === "N" ? "CM 증감 (신규)" : m.st === "Z" ? "CM 증감 (매출없음)" : "CM 증감 (종료)", tt] };
   const rest = m.eC - m.eQ - m.eJ - m.eP;
   const cs = rptSp() ? ` (DC ${fD(m.eQ)} · 장려금 ${fD(m.eJ)} · 판관 ${fD(m.eP)}${Math.abs(rest) >= 0.5 ? ` · 기타 ${fD(rest)}` : ""})` : rptDp() ? ` (차감 ${fD(m.eD)} · 판관 ${fD(m.eP)})` : "";
-  return { v: [m.eS, m.eC, m.eV, m.dM, null], t: ["매출효과" + (sc.S ? " | " + sc.S : ""), "비용효과" + cs + (sc.C ? " | 비용율 " + sc.C : ""), "원가효과" + (sc.V ? " | 원가율 " + sc.V : ""), "ΔCM 합계" + (Math.abs(m.eX) >= 0.5 ? ` (기타 ${fD(m.eX)})` : ""), tt] };
+  return { v: [m.eS, m.eC, m.eV, m.dM, null], t: ["매출효과" + (sc.S ? " : " + sc.S : ""), "비용효과" + cs + (sc.C ? " : 비용율 " + sc.C : ""), "원가효과" + (sc.V ? " : 원가율 " + sc.V : ""), "CM 증감 계" + (Math.abs(m.eX) >= 0.5 ? ` (기타 ${fD(m.eX)})` : ""), tt] };
 }
 /* Impact 내용용 소분류별 증감: 매출 = 금액, 비용·원가 = 이 줄 Δ율에 대한 기여 %p (소분류 합 = 줄 Δ율) · ↑ 2개 / ↓ 2개 */
 function rptSmCh(n) {
@@ -2174,10 +2174,10 @@ function rptIO(n) {
 /* SKU 이름 요약: 앞 코드·끝 (입수)(거래처) 괄호들 빼고 20자까지 */
 const rptSkuNm = s => { let t = String(s || "").replace(/^\s*\d{5,}\s+/, "").replace(/(\s*[\(（][^()（）]*[\)）])+\s*$/, "").trim(); if (!t) t = String(s || ""); return t.length > 20 ? t.slice(0, 19) + "…" : t; };
 /* 줄 1 = IN, 줄 2 = OUT (유지는 표시 안 함) · 대표 SKU 2개 + 외 n */
-const rptIOTxt = n => { const o = rptIO(n), f = (nm, x) => `${nm} ${x.n}개 · 매출 ${fD(x.dS)} · CM ${fD(x.dM)} (${x.top.slice(0, 2).map(([k, v]) => `${rptSkuNm(k)} ${fD(v.dS)}`).join(", ")}${x.n > 2 ? ` 외 ${x.n - 2}` : ""})`; return [o.I.n ? f("🆕 IN", o.I) : "", o.O.n ? f("⛔ OUT", o.O) : ""]; };
+const rptIOTxt = n => { const o = rptIO(n), f = (nm, x) => `${nm} ${x.n}개 · 매출 ${fD(x.dS)} · CM ${fD(x.dM)} (${x.top.slice(0, 2).map(([k, v]) => `${rptSkuNm(k)} ${fD(v.dS)}`).join(", ")}${x.n > 2 ? ` 외 ${x.n - 2}` : ""})`; return [o.I.n ? f("IN", o.I) : "", o.O.n ? f("OUT", o.O) : ""]; };
 const rptHasIO = n => { const o = rptIO(n); return o.I.n + o.O.n > 0; };
 const rptOrgCells = n => n.lv === 1 ? [n.org[0], "부문합", "부문합", "부문합"] : n.lv === 2 ? [n.org[0], n.org[1], "팀계", "팀계"] : n.lv === 3 ? [n.org[0], n.org[1], n.org[2], "채널합"] : [n.org[0], n.org[1], n.org[2], n.cat];
-const rptDgTxt = n => RPT_LB[n.dg] + (n.warn ? " ⚠️검증" : "");
+const rptDgTxt = n => RPT_LB[n.dg] + (n.warn ? " (검증필요)" : "");
 const rptMemo = k => RPT.memo[k] || { t: "", ok: false };
 function rptPass(n, ignoreF) {
   if (RPT.lv === "cat" && n.lv !== 4) return false;
@@ -2207,7 +2207,7 @@ function renderRpt() {
   if (!R) { out.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; $("#rptChips").innerHTML = ""; $("#rptProg").innerHTML = ""; return; }
   rptSelBox();
   const base = R.rows.filter(n => rptPass(n, true)), cnt = k => base.filter(n => rptFk(n, k)).length;
-  $("#rptChips").innerHTML = [["all", "전체"], ["D", "진단 ①②③"], ["1", "①"], ["2", "②"], ["3", "③"], ["G", "🟢 추진방향"], ["W", "⚠️ 검증"], ["E", "기타"], ["NX", "신규·종료·매출없음"], ["IO", "🔄 SKU IN·OUT 있음"]].map(([k, n]) => `<button class="${RPT.f === k ? "on" : "sec"}" data-rptf="${k}">${n} ${cnt(k)}</button>`).join("");
+  $("#rptChips").innerHTML = [["all", "전체"], ["D", "진단 ①②③"], ["1", "①"], ["2", "②"], ["3", "③"], ["G", "추진방향"], ["W", "검증필요"], ["E", "기타"], ["NX", "신규·종료·매출없음"], ["IO", "🔄 SKU IN·OUT 있음"]].map(([k, n]) => `<button class="${RPT.f === k ? "on" : "sec"}" data-rptf="${k}">${n} ${cnt(k)}</button>`).join("");
   $("#rptProg").innerHTML = `<span id="rptPg1">${rptProg()}</span>` + (R.mon ? ` · <span class="muted">${esc(yl(R.y0))} ${R.nA}개월 vs ${esc(yl(R.y1))} ${R.nB}개월 누계${R.nA !== R.nB ? ' <span class="neg">⚠ 개월수 다름</span>' : ""}</span>` : "") + (rptSp() ? "" : ` · <span class="neg">⚠ DC·장려금 분리 열이 없어 ${rptDp() ? "차감율·판관비율" : "비용율"}로 표시</span>`);
   const rows = R.rows.filter(n => rptPass(n));
   const rate = (a, b, d) => `${p1(a)}→${p1(b)}<span class="sub${d != null && d > 5e-5 ? " neg" : ""}">${fPP(d)}</span>`;
@@ -2218,37 +2218,40 @@ function renderRpt() {
     const smS = RPT.sel[4], oc = rptOrgCells(n), mm = rptMemo(n.key), im = rptImp(n), isO = !!smS || RPT.open.has(n.key);
     H.push(`<tr class="lv${n.lv}" data-rk="${esc(n.key)}"><td><span class="dg d${n.dg}">${esc(rptDgTxt(n))}</span></td>${oc.map((v, i) => `<td>${n.lv === 4 && i === 3 ? `<span class="tg">${isO ? "▾" : "▸"}</span> ` : ""}${esc(v)}</td>`).join("")}${n.lv === 4 ? mcell(n.m, rptCK(n.m, n.parent.m, "C"), rptCK(n.m, n.parent.m, "V")) : mcell(n.m)}
       <td class="tl">${rptLines(n).filter(Boolean).map(esc).join("<br>")}</td><td class="tl">${(sc => [sc.S && "매출 " + sc.S, sc.C && "비용율 " + sc.C, sc.V && "원가율 " + sc.V, im.t[4]].filter(Boolean).map(esc).join("<br>"))(rptSmCh(n))}</td><td class="tl">${rptIOTxt(n).filter(Boolean).map(esc).join("<br>")}</td>
-      <td class="memo"><textarea data-mk="${esc(n.key)}" placeholder="${n.dg === "G" ? "추진방향 작성" : "추진방향 / 확인 내용"}">${esc(mm.t)}</textarea></td><td style="text-align:center"><input type="checkbox" data-ck="${esc(n.key)}"${mm.ok ? " checked" : ""}></td></tr>`);
+      <td class="memo"><textarea data-mk="${esc(n.key)}" placeholder="증감분석 작성">${esc(mm.t)}</textarea></td><td style="text-align:center"><input type="checkbox" data-ck="${esc(n.key)}"${mm.ok ? " checked" : ""}></td></tr>`);
     if (n.lv === 4 && isO) {
       const kids = rptKids(n.L, R.I.sm >= 0 ? R.I.sm : R.I.sku, R.X).filter(s => !smS || s.k === smS).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM);
       for (const s of kids) {
         const sk = n.key + "\u0002" + s.k, so = (!!smS || RPT.open.has(sk)) && R.I.sm >= 0;
         H.push(`<tr class="dd" data-rk="${esc(sk)}" style="cursor:${R.I.sm >= 0 ? "pointer" : "default"}"><td></td><td colspan="3"></td><td>${R.I.sm >= 0 ? `<span class="tg">${so ? "▾" : "▸"}</span> ` : ""}└ ${esc(s.k)}</td>${mcell(s.m, rptCK(s.m, n.parent.m, "C"), rptCK(s.m, n.parent.m, "V"))}<td class="tl">${rptLines({ m: s.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
         if (so) for (const q of rptKids(s.L, R.I.sku, R.X).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM))
-          H.push(`<tr class="dd2"><td></td><td colspan="3"></td><td style="padding-left:30px">· ${q.m.st === "N" ? "🆕 " : q.m.st === "X" ? "⛔ " : ""}${esc(q.k)}</td>${mcell(q.m, rptCK(q.m, n.parent.m, "C"), rptCK(q.m, n.parent.m, "V"))}<td class="tl">${rptLines({ m: q.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
+          H.push(`<tr class="dd2"><td></td><td colspan="3"></td><td style="padding-left:30px">· ${q.m.st === "N" ? "[신규] " : q.m.st === "X" ? "[종료] " : ""}${esc(q.k)}</td>${mcell(q.m, rptCK(q.m, n.parent.m, "C"), rptCK(q.m, n.parent.m, "V"))}<td class="tl">${rptLines({ m: q.m }).filter(Boolean).map(esc).join("<br>")}</td><td colspan="4"></td></tr>`);
       }
     }
   }
-  out.innerHTML = rows.length ? `<table class="rpt"><thead><tr><th>진단</th><th>${esc(R.X.dims[R.I.b] || "부문")}</th><th>${esc(R.X.dims[R.I.t] || "팀")}</th><th>${esc(R.X.dims[R.I.c] || "채널")}</th><th>${esc(R.X.dims[R.I.big] || "대분류")}</th><th>총매출 ${esc(yl(R.y0))}→${esc(yl(R.y1))}</th><th>비용율</th><th>원가율</th><th>공헌이익</th><th>CM율</th><th title="매출효과 / 비용효과 / 원가효과 (합 = ΔCM)">Impact 매출/비용/원가</th><th title="매출·DC율·장려금율·판관비율·원가율 26→27 증감 (자동)">세부데이터</th><th title="소분류별 · 매출 = 증감 금액, 비용율·원가율 = 기여도 %p (대분류 줄: 채널 기준 → 소분류 합 = 그 대분류 기여도 / 합계 줄: 자기 줄 기준) · ↑↓ 각 2개 + CM 기여 TOP3">Impact 내용 (소분류)</th><th title="채널 안 SKU 기준 · IN = 26년 매출 없음, OUT = 27년 매출 없음 · 괄호 = 매출 영향 큰 대표 SKU 2개">SKU IN·OUT (매출·CM 증감)</th><th title="직접 작성 · 자동 저장">추진방향 (작성)</th><th>✅</th></tr></thead><tbody>${H.join("")}</tbody></table>` : '<div class="empty">조건에 맞는 줄이 없어요</div>';
+  out.innerHTML = rows.length ? `<table class="rpt"><thead><tr><th>진단</th><th>${esc(R.X.dims[R.I.b] || "부문")}</th><th>${esc(R.X.dims[R.I.t] || "팀")}</th><th>${esc(R.X.dims[R.I.c] || "채널")}</th><th>${esc(R.X.dims[R.I.big] || "대분류")}</th><th>총매출 ${esc(yl(R.y0))}→${esc(yl(R.y1))}</th><th>비용율</th><th>원가율</th><th>공헌이익</th><th>CM율</th><th title="매출효과 / 비용효과 / 원가효과 (합 = ΔCM)">Impact 매출/비용/원가</th><th title="매출·DC율·장려금율·판관비율·원가율 26→27 증감 (자동)">비용세부항목</th><th title="소분류별 · 매출 = 증감 금액, 비용율·원가율 = 기여도 %p (대분류 줄: 채널 기준 → 소분류 합 = 그 대분류 기여도 / 합계 줄: 자기 줄 기준) · ↑↓ 각 2개 + CM 기여 TOP3">Impact 내용 (소분류)</th><th title="채널 안 SKU 기준 · IN = 26년 매출 없음, OUT = 27년 매출 없음 · 괄호 = 매출 영향 큰 대표 SKU 2개">SKU IN·OUT (매출·CM 증감)</th><th title="직접 작성 · 자동 저장">증감분석 (작성)</th><th>✅</th></tr></thead><tbody>${H.join("")}</tbody></table>` : '<div class="empty">조건에 맞는 줄이 없어요</div>';
 }
 let rptSaveT = null;
 const rptSave = () => { clearTimeout(rptSaveT); rptSaveT = setTimeout(() => idb.set("rptMemo", RPT.memo), 400); };
 /* 📥 보고서 엑셀: 시트1 보고서 양식 (조합당 5줄, 병합 없이 전 줄 반복 + 반복 칸은 글자색=배경색) · 시트2 소분류·SKU 상세 */
+const BDI = { T: 1, t: 2, h: 3, hb: 4 };
 function xStyleBook() {
   const fonts = [], fills = [], xfs = [], fm = new Map(), fl = new Map(), xm = new Map();
   const NF = { t: 0, n: 164, p: 165, pp: 166, dn: 167, dp: 168 };
   const font = (b, c, sz) => { const k = [b ? 1 : 0, c || "", sz || 10].join(); if (!fm.has(k)) { fm.set(k, fonts.length); fonts.push(`<font>${b ? "<b/>" : ""}<sz val="${sz || 10}"/>${c ? `<color rgb="FF${c}"/>` : ""}<name val="맑은 고딕"/><family val="3"/></font>`); } return fm.get(k); };
   const fill = c => { if (!c) return 0; if (!fl.has(c)) { fl.set(c, fills.length + 2); fills.push(`<fill><patternFill patternType="solid"><fgColor rgb="FF${c}"/><bgColor indexed="64"/></patternFill></fill>`); } return fl.get(c); };
   font(0, "", 10);
-  const sty = o => { const k = JSON.stringify(o); if (!xm.has(k)) { xm.set(k, xfs.length); xfs.push(`<xf numFmtId="${NF[o.nf || "t"]}" fontId="${font(o.b, o.c, o.sz)}" fillId="${fill(o.bg)}" borderId="${o.nb ? 0 : 1}" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="${o.h || "general"}" vertical="center"${o.w ? ' wrapText="1"' : ""}/></xf>`); } return xm.get(k); };
-  sty({ nb: 1 });
-  const B = `<border><left style="thin"><color rgb="FFC9D0DC"/></left><right style="thin"><color rgb="FFC9D0DC"/></right><top style="thin"><color rgb="FFC9D0DC"/></top><bottom style="thin"><color rgb="FFC9D0DC"/></bottom><diagonal/></border>`;
+  const sty = o => { const k = JSON.stringify(o); if (!xm.has(k)) { xm.set(k, xfs.length); xfs.push(`<xf numFmtId="${NF[o.nf || "t"]}" fontId="${font(o.b, o.c, o.sz)}" fillId="${fill(o.bg)}" borderId="${BDI[o.bd] || 0}" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="${o.h || "general"}" vertical="center"${o.ind ? ` indent="${o.ind}"` : ""}${o.w ? ' wrapText="1"' : ""}/></xf>`); } return xm.get(k); };
+  sty({});
+  // 선 최소화: 세로선 없음, 묶음 첫 줄 위쪽 가로선만 (T 굵은 남색 = 부문 · t 얇은 파랑 = 팀·채널 · h 연회색 = 대분류/SKU · hb = 머리글 아래)
+  const bl = (side, st, c) => `<border><left/><right/>${side === "top" ? `<top style="${st}"><color rgb="FF${c}"/></top><bottom/>` : `<top/><bottom style="${st}"><color rgb="FF${c}"/></bottom>`}<diagonal/></border>`;
+  const B = bl("top", "medium", "1F3864") + bl("top", "thin", "8EA9DB") + bl("top", "thin", "D9DEE7") + bl("bottom", "medium", "1F3864");
   const xml = () => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="5"><numFmt numFmtId="164" formatCode="#,##0.0"/><numFmt numFmtId="165" formatCode="0.0%"/><numFmt numFmtId="166" formatCode="+0.0&quot;%p&quot;;-0.0&quot;%p&quot;;0.0&quot;%p&quot;"/><numFmt numFmtId="167" formatCode="+#,##0.0;-#,##0.0;0.0"/><numFmt numFmtId="168" formatCode="+0.0%;-0.0%;0.0%"/></numFmts>
+<numFmts count="5"><numFmt numFmtId="164" formatCode="#,##0.0"/><numFmt numFmtId="165" formatCode="0.0%"/><numFmt numFmtId="166" formatCode="[&gt;=0.05]+0.0&quot;%p&quot;;[&lt;=-0.05]-0.0&quot;%p&quot;;0.0&quot;%p&quot;"/><numFmt numFmtId="167" formatCode="[&gt;=0.05]+#,##0.0;[&lt;=-0.05]-#,##0.0;0.0"/><numFmt numFmtId="168" formatCode="[&gt;=0.0005]+0.0%;[&lt;=-0.0005]-0.0%;0.0%"/></numFmts>
 <fonts count="${fonts.length}">${fonts.join("")}</fonts>
 <fills count="${fills.length + 2}"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>${fills.join("")}</fills>
-<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>${B}</borders>
+<borders count="5"><border><left/><right/><top/><bottom/><diagonal/></border>${B}</borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
 <cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
@@ -2256,7 +2259,7 @@ function xStyleBook() {
 }
 function xBook(sheets, stylesXml) {
   const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s, i) => `<sheet name="${xe(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets><definedNames>${sheets.map((s, i) => `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xe(s.name.replace(/'/g, "''"))}'!${s.filterRef}</definedName>`).join("")}</definedNames></workbook>`;
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s, i) => `<sheet name="${xe(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets><definedNames>${sheets.map((s, i) => `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xe(s.name.replace(/'/g, "''"))}'!${s.filterRef}</definedName><definedName name="_xlnm.Print_Titles" localSheetId="${i}">'${xe(s.name.replace(/'/g, "''"))}'!$1:$${s.hr}</definedName>`).join("")}</definedNames></workbook>`;
   const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
   const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -2265,37 +2268,41 @@ function xBook(sheets, stylesXml) {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
   return zipStore([{ name: "[Content_Types].xml", data: ct }, { name: "_rels/.rels", data: rels }, { name: "xl/workbook.xml", data: wb }, { name: "xl/_rels/workbook.xml.rels", data: wbRels }, { name: "xl/styles.xml", data: stylesXml }, ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: s.xml }))]);
 }
-function xSheet(rowsX, nC, lastR, hr, widths) {
-  return { xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+function xSheet(rowsX, nC, lastR, hr, widths, grid, paper) {   // paper 9 = A4, 8 = A3   // grid = 눈금선 표시 (보고서 시트는 끔)
+  return { hr, xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<dimension ref="A1:${colL(nC - 1)}${lastR}"/><sheetViews><sheetView workbookViewId="0" zoomScale="90"><pane ySplit="${hr}" topLeftCell="A${hr + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${colL(nC - 1)}${lastR}"/><sheetViews><sheetView workbookViewId="0" zoomScale="90"${grid ? "" : ' showGridLines="0"'}><pane ySplit="${hr}" topLeftCell="A${hr + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="16.5"/><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>
 <sheetData>${rowsX.join("")}</sheetData><autoFilter ref="A${hr}:${colL(nC - 1)}${lastR}"/>
+<pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="${paper || 9}" orientation="landscape" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`, filterRef: `$A$${hr}:$${colL(nC - 1)}$${lastR}` };
 }
 const xCell = (r, c, v, s) => { const ref = colL(c) + r; if (v == null || v === "") return `<c r="${ref}" s="${s}"/>`; if (typeof v === "number") return isFinite(v) ? `<c r="${ref}" s="${s}"><v>${v}</v></c>` : `<c r="${ref}" s="${s}"/>`; return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xe(v)}</t></is></c>`; };
 function rptXlsx(onlyShown) {
-  const R = rptData(), S = xStyleBook(), sty = S.sty;
+  const R = rptData(), S = xStyleBook(), sty = S.sty, sty0 = S.sty;
   const LVBG = ["", "DBE4F3", "E9EEF7", "F4F6FA", ""], DGBG = { "1": "FDECEC", "2": "FDECEC", "3": "FDECEC", G: "E8F5E9" };
   const list = onlyShown ? R.rows.filter(n => rptPass(n)) : R.rows;
   const y0 = yl(R.y0), y1 = yl(R.y1), base = ($("#rptBase") && $("#rptBase").value.trim()) || `${y0} vs ${y1}`;
-  const head = ["부문", "팀", "채널", "대분류", "지표", y0, y1, "증감", "증감율", "기여도(%p)", "진단", "세부데이터", "추진방향", "확인", "Impact", "Impact 내용", "SKU IN·OUT", "구분"], nC = head.length;
+  // 열 순서 (임원 보고용): 조직·지표 → 숫자(26·27·증감·증감율·기여도) → 진단 → 증감분석(작성) → 근거(Impact·내용·비용세부·IN/OUT) → 관리(확인·구분)
+  const head = ["부문", "팀", "채널", "대분류", "지표", y0, y1, "증감", "증감율", "기여도(%p)", "진단", "증감분석", "Impact", "Impact 내용", "비용세부항목", "SKU IN·OUT", "확인", "구분"], nC = head.length;
   const X = [], hr = 3; let r = hr;
-  X.push(`<row r="1" ht="22" customHeight="1">${xCell(1, 0, `□ ${y0} 대비 ${y1} Account x Category 분석`, sty({ nb: 1, b: 1, sz: 13, c: "1F3864" }))}</row>`);
-  X.push(`<row r="2">${xCell(2, nC - 1, `(기준 : ${base} / 단위 : 백만,%)`, sty({ nb: 1, c: "5B6577", h: "right" }))}</row>`);
+  X.push(`<row r="1" ht="24" customHeight="1">${xCell(1, 0, `□ ${y0} 대비 ${y1} Account x Category 분석`, sty({ b: 1, sz: 14, c: "1F3864" }))}</row>`);
+  X.push(`<row r="2" ht="18" customHeight="1">${xCell(2, 0, `(기준 : ${base} / 단위 : 백만,%)`, sty({ c: "5B6577" }))}</row>`);
   X.push(`<row r="${hr}" ht="30" customHeight="1">${head.map((h, i) => xCell(hr, i, h, sty({ b: 1, c: "FFFFFF", bg: "1F3864", h: "center", w: 1 }))).join("")}</row>`);
+  const BDL = ["", "T", "t", "t", "h"];
   const met = [["총매출", "S", 0], ["비용(%)", "c", 1], ["원가(%)", "v", 1], ["공헌이익", "M", 0], ["(%)", "m", 1]];
   for (const n of list) {
     const m = n.m, bg = LVBG[n.lv], b = n.lv < 4 ? 1 : 0, oc = rptOrgCells(n), lines = rptLines(n), im = rptImp(n), mm = rptMemo(n.key), io = rptIOTxt(n), ciX = n.lv === 4 ? [null, rptCK(n.m, n.parent.m, "C") * 100, rptCK(n.m, n.parent.m, "V") * 100, null, null] : [];
     const ml = (mm.t || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean), memoL = ml.length > 5 ? [...ml.slice(0, 4), ml.slice(4).join(" / ")] : ml;
     met.forEach(([nm, k, isR], j) => { r++;
+      const sty = o => sty0(j === 0 ? Object.assign({}, o, { bd: BDL[n.lv] }) : o);   // 묶음 첫 줄 위에만 가로선
       const hide = j > 0, tc = (v, o) => xCell(r, o.col, v, sty({ b, bg, h: o.h || "center", c: hide && o.rep ? (bg || "FFFFFF") : o.c }));
       const a = isR ? m[k + "0"] : m.a[k], bb = isR ? m[k + "1"] : m.b[k];
       const d = isR ? (m["d" + k] != null ? m["d" + k] * 100 : null) : m.b[k] - m.a[k];
-      const gr = isR ? "-" : m.st === "N" ? "신규" : m.st === "X" ? "종료" : Math.abs(m.a[k]) > 1e-9 ? (m.b[k] - m.a[k]) / Math.abs(m.a[k]) : "-";
+      const gr = isR ? "" : m.st === "N" ? "신규" : m.st === "X" ? "종료" : Math.abs(m.a[k]) > 1e-9 ? (m.b[k] - m.a[k]) / Math.abs(m.a[k]) : "-";
       const sgn = (v, th) => typeof v !== "number" || Math.abs(v) < (th || 0.05) ? "" : v < 0 ? "C00000" : "2E7D32";
       const cells = [
-        ...oc.map((v, i) => tc(v, { col: i, rep: 1 })),
+        ...oc.map((v, i) => tc(v, { col: i, rep: 1, c: /^(부문합|팀계|채널합)$/.test(v) ? "8497B0" : "" })),
         xCell(r, 4, nm, sty({ b, bg, h: "center" })),
         xCell(r, 5, a == null ? "" : a, sty({ b, bg, nf: isR ? "p" : "n" })),
         xCell(r, 6, bb == null ? "" : bb, sty({ b, bg, nf: isR ? "p" : "n" })),
@@ -2303,29 +2310,29 @@ function rptXlsx(onlyShown) {
         xCell(r, 8, gr, sty({ b, bg, nf: "dp", h: typeof gr === "number" ? "general" : "center", c: sgn(gr, 0.0005) })),
         xCell(r, 9, ciX[j] == null ? "" : ciX[j], sty({ b, bg, nf: "pp", c: ciX[j] == null ? "" : sgn(-ciX[j]) })),
         xCell(r, 10, rptDgTxt(n), sty({ b, bg: DGBG[n.dg] || bg, h: "center", c: hide ? (DGBG[n.dg] || bg || "FFFFFF") : (n.dg === "G" ? "2E7D32" : DGBG[n.dg] ? "C00000" : "") })),
-        xCell(r, 11, lines[j] || "", sty({ bg, h: "left" })),
-        xCell(r, 12, memoL[j] || "", sty({ bg, h: "left" })),
-        tc(mm.ok ? "✅" : "", { col: 13, rep: 1 }),
-        xCell(r, 14, im.v[j] == null ? "" : im.v[j], sty({ b, bg, nf: "dn", c: sgn(im.v[j]) })),
-        xCell(r, 15, im.t[j] || "", sty({ bg, h: "left" })),
-        xCell(r, 16, io[j] || "", sty({ bg, h: "left" })),
-        tc(RPT_LV[n.lv], { col: 17, rep: 1 })];
+        xCell(r, 11, memoL[j] || "", sty({ bg, h: "left" })),
+        xCell(r, 12, im.v[j] == null ? "" : im.v[j], sty({ b, bg, nf: "dn", c: sgn(im.v[j]) })),
+        xCell(r, 13, im.t[j] || "", sty({ bg, h: "left", c: "404040" })),
+        xCell(r, 14, lines[j] || "", sty({ bg, h: "left", c: "404040" })),
+        xCell(r, 15, io[j] || "", sty({ bg, h: "left", c: "404040" })),
+        tc(mm.ok ? "○" : "", { col: 16, rep: 1 }),
+        tc(RPT_LV[n.lv], { col: 17, rep: 1, c: "7F7F7F" })];
       X.push(`<row r="${r}">${cells.join("")}</row>`); });
   }
-  const sh1 = xSheet(X, nC, r, hr, [11, 11, 13, 15, 9, 11, 11, 10, 9, 11, 20, 46, 30, 6, 10, 56, 34, 8]);
+  const sh1 = xSheet(X, nC, r, hr, [10, 10, 12, 14, 9, 10, 10, 9, 8, 9, 19, 40, 9, 95, 40, 52, 5, 7], false, 8);
   // 시트2: 소분류·SKU 상세 (대분류 줄 기준, 평평한 표)
   const sp = rptSp(), dp = rptDp(), I = R.I;
-  const h2 = ["부문", "팀", "채널", "대분류", "소분류", "SKU", "단계", "SKU 구분", "진단(대분류)", `매출 ${y0}`, `매출 ${y1}`, "매출 증감", "증감율", `비용율 ${y0}`, `비용율 ${y1}`, "비용율 Δ", "비용율 기여도(채널)",
-    ...(sp ? ["DC율 Δ", "장려금율 Δ", "판관비율 Δ"] : dp ? ["차감율 Δ", "판관비율 Δ"] : []), `원가율 ${y0}`, `원가율 ${y1}`, "원가율 Δ", "원가율 기여도(채널)", `CM ${y0}`, `CM ${y1}`, "CM 증감", `CM율 ${y0}`, `CM율 ${y1}`, "CM율 Δ", "매출효과", "비용효과", "원가효과"];
+  const h2 = ["부문", "팀", "채널", "대분류", "소분류", "SKU", "단계", "SKU 구분", "진단(대분류)", `매출 ${y0}`, `매출 ${y1}`, "매출 증감", "증감율", `비용율 ${y0}`, `비용율 ${y1}`, "비용율 증감", "비용율 기여도(채널)",
+    ...(sp ? ["DC율 증감", "장려금율 증감", "판관비율 증감"] : dp ? ["차감율 증감", "판관비율 증감"] : []), `원가율 ${y0}`, `원가율 ${y1}`, "원가율 증감", "원가율 기여도(채널)", `CM ${y0}`, `CM ${y1}`, "CM 증감", `CM율 ${y0}`, `CM율 ${y1}`, "CM율 증감", "매출효과", "비용효과", "원가효과"];
   const X2 = []; let r2 = 1;
   X2.push(`<row r="1" ht="30" customHeight="1">${h2.map((h, i) => xCell(1, i, h, sty({ b: 1, c: "FFFFFF", bg: "1F3864", h: "center", w: 1 }))).join("")}</row>`);
   const pp = v => v == null || !isFinite(v) ? null : v * 100, r1v = v => v == null || !isFinite(v) ? null : v;   // 엑셀엔 원값 그대로 (표시만 소수 1자리) → 합계가 정확히 맞음
-  const line2 = (n, sm, sku, step, m, bg) => { r2++; const st = (nf, v) => sty({ bg, nf, c: nf === "dn" || nf === "pp" || nf === "dp" ? (v == null || Math.abs(v) < (nf === "dp" ? 0.0005 : 0.05) ? "" : v < 0 ? "C00000" : "2E7D32") : "" });
+  const line2 = (n, sm, sku, step, m, bg) => { r2++; const st = (nf, v) => sty({ bg, nf, bd: step === "소분류 합" ? "h" : undefined, c: nf === "dn" || nf === "pp" || nf === "dp" ? (v == null || Math.abs(v) < (nf === "dp" ? 0.0005 : 0.05) ? "" : v < 0 ? "C00000" : "2E7D32") : "" });
     const gr = m.st === "N" ? "신규" : m.st === "X" ? "종료" : m.gS;
-    const vals = [[n.org[0], "t"], [n.org[1], "t"], [n.org[2], "t"], [n.cat, "t"], [sm, "t"], [sku, "t"], [step, "t"], [step === "SKU" ? (m.st === "N" ? "🆕 IN" : m.st === "X" ? "⛔ OUT" : "유지") : "", "t"], [rptDgTxt(n), "t"], [r1v(m.a.S), "n"], [r1v(m.b.S), "n"], [r1v(m.dS), "dn"], [gr, "dp"],
+    const vals = [[n.org[0], "t"], [n.org[1], "t"], [n.org[2], "t"], [n.cat, "t"], [sm, "t"], [sku, "t"], [step, "t"], [step === "SKU" ? (m.st === "N" ? "IN" : m.st === "X" ? "OUT" : "유지") : "", "t"], [rptDgTxt(n), "t"], [r1v(m.a.S), "n"], [r1v(m.b.S), "n"], [r1v(m.dS), "dn"], [gr, "dp"],
       [m.c0, "p"], [m.c1, "p"], [pp(m.dc), "pp"], [pp(rptCK(m, n.parent.m, "C")), "pp"], ...(sp ? [[pp(m.dq), "pp"], [pp(m.dj), "pp"], [pp(m.dp), "pp"]] : dp ? [[pp(m.dd), "pp"], [pp(m.dp), "pp"]] : []),
       [m.v0, "p"], [m.v1, "p"], [pp(m.dv), "pp"], [pp(rptCK(m, n.parent.m, "V")), "pp"], [r1v(m.a.M), "n"], [r1v(m.b.M), "n"], [r1v(m.dM), "dn"], [m.m0, "p"], [m.m1, "p"], [pp(m.dm), "pp"], [m.st ? null : r1v(m.eS), "dn"], [m.st ? null : r1v(m.eC), "dn"], [m.st ? null : r1v(m.eV), "dn"]];
-    X2.push(`<row r="${r2}">${vals.map(([v, nf], i) => xCell(r2, i, v, nf === "t" ? sty({ bg, h: "left", b: step === "소분류 합" ? 1 : 0 }) : st(nf, typeof v === "number" ? v : null))).join("")}</row>`); };
+    X2.push(`<row r="${r2}">${vals.map(([v, nf], i) => xCell(r2, i, v, nf === "t" ? sty({ bg, h: "left", b: step === "소분류 합" ? 1 : 0, bd: step === "소분류 합" ? "h" : undefined }) : st(nf, typeof v === "number" ? v : null))).join("")}</row>`); };
   for (const n of list.filter(n => n.lv === 4)) {
     const smI = I.sm >= 0 ? I.sm : -1;
     for (const s of rptKids(n.L, smI, R.X).sort((x, y) => String(x.k).localeCompare(String(y.k), "ko", { numeric: true }))) {
@@ -2333,7 +2340,7 @@ function rptXlsx(onlyShown) {
       for (const q of rptKids(s.L, I.sku, R.X).sort((x, y) => String(x.k).localeCompare(String(y.k), "ko", { numeric: true }))) line2(n, smI >= 0 ? s.k : "", q.k, "SKU", q.m, "");
     }
   }
-  const sh2 = xSheet(X2, h2.length, Math.max(r2, 1), 1, h2.map((h, i) => i < 4 ? 12 : i === 4 ? 16 : i === 5 ? 28 : i === 6 ? 9 : i === 7 ? 9 : i === 8 ? 18 : i === 16 ? 12 : 10));
+  const sh2 = xSheet(X2, h2.length, Math.max(r2, 1), 1, h2.map((h, i) => i < 4 ? 12 : i === 4 ? 16 : i === 5 ? 28 : i === 6 ? 9 : i === 7 ? 9 : i === 8 ? 18 : i === 16 ? 12 : 10), true);
   return { blob: xBook([{ name: "보고서", ...sh1 }, { name: "소분류·SKU 상세", ...sh2 }], S.xml()), n: list.length, n2: r2 - 1, sheet1: sh1.xml };
 }
 
@@ -2344,7 +2351,7 @@ function rsList() {
   const kidsOf = n => R.rows.filter(x => x.parent === n && x.lv < 4);
   const tops = R.rows.filter(n => n.lv === 1).length ? R.rows.filter(n => n.lv === 1) : R.rows.filter(n => n.lv === 2);
   const nm = x => x.lv === 1 ? x.org[0] : x.lv === 2 ? x.org[1] : x.org[2];
-  const ent = (n, top) => { const kids = kidsOf(n), sc = rptChg(n.m, kids.map(x => ({ k: nm(x), m: x.m })));
+  const ent = (n, top) => { const kids = kidsOf(n), sc = rptChg(top ? n.m : n.parent.m, kids.map(x => ({ k: nm(x), m: x.m })));   // 팀 줄은 부문 기준 → 채널 몫 합 = 그 팀 기여도
     return { n, top, name: nm(n) + (top ? " (합)" : ""), ci: top ? [null, n.m.dc, n.m.dv, null, null] : [null, rptCK(n.m, n.parent.m, "C"), rptCK(n.m, n.parent.m, "V"), null, null], sc, im: rptImp(n, sc), lines: rptLines(n), key: "S|" + n.key }; };
   const out = []; for (const t of tops) { out.push(ent(t, true)); for (const k of kidsOf(t)) out.push(ent(k, false)); }
   return out;
@@ -2368,18 +2375,18 @@ function renderRs() {
         <td class="n${e.ci[j] != null && e.ci[j] > 5e-5 ? " neg" : ""}">${e.ci[j] != null ? fPP(e.ci[j]) : ""}</td>
         ${j === 0 ? `<td rowspan="5"><span class="dg d${e.n.dg}">${esc(rptDgTxt(e.n))}</span></td>` : ""}<td class="tl">${esc(e.lines[j] || "")}</td>
         <td class="n">${e.im.v[j] == null ? "" : fD1(e.im.v[j])}</td><td class="tl">${esc(e.im.t[j] || "")}</td>
-        ${j === 0 ? `<td class="memo" rowspan="5"><textarea data-mk="${esc(e.key)}" style="height:110px" placeholder="추진방향 작성">${esc(mm.t)}</textarea></td>` : ""}</tr>`);
+        ${j === 0 ? `<td class="memo" rowspan="5"><textarea data-mk="${esc(e.key)}" style="height:110px" placeholder="증감분석 작성">${esc(mm.t)}</textarea></td>` : ""}</tr>`);
     });
   }
-  out.innerHTML = `<table class="rpt rs"><thead><tr><th>구분</th><th>지표</th><th>${esc(yl(R.y0))}</th><th>${esc(yl(R.y1))}</th><th>증감</th><th>증감율</th><th title="기여도 = 부문 Δ비용율·Δ원가율 중 그 팀 몫 (비중 반영, 팀 합 = 부문) · 부문 줄 = 부문 Δ율 자체">기여도(%p)</th><th>진단</th><th>세부데이터</th><th>Impact</th><th>Impact 내용</th><th>추진방향 (작성)</th></tr></thead><tbody>${H.join("")}</tbody></table>`;
+  out.innerHTML = `<table class="rpt rs"><thead><tr><th>구분</th><th>지표</th><th>${esc(yl(R.y0))}</th><th>${esc(yl(R.y1))}</th><th>증감</th><th>증감율</th><th title="기여도 = 부문 Δ비용율·Δ원가율 중 그 팀 몫 (비중 반영, 팀 합 = 부문) · 부문 줄 = 부문 Δ율 자체">기여도(%p)</th><th>진단</th><th>비용세부항목</th><th>Impact</th><th>Impact 내용</th><th>증감분석 (작성)</th></tr></thead><tbody>${H.join("")}</tbody></table>`;
 }
 function rsXlsx() {
-  const R = rptData(), S = xStyleBook(), sty = S.sty, E = rsList();
+  const R = rptData(), S = xStyleBook(), sty = S.sty, sty0 = S.sty, E = rsList();
   const y0 = yl(R.y0), y1 = yl(R.y1), base = ($("#rptBase") && $("#rptBase").value.trim()) || `${y0} 1~9월 Actual + 10~12월 계획, ${y1} 사업계획 최종`;
-  const head = ["구분", "지표", y0, y1, "증감", "증감율", "기여도(%p)", "진단", "세부데이터", "추진방향", "Impact", "Impact 내용", "레벨"], nC = head.length;
+  const head = ["구분", "지표", y0, y1, "증감", "증감율", "기여도(%p)", "진단", "증감분석", "Impact", "Impact 내용", "비용세부항목", "레벨"], nC = head.length;
   const X = [], hr = 3; let r = hr;
-  X.push(`<row r="1" ht="22" customHeight="1">${xCell(1, 0, `□ ${y0} 대비 ${y1} 부문·팀 요약`, sty({ nb: 1, b: 1, sz: 13, c: "1F3864" }))}</row>`);
-  X.push(`<row r="2">${xCell(2, nC - 1, `(기준 : ${base} / 단위 : 백만,%)`, sty({ nb: 1, c: "5B6577", h: "right" }))}</row>`);
+  X.push(`<row r="1" ht="24" customHeight="1">${xCell(1, 0, `□ ${y0} 대비 ${y1} 부문·팀 요약`, sty({ b: 1, sz: 14, c: "1F3864" }))}</row>`);
+  X.push(`<row r="2" ht="18" customHeight="1">${xCell(2, 0, `(기준 : ${base} / 단위 : 백만,%)`, sty({ c: "5B6577" }))}</row>`);
   X.push(`<row r="${hr}" ht="30" customHeight="1">${head.map((h, i) => xCell(hr, i, h, sty({ b: 1, c: "FFFFFF", bg: "1F3864", h: "center", w: 1 }))).join("")}</row>`);
   const DGBG = { "1": "FDECEC", "2": "FDECEC", "3": "FDECEC", G: "E8F5E9" };
   const sgn = (v, th) => typeof v !== "number" || Math.abs(v) < (th || 0.05) ? "" : v < 0 ? "C00000" : "2E7D32";
@@ -2387,27 +2394,28 @@ function rsXlsx() {
     const m = e.n.m, bg = e.top ? "DBE4F3" : "", b = e.top ? 1 : 0, mm = rptMemo(e.key);
     const ml = (mm.t || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean), memoL = ml.length > 5 ? [...ml.slice(0, 4), ml.slice(4).join(" / ")] : ml;
     RS_MET.forEach(([nm, k, isR], j) => { r++;
+      const sty = o => sty0(j === 0 ? Object.assign({}, o, { bd: e.top ? "T" : "h" }) : o);   // 부문 = 굵은 남색, 팀 = 연회색 가로선만
       const v = rsVal(m, k, isR), hide = j > 0;
       const d = v.d == null ? null : isR ? v.d * 100 : v.d;
       const dd = isR && k !== "m" && d != null ? -d : d;   // 비용·원가율은 증가가 나쁨 → 빨강
       const ci = e.ci[j] != null ? e.ci[j] * 100 : null;
       const cells = [
-        xCell(r, 0, e.name, sty({ b, bg, c: hide ? (bg || "FFFFFF") : "" })),
+        xCell(r, 0, e.name, sty({ b, bg, h: "left", ind: e.top ? 0 : 1, c: hide ? (bg || "FFFFFF") : "" })),
         xCell(r, 1, nm, sty({ b, bg, h: "center" })),
         xCell(r, 2, v.a == null ? "" : v.a, sty({ b, bg, nf: isR ? "p" : "n" })),
         xCell(r, 3, v.b == null ? "" : v.b, sty({ b, bg, nf: isR ? "p" : "n" })),
         xCell(r, 4, d, sty({ b, bg, nf: isR ? "pp" : "dn", c: sgn(dd) })),
-        xCell(r, 5, isR ? "-" : v.gr == null ? "-" : v.gr, sty({ b, bg, nf: "dp", h: typeof v.gr === "number" ? "general" : "center", c: sgn(v.gr, 0.0005) })),
+        xCell(r, 5, isR ? "" : v.gr == null ? "-" : v.gr, sty({ b, bg, nf: "dp", h: typeof v.gr === "number" ? "general" : "center", c: sgn(v.gr, 0.0005) })),
         xCell(r, 6, ci == null ? "" : ci, sty({ b, bg, nf: "pp", c: sgn(ci == null ? null : -ci) })),
         xCell(r, 7, rptDgTxt(e.n), sty({ b, bg: DGBG[e.n.dg] || bg, h: "center", c: hide ? (DGBG[e.n.dg] || bg || "FFFFFF") : (e.n.dg === "G" ? "2E7D32" : DGBG[e.n.dg] ? "C00000" : "") })),
-        xCell(r, 8, e.lines[j] || "", sty({ bg, h: "left" })),
-        xCell(r, 9, memoL[j] || "", sty({ bg, h: "left" })),
-        xCell(r, 10, e.im.v[j] == null ? "" : e.im.v[j], sty({ b, bg, nf: "dn", c: sgn(e.im.v[j]) })),
-        xCell(r, 11, e.im.t[j] || "", sty({ bg, h: "left" })),
-        xCell(r, 12, e.top ? "부문" : "팀", sty({ bg, h: "center", c: hide ? (bg || "FFFFFF") : "" }))];
+        xCell(r, 8, memoL[j] || "", sty({ bg, h: "left" })),
+        xCell(r, 9, e.im.v[j] == null ? "" : e.im.v[j], sty({ b, bg, nf: "dn", c: sgn(e.im.v[j]) })),
+        xCell(r, 10, e.im.t[j] || "", sty({ bg, h: "left", c: "404040" })),
+        xCell(r, 11, e.lines[j] || "", sty({ bg, h: "left", c: "404040" })),
+        xCell(r, 12, e.top ? "부문" : "팀", sty({ bg, h: "center", c: hide ? (bg || "FFFFFF") : "7F7F7F" }))];
       X.push(`<row r="${r}">${cells.join("")}</row>`); });
   }
-  const sh = xSheet(X, nC, r, hr, [16, 9, 11, 11, 10, 9, 12, 20, 40, 34, 10, 70, 7]);
+  const sh = xSheet(X, nC, r, hr, [16, 9, 10, 10, 9, 8, 9, 19, 40, 9, 95, 40, 6]);
   return { blob: xBook([{ name: "보고서(요약)", ...sh }], S.xml()), n: E.length, sheet: sh.xml };
 }
 
