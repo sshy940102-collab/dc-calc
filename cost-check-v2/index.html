@@ -59,6 +59,10 @@ body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #
 .mfsel select{min-width:120px}
 .mfwrap{position:relative;max-width:1100px}
 .mfwrap svg{width:100%;height:auto;display:block}
+.mfgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mfp{border:1px solid #e5e7eb;border-radius:10px;padding:8px 10px 2px;background:#fff}
+.mfpt{font-size:13px;font-weight:600;color:#0f172a;margin-bottom:2px}
+.mfwrap:has(.mfgrid){max-width:1300px}
 .mftip{position:absolute;pointer-events:none;background:#0f172a;color:#fff;font-size:12px;line-height:1.5;padding:6px 9px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .mflg{display:flex;gap:16px;font-size:12px;color:#334155;margin:2px 0 4px}
 .mflg i{display:inline-block;width:22px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
@@ -2292,7 +2296,7 @@ function xStyleBook() {
   const font = (b, c, sz) => { const k = [b ? 1 : 0, c || "", sz || 10].join(); if (!fm.has(k)) { fm.set(k, fonts.length); fonts.push(`<font>${b ? "<b/>" : ""}<sz val="${sz || 10}"/>${c ? `<color rgb="FF${c}"/>` : ""}<name val="맑은 고딕"/><family val="3"/></font>`); } return fm.get(k); };
   const fill = c => { if (!c) return 0; if (!fl.has(c)) { fl.set(c, fills.length + 2); fills.push(`<fill><patternFill patternType="solid"><fgColor rgb="FF${c}"/><bgColor indexed="64"/></patternFill></fill>`); } return fl.get(c); };
   font(0, "", 10);
-  const sty = o => { const k = JSON.stringify(o); if (!xm.has(k)) { xm.set(k, xfs.length); xfs.push(`<xf numFmtId="${NF[o.nf || "t"]}" fontId="${font(o.b, o.c, o.sz)}" fillId="${fill(o.bg)}" borderId="${BDI[o.bd] || 0}" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="${o.h || "general"}" vertical="center"${o.ind ? ` indent="${o.ind}"` : ""}${o.w ? ' wrapText="1"' : ""}/></xf>`); } return xm.get(k); };
+  const sty = o => { const k = JSON.stringify(o); if (!xm.has(k)) { xm.set(k, xfs.length); xfs.push(`<xf numFmtId="${NF[o.nf || "t"]}" fontId="${font(o.b, o.c, o.sz)}" fillId="${fill(o.bg)}" borderId="${BDI[o.bd] || 0}" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"${o.q ? ' quotePrefix="1"' : ""}><alignment horizontal="${o.h || "general"}" vertical="center"${o.ind ? ` indent="${o.ind}"` : ""}${o.w ? ' wrapText="1"' : ""}/></xf>`); } return xm.get(k); };
   sty({});
   // 선 최소화: 세로선 없음, 묶음 첫 줄 위쪽 가로선만 (T 굵은 남색 = 부문 · t 얇은 파랑 = 팀·채널 · h 연회색 = 대분류/SKU · hb = 머리글 아래)
   const bl = (side, st, c) => `<border><left/><right/>${side === "top" ? `<top style="${st}"><color rgb="FF${c}"/></top><bottom/>` : `<top/><bottom style="${st}"><color rgb="FF${c}"/></bottom>`}<diagonal/></border>`;
@@ -2363,7 +2367,7 @@ function rptXlsx(onlyShown) {
         xCell(r, 8, gr, sty({ b, bg, nf: "dp", h: typeof gr === "number" ? "general" : "center", c: sgn(gr, 0.0005) })),
         xCell(r, 9, ciX[j] == null ? "" : ciX[j], sty({ b, bg, nf: "pp", c: ciX[j] == null ? "" : sgn(-ciX[j]) })),
         xCell(r, 10, rptDgTxt(n), sty({ b, bg: DGBG[n.dg] || bg, h: "center", c: hide ? (DGBG[n.dg] || bg || "FFFFFF") : (n.dg === "G" ? "2E7D32" : DGBG[n.dg] ? "C00000" : "") })),
-        xCell(r, 11, memoL[j] || "", sty({ bg, h: "left", c: j >= auN ? "C00000" : "" })),
+        xCell(r, 11, memoL[j] || "", sty({ bg, h: "left", c: j >= auN ? "C00000" : "", q: 1 })),   // quotePrefix = 엑셀 '- 처럼 텍스트 고정 (편집 시 수식으로 안 바뀜)
         xCell(r, 12, im.v[j] == null ? "" : im.v[j], sty({ b, bg, nf: "dn", c: sgn(im.v[j]) })),
         xCell(r, 13, im.t[j] || "", sty({ bg, h: "left", c: "404040" })),
         xCell(r, 14, lines[j] || "", sty({ bg, h: "left", c: "404040" })),
@@ -2398,7 +2402,7 @@ function rptXlsx(onlyShown) {
 }
 
 /* ---------- 6 월별 흐름 분석: 26 vs 27 1~12월 (전체 달, 2단계 기간 무관) ---------- */
-const MF = { k: "S", sel: ["", "", "", "", "", ""] };
+const MF = { k: "S", sel: ["", "", "", "", "", ""], view: "one", ks: ["S", "C", "M", "Mr"] };   // view one = 단일(26 vs 27 선) / grid = 종합(지표별 칸, 월별 증감 막대)
 function mfKeys() {   // [키, 이름, 율?] · DC·장려금 분리 자료면 DC율·장려금율, 아니면 차감율
   const sp = rptSp(), dp = rptDp();
   return [["S", "매출", 0], ...(sp ? [["Q", "DC율", 1], ["J", "장려금율", 1]] : dp ? [["D", "차감율", 1]] : []), ...(sp || dp ? [["P", "판관비율", 1]] : []), ["C", "비용율", 1], ["V", "원가율", 1], ["M", "공헌이익", 0], ["Mr", "공헌이익율", 1]];
@@ -2433,7 +2437,10 @@ function renderMf() {
     return `<label class="muted">${esc(X.dims[i] || nm[k])} <select data-mfs="${k}"${k === 5 ? ' style="max-width:260px"' : ""}><option value="">전체</option>${opts.map(o => `<option value="${esc(o)}"${o === MF.sel[k] ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`; }).join("");
   const K = mfKeys(); if (!K.some(x => x[0] === MF.k)) MF.k = "S";
   const [key, kn, isR] = K.find(x => x[0] === MF.k);
-  $("#mfChips").innerHTML = K.map(([k, n]) => `<button class="${k === MF.k ? "on" : "sec"}" data-mfk="${k}">${n}</button>`).join("");
+  const vt = `<button class="${MF.view === "one" ? "on" : "sec"}" data-mfv="one">단일</button><button class="${MF.view === "grid" ? "on" : "sec"}" data-mfv="grid">종합</button><span style="width:14px"></span>`;
+  if (MF.view === "grid") { MF.ks = MF.ks.filter(k => K.some(x => x[0] === k)); if (!MF.ks.length) MF.ks = ["S"]; }
+  $("#mfChips").innerHTML = vt + K.map(([k, n]) => `<button class="${(MF.view === "grid" ? MF.ks.includes(k) : k === MF.k) ? "on" : "sec"}" data-mfk="${k}">${n}</button>`).join("");
+  if (MF.view === "grid") { W._mf = null; return renderMfMix(X, K, mfLeaves(X, 6)); }
   const Ls = mfLeaves(X, 6), A = mfSeries(Ls, X, X.y0, key), B = mfSeries(Ls, X, X.y1, key);
   const C0 = "#94a3b8", C1 = "#0369a1", la = yl(X.y0), lb = yl(X.y1);
   $("#mfLg").innerHTML = `<span><i style="border-color:${C0};border-top-style:dashed"></i>${esc(la)}</span><span><i style="border-color:${C1}"></i>${esc(lb)}</span><span class="muted">${esc(kn)}${isR ? "" : " (백만원)"}</span>`;
@@ -2473,9 +2480,94 @@ function renderMf() {
   </tbody></table><div class="muted" style="font-size:11px;margin-top:4px">연간 = 자료 있는 달 합계 기준 (${esc(la)} ${A.n}개월 · ${esc(lb)} ${B.n}개월)${isR ? " · 율은 월 합계 금액 ÷ 월 합계 매출" : ""} · 빨간 글자 = 불리한 방향 (비용·원가율은 ↑, 매출·공헌이익은 ↓)</div>`;
 }
 document.addEventListener("change", e => { const s = e.target.closest && e.target.closest("[data-mfs]"); if (!s) return; const k = +s.dataset.mfs; MF.sel[k] = s.value; for (let j = k + 1; j < 6; j++) MF.sel[j] = ""; renderMf(); });
-document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-mfk]"); if (!b) return; MF.k = b.dataset.mfk; renderMf(); });
+/* 종합 (사용자 확정 2026-11-25): 그래프 한 장, 0선 위 + / 아래 −, 금액(매출·공헌이익) = 증감율 % 막대, 율 지표 = 증감 %p 꺾은선 → 한 축(%) */
+const MF_COL = { S: "#2563eb", M: "#0d9488", Q: "#db2777", J: "#a16207", D: "#db2777", P: "#65a30d", C: "#ea580c", V: "#475569", Mr: "#7c3aed" };
+function renderMfMix(X, K, Ls) {   // 종합 (사용자 확정): 1~12월 실제 값, 금액 = 막대(왼쪽 축 백만원), 율 = 꺾은선(오른쪽 축 %), 26 연하게·27 진하게, 0선 아래 = 마이너스
+  const W = $("#mfWrap"), la = yl(X.y0), lb = yl(X.y1);
+  const S = MF.ks.map(key => { const [, kn, isR] = K.find(x => x[0] === key); return { key, kn, isR, A: mfSeries(Ls, X, X.y0, key), B: mfSeries(Ls, X, X.y1, key) }; });
+  const bars = S.filter(s => !s.isR), lines = S.filter(s => s.isR), two = bars.length && lines.length;
+  const fv = (s, v) => v == null ? "-" : s.isR ? (v * 100).toFixed(1) + "%" : fN(v), fd = (s, a, b) => a == null || b == null ? "-" : s.isR ? fPP(b - a) : fD(b - a);
+  $("#mfLg").innerHTML = S.map(s => `<span><i style="border-color:${MF_COL[s.key]};${s.isR ? "" : "border-top-width:8px;width:12px"}"></i>${esc(s.kn)}${two ? (s.isR ? " (오른쪽 축 %)" : " (왼쪽 축 백만원)") : ""}</span>`).join("") + `<span class="muted">연한 색·점선 = ${esc(la)} · 진한 색·실선 = ${esc(lb)}</span>`;
+  const all = ss => ss.flatMap(s => [...s.A.ms, ...s.B.ms]).filter(v => v != null);
+  if (!all(S).length) { W.innerHTML = '<div class="empty">이 범위에 값이 없어요</div>'; $("#mfTbl").innerHTML = ""; return; }
+  // 축: 금액(왼쪽)·율(오른쪽) 따로, 0선 높이 공통 (r = 0선 아래 비율)
+  const ext = ss => { const v = all(ss); return { p: Math.max(0, ...v) * 1.12, n: Math.max(0, -Math.min(0, ...v)) * 1.12 }; };
+  const eB = ext(bars), eL = ext(lines), rr = o => o.p + o.n > 0 ? o.n / (o.p + o.n) : 0, r = Math.max(bars.length ? rr(eB) : 0, lines.length ? rr(eL) : 0);
+  const mkAx = (o, isR) => { let T = r <= 0 ? o.p : r >= 1 ? o.n : Math.max(o.p / (1 - r), o.n / r); if (!(T > 0)) T = isR ? 0.01 : 10;
+    const lo = -r * T, hi = (1 - r) * T, raw = T / 5, p10 = Math.pow(10, Math.floor(Math.log10(raw))), st = [1, 2, 5, 10].map(k => k * p10).find(q => q >= raw) || p10 * 10, t = [];
+    for (let v = Math.ceil(lo / st - 1e-9) * st; v <= hi + 1e-9; v += st) t.push(+v.toFixed(10)); return { lo, hi, t }; };
+  const aB = mkAx(eB, 0), aL = mkAx(eL, 1);
+  const w = 1000, h = 420, ml = 64, mr = two ? 52 : 16, mt = 22, mb = 30, pw = w - ml - mr, ph = h - mt - mb;
+  const xs = i => ml + pw * (i + 0.5) / 12, Y = a => v => mt + ph * (1 - (v - a.lo) / (a.hi - a.lo)), yB = Y(aB), yL = Y(aL), y0 = bars.length ? yB(0) : yL(0);
+  const slot = pw / 12, bw = bars.length ? Math.min(16, slot * 0.8 / (bars.length * 2)) : 0;
+  const tlB = v => Math.round(v).toLocaleString("ko-KR"), tlL = v => { const q = aL.t.length > 1 ? Math.abs(aL.t[1] - aL.t[0]) * 100 : 1; return (v * 100).toFixed(q < 1 ? 1 : 0) + "%"; };
+  const gA = bars.length ? aB : aL, gy = bars.length ? yB : yL, gl = bars.length ? tlB : tlL;
+  let g = gA.t.map(v => `<line x1="${ml}" x2="${w - mr}" y1="${gy(v).toFixed(1)}" y2="${gy(v).toFixed(1)}" stroke="#eef0f3"/><text x="${ml - 6}" y="${gy(v).toFixed(1)}" font-size="11" fill="#64748b" text-anchor="end" dominant-baseline="middle">${gl(v)}</text>`).join("");
+  if (two) g += aL.t.map(v => `<text x="${w - mr + 6}" y="${yL(v).toFixed(1)}" font-size="11" fill="#64748b" dominant-baseline="middle">${tlL(v)}</text>`).join("") + `<text x="${ml - 6}" y="${mt - 9}" font-size="10" fill="#64748b" text-anchor="end">백만원</text><text x="${w - mr + 6}" y="${mt - 9}" font-size="10" fill="#64748b">%</text>`;
+  g += `<rect id="mfBand" x="0" y="${mt}" width="${slot.toFixed(1)}" height="${ph}" fill="#e2e8f0" opacity=".55" visibility="hidden"/>`;
+  const nb = bars.length * 2;
+  bars.forEach((s, bi) => [s.A, s.B].forEach((ser, yi) => ser.ms.forEach((v, i) => { if (v == null) return; const x = xs(i) - nb * bw / 2 + (bi * 2 + yi) * bw + 0.5, y = yB(v), top = Math.min(y, y0), hh = Math.max(Math.abs(y - y0), 1);
+    g += `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${(bw - 1).toFixed(1)}" height="${hh.toFixed(1)}" rx="2" fill="${MF_COL[s.key]}" opacity="${yi ? 1 : 0.32}"/>`; })));
+  g += `<line x1="${ml}" x2="${w - mr}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}" stroke="#475569" stroke-width="1.2"/>`;
+  lines.forEach(s => [s.A, s.B].forEach((ser, yi) => { let p = "", pen = false; ser.ms.forEach((v, i) => { if (v == null) { pen = false; return; } p += (pen ? "L" : "M") + xs(i).toFixed(1) + " " + yL(v).toFixed(1); pen = true; });
+    g += `<path d="${p}" fill="none" stroke="${MF_COL[s.key]}" stroke-width="2" stroke-linejoin="round"${yi ? "" : ' stroke-dasharray="5 4" opacity=".55"'}/>` + ser.ms.map((v, i) => v == null ? "" : `<circle cx="${xs(i).toFixed(1)}" cy="${yL(v).toFixed(1)}" r="${yi ? 4 : 3}" fill="${MF_COL[s.key]}" stroke="#fff" stroke-width="2"${yi ? "" : ' opacity=".55"'}/>`).join(""); }));
+  g += Array.from({ length: 12 }, (_, i) => `<text x="${xs(i).toFixed(1)}" y="${h - 9}" font-size="11" fill="#64748b" text-anchor="middle">${i + 1}월</text>`).join("");
+  W.innerHTML = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="월별 종합">${g}</svg><div class="mftip" id="mfTip" hidden></div>`;
+  W._mfg = { ml, pw, w, S, f: (s, i) => `${esc(la)} ${fv(s, s.A.ms[i])} → ${esc(lb)} ${fv(s, s.B.ms[i])} (${fd(s, s.A.ms[i], s.B.ms[i])})` };
+  // 표: 지표마다 26 / 27 / 증감 3줄 + 연간 (숫자는 표에서 정확히)
+  const bad = (s, a, b) => a != null && b != null && ((s.key === "S" || s.key === "M" || s.key === "Mr") ? b - a < (s.isR ? -5e-5 : -0.5) : b - a > (s.isR ? 5e-5 : 0.5));
+  const td = (x, b) => `<td${b ? ' style="font-weight:600"' : ""}>${x}</td>`;
+  $("#mfTbl").innerHTML = `<table class="mft"><thead><tr><th>지표</th><th></th>${Array.from({ length: 12 }, (_, i) => `<th>${i + 1}월</th>`).join("")}<th>연간</th></tr></thead><tbody>${S.map(s => {
+    const A = [...s.A.ms, s.A.tot], B = [...s.B.ms, s.B.tot], nm = `<span style="color:${MF_COL[s.key]}">■</span> ${esc(s.kn)}`;
+    return `<tr><td rowspan="3" style="vertical-align:top">${nm}</td><td class="muted">${esc(la)}</td>${A.map((v, i) => td(fv(s, v), i === 12)).join("")}</tr><tr><td class="muted">${esc(lb)}</td>${B.map((v, i) => td(fv(s, v), i === 12)).join("")}</tr><tr class="tot"><td class="muted">증감</td>${A.map((a, i) => td(bad(s, a, B[i]) ? `<span class="neg">${fd(s, a, B[i])}</span>` : fd(s, a, B[i]), i === 12)).join("")}</tr>`; }).join("")}</tbody></table>
+    <div class="muted" style="font-size:11px;margin-top:4px">${two ? "막대 = 왼쪽 축(백만원), 꺾은선 = 오른쪽 축(%) · 두 축 0선 높이 같음 · " : ""}연간 율 = 연간 합계 기준 · 빨간 글자 = 불리한 방향 · 마우스 올리면 그 달 숫자</div>`;
+}
+const fGr1 = x => { if (x == null || !isFinite(x)) return "-"; const r = Math.round(x * 1000) / 10; return (r > 0 ? "+" : "") + r.toFixed(1) + "%"; };
+/* (이전 시안: 지표별 칸 나누기 — 사용자 미채택, 호출 안 함) */
+function renderMfGrid(X, K, Ls) {
+  const W = $("#mfWrap"), la = yl(X.y0), lb = yl(X.y1);
+  $("#mfLg").innerHTML = `<span class="muted">월별 증감 (${esc(lb)} − ${esc(la)}) · 금액 = 백만원, 율 = %p · <span style="color:#2e7d32">■ 유리</span> <span style="color:#c62828">■ 불리</span> (비용·원가율은 ↑가 불리)</span>`;
+  const w = 540, h = 250, ml = 52, mr = 12, mt = 24, mb = 26, pw = w - ml - mr, ph = h - mt - mb, xs = i => ml + pw * (i + 0.5) / 12, bw = pw / 12 * 0.56;
+  const P = MF.ks.map(key => { const [, kn, isR] = K.find(x => x[0] === key), A = mfSeries(Ls, X, X.y0, key), B = mfSeries(Ls, X, X.y1, key);
+    const d = A.ms.map((a, i) => a == null || B.ms[i] == null ? null : B.ms[i] - a), good = key === "S" || key === "M" || key === "Mr";
+    const f = v => isR ? fPP(v) : fD(v), tot = A.tot == null || B.tot == null ? null : B.tot - A.tot;
+    const vs = d.filter(v => v != null); let lo = Math.min(0, ...vs), hi = Math.max(0, ...vs); const pad = (hi - lo) * 0.18 || (isR ? 0.001 : 1); lo = lo < 0 ? lo - pad : 0; hi = hi > 0 ? hi + pad : 0; if (lo === hi) hi = isR ? 0.001 : 1;
+    const N = mfNice(lo, hi), ys = v => mt + ph * (1 - (v - N.a) / (N.b - N.a)), y0 = ys(0);
+    const tl = v => isR ? (v * 100).toFixed(Math.abs(N.t[1] - N.t[0]) * 100 < 1 ? 1 : 0) + "%p" : Math.round(v).toLocaleString("ko-KR");
+    const col = v => Math.abs(v) < (isR ? 5e-5 : 0.05) ? "#94a3b8" : (v > 0) === good ? "#2e7d32" : "#c62828";
+    const bars = d.map((v, i) => { if (v == null) return ""; const y = ys(v), top = Math.min(y, y0), hh = Math.max(Math.abs(y - y0), 1), up = v >= 0;
+      return `<rect x="${(xs(i) - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="3" fill="${col(v)}"/><text x="${xs(i).toFixed(1)}" y="${(up ? top - 5 : top + hh + 12).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#0f172a">${f(v)}</text>`; }).join("");
+    const tt = tot == null ? "" : ` <span style="color:${col(tot)};font-weight:600">연간 ${f(tot)}</span>`;
+    return `<div class="mfp"><div class="mfpt">${esc(kn)}${isR ? " (%p)" : " (백만원)"}${tt} <span class="muted" style="font-weight:400">${esc(la)} ${A.tot == null ? "-" : isR ? (A.tot * 100).toFixed(1) + "%" : fN(A.tot)} → ${esc(lb)} ${B.tot == null ? "-" : isR ? (B.tot * 100).toFixed(1) + "%" : fN(B.tot)}</span></div>
+      <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(kn)} 월별 증감">
+      ${N.t.map(v => `<line x1="${ml}" x2="${w - mr}" y1="${ys(v).toFixed(1)}" y2="${ys(v).toFixed(1)}" stroke="#eef0f3"/><text x="${ml - 6}" y="${ys(v).toFixed(1)}" font-size="10" fill="#64748b" text-anchor="end" dominant-baseline="middle">${tl(v)}</text>`).join("")}
+      <rect class="mfband" x="0" y="${mt}" width="${(pw / 12).toFixed(1)}" height="${ph}" fill="#e2e8f0" opacity=".6" visibility="hidden"/>
+      <line x1="${ml}" x2="${w - mr}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}" stroke="#64748b" stroke-width="1"/>${bars}
+      ${Array.from({ length: 12 }, (_, i) => `<text x="${xs(i).toFixed(1)}" y="${h - 8}" font-size="10.5" fill="#64748b" text-anchor="middle">${i + 1}월</text>`).join("")}
+      </svg></div>`; });
+  W.innerHTML = `<div class="mfgrid">${P.join("")}</div>`;
+  W._mfg = { ml, pw, w };
+  $("#mfTbl").innerHTML = "";
+}
+document.addEventListener("click", e => {
+  const v = e.target.closest && e.target.closest("[data-mfv]"); if (v) { MF.view = v.dataset.mfv; renderMf(); return; }
+  const b = e.target.closest && e.target.closest("[data-mfk]"); if (!b) return;
+  if (MF.view === "grid") { const k = b.dataset.mfk, i = MF.ks.indexOf(k); if (i >= 0) { if (MF.ks.length > 1) MF.ks.splice(i, 1); } else { const K = mfKeys().map(x => x[0]); MF.ks.push(k); MF.ks.sort((a, c) => K.indexOf(a) - K.indexOf(c)); } }
+  else MF.k = b.dataset.mfk;
+  renderMf(); });
 document.addEventListener("mousemove", e => {
-  const W = $("#mfWrap"), M = W && W._mf; if (!M) return;
+  const W = $("#mfWrap"); if (!W) return;
+  if (MF.view === "grid" && W._mfg) {   // 종합: 한 칸에 올리면 모든 칸에 같은 달 띠
+    const G = W._mfg, sv = W.querySelector("svg"), band = $("#mfBand"), tip = $("#mfTip"); if (!sv || !band || !tip) return;
+    const r = sv.getBoundingClientRect(), i = Math.floor(((e.clientX - r.left) * G.w / r.width - G.ml) / G.pw * 12);
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom || i < 0 || i > 11) { band.setAttribute("visibility", "hidden"); tip.hidden = true; return; }
+    band.setAttribute("x", (G.ml + G.pw * i / 12).toFixed(1)); band.setAttribute("visibility", "visible");
+    tip.innerHTML = `<b>${i + 1}월</b>` + G.S.map(s => `<br><span style="color:${MF_COL[s.key]}">■</span> ${esc(s.kn)} ${G.f(s, i)}`).join(""); tip.hidden = false;
+    const wr = W.getBoundingClientRect(), px = (G.ml + G.pw * (i + 1) / 12) * r.width / G.w;
+    tip.style.left = Math.min(px + 8, wr.width - tip.offsetWidth - 4) + "px"; tip.style.top = (e.clientY - wr.top + 12) + "px";
+    return;
+  }
+  const M = W._mf; if (!M) return;
   const svg = W.querySelector("svg"), tip = $("#mfTip"), xl = $("#mfX"); if (!svg || !tip) return;
   const r = svg.getBoundingClientRect(), inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
   if (!inside) { tip.hidden = true; if (xl) xl.setAttribute("visibility", "hidden"); return; }
@@ -2551,7 +2643,7 @@ function rsXlsx() {
         xCell(r, 5, isR ? "" : v.gr == null ? "-" : v.gr, sty({ b, bg, nf: "dp", h: typeof v.gr === "number" ? "general" : "center", c: sgn(v.gr, 0.0005) })),
         xCell(r, 6, ci == null ? "" : ci, sty({ b, bg, nf: "pp", c: sgn(ci == null ? null : -ci) })),
         xCell(r, 7, rptDgTxt(e.n), sty({ b, bg: DGBG[e.n.dg] || bg, h: "center", c: hide ? (DGBG[e.n.dg] || bg || "FFFFFF") : (e.n.dg === "G" ? "2E7D32" : DGBG[e.n.dg] ? "C00000" : "") })),
-        xCell(r, 8, memoL[j] || "", sty({ bg, h: "left" })),
+        xCell(r, 8, memoL[j] || "", sty({ bg, h: "left", q: 1 })),
         xCell(r, 9, e.im.v[j] == null ? "" : e.im.v[j], sty({ b, bg, nf: "dn", c: sgn(e.im.v[j]) })),
         xCell(r, 10, e.im.t[j] || "", sty({ bg, h: "left", c: "404040" })),
         xCell(r, 11, e.lines[j] || "", sty({ bg, h: "left", c: "404040" })),
