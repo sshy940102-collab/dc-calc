@@ -53,7 +53,19 @@ button:disabled{opacity:.4;cursor:default}
 .modebar{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .stg{display:none}
-body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4,body[data-stage="5"] #stage5,body[data-stage="6"] #stage6,body[data-stage="7"] #stage7,body[data-stage="8"] #stage8{display:block}
+body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4,body[data-stage="5"] #stage5,body[data-stage="6"] #stage6,body[data-stage="7"] #stage7,body[data-stage="8"] #stage8,body[data-stage="9"] #stage9{display:block}
+.mfchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.mfsel{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 8px}
+.mfsel select{min-width:120px}
+.mfwrap{position:relative;max-width:1100px}
+.mfwrap svg{width:100%;height:auto;display:block}
+.mftip{position:absolute;pointer-events:none;background:#0f172a;color:#fff;font-size:12px;line-height:1.5;padding:6px 9px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.mflg{display:flex;gap:16px;font-size:12px;color:#334155;margin:2px 0 4px}
+.mflg i{display:inline-block;width:22px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+table.mft{border-collapse:collapse;font-size:12px;margin-top:10px}
+table.mft th,table.mft td{padding:4px 8px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap}
+table.mft th:first-child,table.mft td:first-child{text-align:left}
+table.mft tr.tot td{font-weight:600}
 /* 7 보고서 */
 .rpt td{vertical-align:top}
 .rpt tr.lv1 td{background:#dbe4f3;font-weight:700}
@@ -63,6 +75,8 @@ body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #
 .rpt tr.dd td{background:#fffdf3;font-size:11.5px;color:#334155}
 .rpt tr.dd2 td{background:#fffaf0;font-size:11px;color:#475569}
 .rpt td.memo{min-width:220px;padding:3px}
+.rpt td.memo .auto{font-size:12px;line-height:1.4;color:#111;padding:2px 4px 4px;white-space:nowrap}
+.rpt td.memo textarea{color:#c00000}
 .rpt textarea{height:34px;min-height:34px;width:100%;font:12px/1.35 "Malgun Gothic",sans-serif;white-space:pre-wrap;padding:3px 5px}
 .rpt .dg{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11.5px;font-weight:700;white-space:nowrap}
 .dg.d1,.dg.d2,.dg.d3{background:var(--redbg);color:var(--red)}.dg.dG{background:var(--okbg);color:var(--ok)}.dg.dE,.dg.dN,.dg.dX,.dg.dZ{background:#eef1f6;color:var(--sub)}
@@ -192,15 +206,10 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
   <button data-s="2" data-m="c"><b>3</b>요약표</button>
   <button data-s="3" data-m="c"><b>4</b>판정표 <span class="badge" id="bdg" hidden></span></button>
   <button data-s="5" data-m="c"><b>5</b>증감 요인 분석</button>
-  <button data-s="4" data-m="c"><b>6</b>INSIGHT</button>
-  <span class="ngrp">📦 제품 분석</span>
-  <button data-s="2" data-m="p"><b>3</b>요약표</button>
-  <button data-s="3" data-m="p"><b>4</b>판정표 <span class="badge" id="bdgP" hidden></span></button>
-  <button data-s="5" data-m="p"><b>5</b>증감 요인 분석</button>
-  <button data-s="4" data-m="p"><b>6</b>INSIGHT</button>
-  <span class="ngrp">📝 보고</span>
-  <button data-s="7"><b>7</b>보고서</button>
-  <button data-s="8"><b>8</b>보고서(요약)</button>
+  <button data-s="9" data-m="c"><b>6</b>월별 흐름 분석</button>
+  <button data-s="7" data-m="c"><b>7</b>보고서(채널)</button>
+  <button data-s="8" data-m="c"><b>8</b>보고서(부문)</button>
+  <span id="bdgP" hidden></span>
 </nav>
 <main>
 <div id="modeBar" class="modebar" hidden></div>
@@ -329,7 +338,7 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
 
 <section id="stage8" class="stg">
   <div class="card" style="padding:14px 18px">
-    <h2>📋 보고서 (요약) <small>부문 → 팀 · 제품 없이 조직 합계만 · 26년 연간 vs 27년 연간 (누계) · 백만원</small></h2>
+    <h2>📋 보고서 (부문) <small>부문 → 팀 · 제품 없이 조직 합계만 · 26년 연간 vs 27년 연간 (누계) · 백만원</small></h2>
     <div class="help">
       지표 5줄 = 총매출 · 비용(%) · 원가(%) · 공헌이익 · CM율 &nbsp;|&nbsp; <b>기여도(%p)</b> = 비용(%)·원가(%) 줄에 표시 · 팀 줄: 부문 Δ율 중 그 팀 몫 (팀 합 = 부문 Δ율) · 부문 줄: 부문 Δ율 자체<br>
       몫 = 율효과(27 비중 × 자기 비용율 증감) + 믹스효과(비중 증감 × (자기 26 비용율 − 부문 26 비용율)) → 평균보다 비싼 팀이 커지면 +, 싼 팀이 커지면 − &nbsp;|&nbsp;
@@ -338,9 +347,18 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
     <div class="row"><button id="rsXl">📥 요약 엑셀</button><span class="muted" style="align-self:center">엑셀 기준 문구는 7 보고서 탭 값 사용</span></div>
   </div>
   <div class="tw" id="rsOut" style="max-height:76vh"></div>
+</section><section id="stage9" class="stg">
+  <div class="card" style="padding:14px 18px">
+    <h2>📈 월별 흐름 분석 <small>26년 vs 27년 · 1~12월 · 금액 백만원 · 율 = 그 달 금액 ÷ 그 달 총매출 · 2단계 기간 선택과 무관 (전체 달)</small></h2>
+    <div class="mfsel" id="mfSel"></div>
+    <div class="mfchips" id="mfChips"></div>
+    <div class="mflg" id="mfLg"></div>
+    <div class="mfwrap" id="mfWrap"></div>
+    <div class="tw" id="mfTbl"></div>
+  </div>
 </section><section id="stage7" class="stg">
   <div class="card" style="padding:14px 18px">
-    <h2>📝 Account × Category 보고서 <small>26년 연간 vs 27년 연간 (누계) · 부문합 → 팀계 → 채널합 → 채널×대분류 · 백만원</small></h2>
+    <h2>📝 보고서 (채널) · Account × Category <small>26년 연간 vs 27년 연간 (누계) · 부문합 → 팀계 → 채널합 → 채널×대분류 · 백만원</small></h2>
     <div class="help">
       <b>진단</b> ① 비용율↑ + 매출↓ · ② 비용율↑ + 매출 증가율 &lt; 상위(채널합 등) 증가율 (상위가 역성장이면 0%) · ③ 비용율↓(동일) + 매출↓로 CM↓ &nbsp;|&nbsp;
       <b>추진방향</b> 진단 아님 + 비용율↓(동일) + CM↑ ((검증필요) = 매출 증가율이 상위보다 10%p 이상 높음) · 나머지 = 기타<br>
@@ -455,7 +473,7 @@ function renderPerBox() {
   box.innerHTML = cmpBar().replace('class="cmpb"', 'class="cmpb" style="margin-left:0"') +
     `<div class="lbl" style="margin-top:12px">미리보기 — 전체 (${esc(vl("FY"))}, 백만원)</div><div class="tw" style="max-width:640px;max-height:none"><table><thead><tr><th></th><th>기준 ${esc(yl(D.y0))}</th><th>비교 ${esc(yl(D.y1))}</th><th>증감</th></tr></thead><tbody>
       ${r("매출", j.a.S, j.b.S, j.dS)}${r("판촉비", j.a.C, j.b.C, j.dC)}${r("판촉율", j.cr0, j.cr1, j.dcr, 1)}${r("CM", j.a.M, j.b.M, j.dM)}${r("CM율", j.mr0, j.mr1, j.dmr, 1)}</tbody></table></div>
-    <div class="row"><span class="muted">이 기준으로 보기 →</span><button data-gostage="2">요약표</button><button data-gostage="3">판정표</button><button data-gostage="5">증감 요인 분석</button><button data-gostage="4">INSIGHT</button></div>`;
+    <div class="row"><span class="muted">이 기준으로 보기 →</span><button data-gostage="2">요약표</button><button data-gostage="3">판정표</button><button data-gostage="5">증감 요인 분석</button><button data-gostage="7">보고서(채널)</button><button data-gostage="8">보고서(부문)</button></div>`;
 }
 function cmpBar() {
   if (!DC0) return "";
@@ -1640,7 +1658,7 @@ function buildIns(lvl, f, part) {
   const cmpTxt = `${yl(D.y0)} → ${yl(D.y1)}${D.cmp === "per" ? ` (${D.agg})` : ""}`;
   if (part === "pz") {
     cards.length = 0;
-    cards.push({ cls: "b wide", t: `📊 ${esc(scope)} 증감 요인 분석 <small>${esc(cmpTxt)}</small> <a class="lnk" data-gostage="4" style="margin-left:auto">📌 INSIGHT에서 해석 보기 ▸</a>`,
+    cards.push({ cls: "b wide", t: `📊 ${esc(scope)} 증감 요인 분석 <small>${esc(cmpTxt)}</small>`,
       h: `<p>판촉율 <b>${fP(RS.CR0)} → ${fP(RS.CR1)} (${fPP2(RS.dCR)})</b> · 매출 ${pzChg(tot.j.FY.a.S, tot.j.FY.b.S, "S")} · CM ${fN(tot.j.FY.a.M)}→${fN(tot.j.FY.b.M)} <span class="${nc(tot.j.FY.dM)}">(${fD(tot.j.FY.dM)})</span></p><p>📐 ${rdLine(RS, "기존 " + LEAF())}</p><p class="muted">아래 표: ① 지금 범위 안 → 상위 단계 기준 순서. 행 클릭 = 펼치기, 모든 단계 합계 = 위 증감</p>`,
       x: `[📊 ${scope} 증감 요인 분석 ${cmpTxt}] 판촉율 ${fP(RS.CR0)}→${fP(RS.CR1)} (${fPP2(RS.dCR)}) · ${strip(rdLine(RS, "기존 " + LEAF()))}` });
   } else {
@@ -2150,6 +2168,33 @@ function rptChg(m, kids) {
     return [up.length ? "↑ " + up.map(r => `${r.k} ${fmt(r[key])}`).join(", ") : "", dn.length ? "↓ " + dn.map(r => `${r.k} ${fmt(r[key])}`).join(", ") : ""].filter(Boolean).join(" / "); };
   return { rows, S: pick("s", 0.5, fD), C: m.st ? "" : pick("c", 0.0005, fPP), V: m.st ? "" : pick("v", 0.0005, fPP), M: pick("mm", 0.5, fD) };
 }
+/* 소분류 짧은 이름: 앞 코드(B03.) 빼고, 괄호 있으면 괄호 안 이름(저가·그릭 같은 수식어면 "SY 저가"), 괄호 없으면 "시유 GT900" → "GT900" */
+const RPT_NICK = { "아이엠마더": "마더", "불가리스요거트": "불가리스" };
+const RPT_QUAL = /^(저가|고가|그릭|대용량|소용량|믹스|액상|기타|일반|멸균|가공|플레인)$/;
+function rptNick(s) {
+  let t = String(s || "").trim().replace(/^[A-Za-z]{0,3}\d{1,3}\s*[.)\-]\s*/, "");
+  const p = t.match(/^(.*?)\s*[\(（]([^()（）]+)[\)）]\s*$/);
+  if (p) { const base = p[1].trim(), q = p[2].trim(); t = RPT_QUAL.test(q) && base ? base + " " + q : q; }
+  else { const w = t.split(/\s+/); if (w.length > 1 && /[A-Za-z0-9]/.test(w[w.length - 1]) && !/[A-Za-z0-9]/.test(w[0])) t = w.slice(1).join(" "); }
+  return RPT_NICK[t] || t || String(s || "");
+}
+/* 증감 큰 순(절대값)으로 더하다가 합이 줄 증감 ±10% 안에 들면 멈춤 (최대 3개) */
+function rptPickSum(rows, key, tot, th) {
+  const c = rows.filter(r => Math.abs(r[key]) >= th).sort((a, b) => Math.abs(b[key]) - Math.abs(a[key])), out = []; let s = 0;
+  for (const r of c) { if (out.length >= 3 || (out.length && Math.abs(s - tot) <= Math.abs(tot) * 0.1)) break; out.push(r); s += r[key]; }
+  return out;
+}
+/* 증감분석 자동 줄 (검은 글자): 매출 금액 · 비용 = 비용율 기여도 %p (기여도 칸과 같은 기준) · CM 금액 */
+function rptAuto(n) {
+  if (n._au) return n._au;
+  const m = n.m, rows = rptSmCh(n).rows, L = [];
+  const ln = (nm, key, tot, th, fmt) => { const p = rptPickSum(rows, key, tot, th); if (p.length) L.push(`- ${nm} : ` + p.map(r => `${rptNick(r.k)} ${fmt(r[key])}`).join(", ")); };
+  ln("매출", "s", m.dS, 0.51, fD);   // 반올림하면 0으로 보이는 것(±0.5 이하)은 제외
+  const cb = n.lv === 4 ? n.parent.m : m;
+  if (!cb.st) ln("비용", "c", n.lv === 4 ? rptCK(m, cb, "C") : m.dc, 0.00051, fPP);
+  ln("CM", "mm", m.dM, 0.51, fD);
+  return n._au = L;
+}
 /* 율 기여도 (%p, 상위 P 기준) = 율효과 + 믹스효과 = (27 금액/P 27 매출 − 26 금액/P 26 매출) − (27 비중 − 26 비중) × P 26 율
    → 평균보다 율 높은 품목 비중↑ = +, 낮은 품목 비중↑ = − · 하위 합 = P Δ율 (k = "C" 비용 / "V" 원가) */
 const rptCK = (m, P, k) => { const e = 1e-9, d = (x, S) => Math.abs(S) > e ? x / S : 0, w0 = d(m.a.S, P.a.S), w1 = d(m.b.S, P.b.S), r0 = Math.abs(P.a.S) > e ? P.a[k] / P.a.S : 0;
@@ -2218,7 +2263,7 @@ function renderRpt() {
     const smS = RPT.sel[4], oc = rptOrgCells(n), mm = rptMemo(n.key), im = rptImp(n), isO = !!smS || RPT.open.has(n.key);
     H.push(`<tr class="lv${n.lv}" data-rk="${esc(n.key)}"><td><span class="dg d${n.dg}">${esc(rptDgTxt(n))}</span></td>${oc.map((v, i) => `<td>${n.lv === 4 && i === 3 ? `<span class="tg">${isO ? "▾" : "▸"}</span> ` : ""}${esc(v)}</td>`).join("")}${n.lv === 4 ? mcell(n.m, rptCK(n.m, n.parent.m, "C"), rptCK(n.m, n.parent.m, "V")) : mcell(n.m)}
       <td class="tl">${rptLines(n).filter(Boolean).map(esc).join("<br>")}</td><td class="tl">${(sc => [sc.S && "매출 " + sc.S, sc.C && "비용율 " + sc.C, sc.V && "원가율 " + sc.V, im.t[4]].filter(Boolean).map(esc).join("<br>"))(rptSmCh(n))}</td><td class="tl">${rptIOTxt(n).filter(Boolean).map(esc).join("<br>")}</td>
-      <td class="memo"><textarea data-mk="${esc(n.key)}" placeholder="증감분석 작성">${esc(mm.t)}</textarea></td><td style="text-align:center"><input type="checkbox" data-ck="${esc(n.key)}"${mm.ok ? " checked" : ""}></td></tr>`);
+      <td class="memo">${(a => a.length ? `<div class="auto" title="자동: 증감 큰 소분류부터, 합이 줄 증감 ±10% 안에 들 때까지 (최대 3개) · 비용 = 기여도 %p">${a.map(esc).join("<br>")}</div>` : "")(rptAuto(n))}<textarea data-mk="${esc(n.key)}" placeholder="사유·전략 작성 (엑셀에 빨간 글자)">${esc(mm.t)}</textarea></td><td style="text-align:center"><input type="checkbox" data-ck="${esc(n.key)}"${mm.ok ? " checked" : ""}></td></tr>`);
     if (n.lv === 4 && isO) {
       const kids = rptKids(n.L, R.I.sm >= 0 ? R.I.sm : R.I.sku, R.X).filter(s => !smS || s.k === smS).sort((x, y) => n.m.dM >= 0 ? y.m.dM - x.m.dM : x.m.dM - y.m.dM);
       for (const s of kids) {
@@ -2293,7 +2338,9 @@ function rptXlsx(onlyShown) {
   const met = [["총매출", "S", 0], ["비용(%)", "c", 1], ["원가(%)", "v", 1], ["공헌이익", "M", 0], ["(%)", "m", 1]];
   for (const n of list) {
     const m = n.m, bg = LVBG[n.lv], b = n.lv < 4 ? 1 : 0, oc = rptOrgCells(n), lines = rptLines(n), im = rptImp(n), mm = rptMemo(n.key), io = rptIOTxt(n), ciX = n.lv === 4 ? [null, rptCK(n.m, n.parent.m, "C") * 100, rptCK(n.m, n.parent.m, "V") * 100, null, null] : [];
-    const ml = (mm.t || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean), memoL = ml.length > 5 ? [...ml.slice(0, 4), ml.slice(4).join(" / ")] : ml;
+    // 증감분석 = 자동 줄(검정) 먼저 + 작성 메모(빨강) 남은 줄에, 넘치면 마지막 줄에 " / "로 이어 붙임
+    const au = rptAuto(n), ml = (mm.t || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean), room = 5 - au.length;
+    const memoL = [...au, ...(ml.length > room ? [...ml.slice(0, room - 1), ml.slice(room - 1).join(" / ")] : ml)], auN = au.length;
     met.forEach(([nm, k, isR], j) => { r++;
       const sty = o => sty0(j === 0 ? Object.assign({}, o, { bd: BDL[n.lv] }) : o);   // 묶음 첫 줄 위에만 가로선
       const hide = j > 0, tc = (v, o) => xCell(r, o.col, v, sty({ b, bg, h: o.h || "center", c: hide && o.rep ? (bg || "FFFFFF") : o.c }));
@@ -2310,7 +2357,7 @@ function rptXlsx(onlyShown) {
         xCell(r, 8, gr, sty({ b, bg, nf: "dp", h: typeof gr === "number" ? "general" : "center", c: sgn(gr, 0.0005) })),
         xCell(r, 9, ciX[j] == null ? "" : ciX[j], sty({ b, bg, nf: "pp", c: ciX[j] == null ? "" : sgn(-ciX[j]) })),
         xCell(r, 10, rptDgTxt(n), sty({ b, bg: DGBG[n.dg] || bg, h: "center", c: hide ? (DGBG[n.dg] || bg || "FFFFFF") : (n.dg === "G" ? "2E7D32" : DGBG[n.dg] ? "C00000" : "") })),
-        xCell(r, 11, memoL[j] || "", sty({ bg, h: "left" })),
+        xCell(r, 11, memoL[j] || "", sty({ bg, h: "left", c: j >= auN ? "C00000" : "" })),
         xCell(r, 12, im.v[j] == null ? "" : im.v[j], sty({ b, bg, nf: "dn", c: sgn(im.v[j]) })),
         xCell(r, 13, im.t[j] || "", sty({ bg, h: "left", c: "404040" })),
         xCell(r, 14, lines[j] || "", sty({ bg, h: "left", c: "404040" })),
@@ -2343,6 +2390,93 @@ function rptXlsx(onlyShown) {
   const sh2 = xSheet(X2, h2.length, Math.max(r2, 1), 1, h2.map((h, i) => i < 4 ? 12 : i === 4 ? 16 : i === 5 ? 28 : i === 6 ? 9 : i === 7 ? 9 : i === 8 ? 18 : i === 16 ? 12 : 10), true);
   return { blob: xBook([{ name: "보고서", ...sh1 }, { name: "소분류·SKU 상세", ...sh2 }], S.xml()), n: list.length, n2: r2 - 1, sheet1: sh1.xml };
 }
+
+/* ---------- 6 월별 흐름 분석: 26 vs 27 1~12월 (전체 달, 2단계 기간 무관) ---------- */
+const MF = { k: "S", sel: ["", "", "", ""] };
+function mfKeys() {   // [키, 이름, 율?] · DC·장려금 분리 자료면 DC율·장려금율, 아니면 차감율
+  const sp = rptSp(), dp = rptDp();
+  return [["S", "매출", 0], ...(sp ? [["Q", "DC율", 1], ["J", "장려금율", 1]] : dp ? [["D", "차감율", 1]] : []), ...(sp || dp ? [["P", "판관비율", 1]] : []), ["C", "비용율", 1], ["V", "원가율", 1], ["M", "공헌이익", 0], ["Mr", "공헌이익율", 1]];
+}
+function mfIdx(X) { const I = rptIdx(X); return [I.b, I.t, I.c, I.big]; }
+function mfLeaves(X, upto) { const ix = mfIdx(X); return X.leaves.filter(L => ix.every((i, k) => k >= upto || !MF.sel[k] || i < 0 || L.d[i] === MF.sel[k])); }
+/* 연도 y의 1~12월 값 (자료 없는 달 = null) + 연간(있는 달 합 기준) */
+function mfSeries(Ls, X, y, key) {
+  const have = new Set(monthsOf(X, y)), k = key === "Mr" ? "M" : key, isR = key !== "S" && key !== "M";
+  const val = o => isR ? (Math.abs(o.S) > 1e-9 ? o[k] / o.S : null) : o[k];
+  const tot = z8(), ms = [];
+  for (let m = 1; m <= 12; m++) {
+    if (!have.has(m)) { ms.push(null); continue; }
+    const o = z8(); for (const L of Ls) { const x = L.v[y] && L.v[y][m + "월"]; if (x) for (const q in o) o[q] += x[q] || 0; }
+    for (const q in o) tot[q] += o[q]; ms.push(val(o));
+  }
+  return { ms, tot: have.size ? val(tot) : null, n: have.size };
+}
+function mfNice(lo, hi) {   // 보기 좋은 눈금 5개 안팎
+  if (lo === hi) { const d = Math.abs(lo) || 1; lo -= d * 0.1; hi += d * 0.1; }
+  const span = hi - lo, st0 = Math.pow(10, Math.floor(Math.log10(span / 5))), st = [1, 2, 5, 10].map(f => f * st0).find(s => span / s <= 6) || st0 * 10;
+  const a = Math.floor(lo / st) * st, b = Math.ceil(hi / st) * st, t = []; for (let v = a; v <= b + st * 1e-6; v += st) t.push(+v.toFixed(10));
+  return { a, b, t };
+}
+function renderMf() {
+  const X = DC0, W = $("#mfWrap"); if (!W) return;
+  if (!X) { W.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; ["#mfSel", "#mfChips", "#mfLg", "#mfTbl"].forEach(s => $(s).innerHTML = ""); return; }
+  if (!isMonthly(X)) { W.innerHTML = '<div class="empty">월별(1~12월) 자료일 때만 볼 수 있어요</div>'; ["#mfSel", "#mfChips", "#mfLg", "#mfTbl"].forEach(s => $(s).innerHTML = ""); return; }
+  const ix = mfIdx(X), nm = ["부문", "팀", "채널", "대분류"];
+  $("#mfSel").innerHTML = ix.map((i, k) => { if (i < 0) return ""; const opts = [...new Set(mfLeaves(X, k).map(L => L.d[i]))].sort((a, b) => String(a).localeCompare(String(b), "ko", { numeric: true }));
+    if (MF.sel[k] && !opts.includes(MF.sel[k])) MF.sel[k] = "";
+    return `<label class="muted">${esc(X.dims[i] || nm[k])} <select data-mfs="${k}"><option value="">전체</option>${opts.map(o => `<option${o === MF.sel[k] ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`; }).join("");
+  const K = mfKeys(); if (!K.some(x => x[0] === MF.k)) MF.k = "S";
+  const [key, kn, isR] = K.find(x => x[0] === MF.k);
+  $("#mfChips").innerHTML = K.map(([k, n]) => `<button class="${k === MF.k ? "on" : "sec"}" data-mfk="${k}">${n}</button>`).join("");
+  const Ls = mfLeaves(X, 4), A = mfSeries(Ls, X, X.y0, key), B = mfSeries(Ls, X, X.y1, key);
+  const C0 = "#94a3b8", C1 = "#0369a1", la = yl(X.y0), lb = yl(X.y1);
+  $("#mfLg").innerHTML = `<span><i style="border-color:${C0};border-top-style:dashed"></i>${esc(la)}</span><span><i style="border-color:${C1}"></i>${esc(lb)}</span><span class="muted">${esc(kn)}${isR ? "" : " (백만원)"}</span>`;
+  const fv = v => v == null ? "-" : isR ? (v * 100).toFixed(1) + "%" : fN(v), fd = (a, b) => a == null || b == null ? "-" : isR ? fPP(b - a) : fD(b - a);
+  // 차트
+  const vals = [...A.ms, ...B.ms].filter(v => v != null);
+  if (!vals.length) { W.innerHTML = '<div class="empty">이 범위에 값이 없어요</div>'; $("#mfTbl").innerHTML = ""; return; }
+  let lo = Math.min(...vals), hi = Math.max(...vals); if (!isR && lo > 0) lo = 0; if (!isR && hi < 0) hi = 0;
+  if (isR) { const pad = (hi - lo) * 0.15 || 0.01; lo = Math.max(lo - pad, Math.min(lo, 0)); hi += pad; }
+  const N = mfNice(lo, hi), w = 960, h = 340, ml = 64, mr = 48, mt = 16, mb = 32, pw = w - ml - mr, ph = h - mt - mb;
+  const xs = i => ml + pw * (i + 0.5) / 12, ys = v => mt + ph * (1 - (v - N.a) / (N.b - N.a));
+  const tl = v => isR ? (v * 100).toFixed(Math.abs(N.t[1] - N.t[0]) * 100 < 1 ? 1 : 0) + "%" : Math.round(v).toLocaleString("ko-KR");
+  const path = ms => { let d = "", pen = false; ms.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + xs(i).toFixed(1) + " " + ys(v).toFixed(1); pen = true; }); return d; };
+  const dots = (ms, c) => ms.map((v, i) => v == null ? "" : `<circle cx="${xs(i).toFixed(1)}" cy="${ys(v).toFixed(1)}" r="4" fill="${c}" stroke="#fff" stroke-width="2"/>`).join("");
+  const last = ms => { for (let i = 11; i >= 0; i--) if (ms[i] != null) return i; return -1; };
+  const lab = (ms, c, t, dy) => { const i = last(ms); return i < 0 ? "" : `<text x="${(xs(i) + 9).toFixed(1)}" y="${(ys(ms[i]) + dy).toFixed(1)}" font-size="12" fill="#334155" dominant-baseline="middle">${esc(t)}</text>`; };
+  const iA = last(A.ms), iB = last(B.ms), yA = iA < 0 ? 0 : ys(A.ms[iA]), yB = iB < 0 ? 0 : ys(B.ms[iB]), clash = iA === iB && Math.abs(yA - yB) < 14, dA = clash ? (yA <= yB ? -7 : 7) : 0;
+  const zero = N.a < 0 && N.b > 0 ? `<line x1="${ml}" x2="${w - mr}" y1="${ys(0)}" y2="${ys(0)}" stroke="#94a3b8" stroke-width="1"/>` : "";
+  W.innerHTML = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(kn)} 월별 ${esc(la)} vs ${esc(lb)}">
+    ${N.t.map(v => `<line x1="${ml}" x2="${w - mr}" y1="${ys(v).toFixed(1)}" y2="${ys(v).toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/><text x="${ml - 8}" y="${ys(v).toFixed(1)}" font-size="11" fill="#64748b" text-anchor="end" dominant-baseline="middle">${tl(v)}</text>`).join("")}${zero}
+    ${Array.from({ length: 12 }, (_, i) => `<text x="${xs(i).toFixed(1)}" y="${h - 10}" font-size="11" fill="#64748b" text-anchor="middle">${i + 1}월</text>`).join("")}
+    <line id="mfX" x1="0" x2="0" y1="${mt}" y2="${mt + ph}" stroke="#64748b" stroke-width="1" visibility="hidden"/>
+    <path d="${path(A.ms)}" fill="none" stroke="${C0}" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>${dots(A.ms, C0)}
+    <path d="${path(B.ms)}" fill="none" stroke="${C1}" stroke-width="2" stroke-linejoin="round"/>${dots(B.ms, C1)}
+    ${lab(A.ms, C0, la, dA)}${lab(B.ms, C1, lb, -dA)}
+    <rect id="mfHit" x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="transparent"/>
+  </svg><div class="mftip" id="mfTip" hidden></div>`;
+  W._mf = { A, B, la, lb, kn, fv, fd, ml, pw, w, xs };
+  // 표
+  const row = (t, arr, tot, cls) => `<tr${cls ? ` class="${cls}"` : ""}><td>${esc(t)}</td>${arr.map(x => `<td>${x}</td>`).join("")}<td><b>${tot}</b></td></tr>`;
+  const dCell = (a, b) => { const s = fd(a, b); const neg = a != null && b != null && (b - a) * (key === "S" || key === "M" || key === "Mr" ? 1 : -1) < (isR ? -5e-5 : -0.05); return neg ? `<span class="neg">${s}</span>` : s; };
+  $("#mfTbl").innerHTML = `<table class="mft"><thead><tr><th>${esc(kn)}</th>${Array.from({ length: 12 }, (_, i) => `<th>${i + 1}월</th>`).join("")}<th>연간</th></tr></thead><tbody>
+    ${row(la, A.ms.map(fv), fv(A.tot))}${row(lb, B.ms.map(fv), fv(B.tot))}${row("증감", A.ms.map((a, i) => dCell(a, B.ms[i])), dCell(A.tot, B.tot), "tot")}
+  </tbody></table><div class="muted" style="font-size:11px;margin-top:4px">연간 = 자료 있는 달 합계 기준 (${esc(la)} ${A.n}개월 · ${esc(lb)} ${B.n}개월)${isR ? " · 율은 월 합계 금액 ÷ 월 합계 매출" : ""} · 빨간 글자 = 불리한 방향 (비용·원가율은 ↑, 매출·공헌이익은 ↓)</div>`;
+}
+document.addEventListener("change", e => { const s = e.target.closest && e.target.closest("[data-mfs]"); if (!s) return; const k = +s.dataset.mfs; MF.sel[k] = s.value; for (let j = k + 1; j < 4; j++) MF.sel[j] = ""; renderMf(); });
+document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-mfk]"); if (!b) return; MF.k = b.dataset.mfk; renderMf(); });
+document.addEventListener("mousemove", e => {
+  const W = $("#mfWrap"), M = W && W._mf; if (!M) return;
+  const svg = W.querySelector("svg"), tip = $("#mfTip"), xl = $("#mfX"); if (!svg || !tip) return;
+  const r = svg.getBoundingClientRect(), inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  if (!inside) { tip.hidden = true; if (xl) xl.setAttribute("visibility", "hidden"); return; }
+  const sx = (e.clientX - r.left) * M.w / r.width, i = Math.max(0, Math.min(11, Math.floor((sx - M.ml) / M.pw * 12)));
+  const a = M.A.ms[i], b = M.B.ms[i];
+  xl.setAttribute("x1", M.xs(i)); xl.setAttribute("x2", M.xs(i)); xl.setAttribute("visibility", "visible");
+  tip.innerHTML = `<b>${i + 1}월 · ${esc(M.kn)}</b><br>${esc(M.la)} ${M.fv(a)}<br>${esc(M.lb)} ${M.fv(b)}<br>증감 ${M.fd(a, b)}`; tip.hidden = false;
+  const px = M.xs(i) * r.width / M.w, wr = W.getBoundingClientRect();
+  tip.style.left = Math.min(px + 12, wr.width - tip.offsetWidth - 4) + "px"; tip.style.top = (e.clientY - wr.top + 12) + "px";
+});
 
 /* ---------- 8 보고서(요약): 부문 → 팀, 지표 5줄 ---------- */
 const RS_MET = [["총매출", "S", 0], ["비용(%)", "c", 1], ["원가(%)", "v", 1], ["공헌이익", "M", 0], ["(%)", "m", 1]];
@@ -2416,17 +2550,17 @@ function rsXlsx() {
       X.push(`<row r="${r}">${cells.join("")}</row>`); });
   }
   const sh = xSheet(X, nC, r, hr, [16, 9, 10, 10, 9, 8, 9, 19, 40, 9, 95, 40, 6]);
-  return { blob: xBook([{ name: "보고서(요약)", ...sh }], S.xml()), n: E.length, sheet: sh.xml };
+  return { blob: xBook([{ name: "보고서(부문)", ...sh }], S.xml()), n: E.length, sheet: sh.xml };
 }
 
 /* ---------- 공통 ---------- */
-function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || s == 6 || s == 7 || s == 8 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || s == 6 || s == 7 || s == 8 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpShort(); } if (s == 6) renderPerBox(); if (s == 7) renderRpt(); if (s == 8) renderRs(); window.scrollTo(0, 0); }
-function renderAll() { renderSum(); renderTbl(); renderIns(); renderPz(); RPT.data = null; if (document.body.dataset.stage == 7) renderRpt(); if (document.body.dataset.stage == 8) renderRs(); }
+function setStage(s) { document.body.dataset.stage = s; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || s == 6 || s == 7 || s == 8 || s == 9 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || s == 6 || s == 7 || s == 8 || s == 9 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpShort(); } if (s == 6) renderPerBox(); if (s == 7) renderRpt(); if (s == 8) renderRs(); if (s == 9) renderMf(); window.scrollTo(0, 0); }
+function renderAll() { renderSum(); renderTbl(); renderIns(); renderPz(); RPT.data = null; if (document.body.dataset.stage == 7) renderRpt(); if (document.body.dataset.stage == 8) renderRs(); if (document.body.dataset.stage == 9) renderMf(); }
 /* 상단 KPI 카드: 지금 화면의 필터 범위 기준 (요약표=요약표 필터, 판정표=판정표 필터, 증감 요인·INSIGHT=공유 범위) */
 function updateKpi() {
   const box = $("#kpiBar"); if (!box) return;
   const s = document.body.dataset.stage;
-  if (!D || s == 1 || s == 6 || s == 7 || s == 8) { box.hidden = true; return; }
+  if (!D || s == 1 || s == 6 || s == 7 || s == 8 || s == 9) { box.hidden = true; return; }
   const F = s == 2 ? ST.sum.filt : s == 3 ? ST.filt : ST.ins.filt;
   const fk = Object.keys(F || {}).filter(k => F[k] && !(Array.isArray(F[k]) && !F[k].length)).map(Number).sort((a, b) => a - b);
   const Ls = D.leaves.filter(L => passF(L, F || {}));
@@ -2563,7 +2697,7 @@ $("#insOut").addEventListener("click", e => {
   const u = e.target.closest("[data-prup]"); if (u) { const k = +u.dataset.prup, F = ST.insPr || {}; Object.keys(F).forEach(j => { if (+j > k) delete F[j]; }); renderIns(); }
 });
 /* 7 보고서 이벤트 */
-idb.get("rptMemo").then(o => { RPT.memo = o || {}; if (document.body.dataset.stage == 7) renderRpt(); if (document.body.dataset.stage == 8) renderRs(); });
+idb.get("rptMemo").then(o => { RPT.memo = o || {}; if (document.body.dataset.stage == 7) renderRpt(); if (document.body.dataset.stage == 8) renderRs(); if (document.body.dataset.stage == 9) renderMf(); });
 $("#rsOut").addEventListener("input", e => { const t = e.target.closest("textarea[data-mk]"); if (!t) return; const k = t.dataset.mk; RPT.memo[k] = Object.assign(rptMemo(k), { t: t.value }); rptSave(); });
 $("#rsXl").onclick = () => { if (!DC0) { toast("자료가 없어요"); return; } const x = rsXlsx(); dlBlob(x.blob, `부문팀_요약보고서_${new Date().toISOString().slice(0, 10)}.xlsx`); toast(`${x.n}개 묶음 다운로드`); };
 $("#rptChips").onclick = e => { const b = e.target.closest("button[data-rptf]"); if (!b) return; RPT.f = b.dataset.rptf; renderRpt(); };
