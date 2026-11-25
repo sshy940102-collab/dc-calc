@@ -2165,7 +2165,7 @@ function rptSmCh(n) {
 }
 /* kids [{k, m}] → ↑↓ 문구 (매출 금액, 비용율·원가율 기여 %p, CM 금액) */
 function rptChg(m, kids) {
-  const rows = kids.map(k => ({ k: k.k, s: k.m.dS, mm: k.m.dM, c: rptCK(k.m, m, "C"), v: rptCK(k.m, m, "V") }));
+  const rows = kids.map(k => ({ k: k.k, s: k.m.dS, mm: k.m.dM, c: rptCK(k.m, m, "C"), v: rptCK(k.m, m, "V"), dc: k.m.dc, dv: k.m.dv, st: k.m.st }));
   const pick = (key, th, fmt) => { const up = rows.filter(r => r[key] >= th).sort((a, b) => b[key] - a[key]).slice(0, 2), dn = rows.filter(r => r[key] <= -th).sort((a, b) => a[key] - b[key]).slice(0, 2);
     return [up.length ? "↑ " + up.map(r => `${r.k} ${fmt(r[key])}`).join(", ") : "", dn.length ? "↓ " + dn.map(r => `${r.k} ${fmt(r[key])}`).join(", ") : ""].filter(Boolean).join(" / "); };
   return { rows, S: pick("s", 0.5, fD), C: m.st ? "" : pick("c", 0.0005, fPP), V: m.st ? "" : pick("v", 0.0005, fPP), M: pick("mm", 0.5, fD) };
@@ -2186,15 +2186,19 @@ function rptPickSum(rows, key, tot, th) {
   for (const r of c) { if (out.length >= 3 || (out.length && Math.abs(s - tot) <= Math.abs(tot) * 0.1)) break; out.push(r); s += r[key]; }
   return out;
 }
-/* 증감분석 자동 줄 (검은 글자): 매출 금액 · 비용 = 비용율 기여도 %p (기여도 칸과 같은 기준) · CM 금액 */
+/* 증감분석 자동 줄 (검은 글자): 매출 금액 · 비용/원가 = 소분류 자기 율 Gap (27율 − 26율, 사용자 요청 2026-11-25; 고르는 기준은 기여도 %p 합) · CM 금액 */
 function rptAuto(n) {
   if (n._au) return n._au;
   const m = n.m, rows = rptSmCh(n).rows, L = [];
-  const ln = (nm, key, tot, th, fmt) => { const p = rptPickSum(rows, key, tot, th); if (p.length) L.push(`- ${nm} : ` + p.map(r => `${rptNick(r.k)} ${fmt(r[key])}`).join(", ")); };
-  ln("매출", "s", m.dS, 0.51, fD);   // 반올림하면 0으로 보이는 것(±0.5 이하)은 제외
+  const gap = (r, k) => r.st === "N" ? "(신규)" : r.st === "X" ? "(종료)" : r[k] == null ? "-" : fPP(r[k]);
+  const ln = (nm, key, tot, th, fmt) => { const p = rptPickSum(rows, key, tot, th); if (p.length) L.push(`- ${nm} : ` + p.map(r => `${rptNick(r.k)} ${fmt(r)}`).join(", ")); };
+  ln("매출", "s", m.dS, 0.51, r => fD(r.s));   // 반올림하면 0으로 보이는 것(±0.5 이하)은 제외
   const cb = n.lv === 4 ? n.parent.m : m;
-  if (!cb.st) ln("비용", "c", n.lv === 4 ? rptCK(m, cb, "C") : m.dc, 0.00051, fPP);
-  ln("CM", "mm", m.dM, 0.51, fD);
+  if (!cb.st) {
+    ln("비용", "c", n.lv === 4 ? rptCK(m, cb, "C") : m.dc, 0.00051, r => gap(r, "dc"));
+    ln("원가", "v", n.lv === 4 ? rptCK(m, cb, "V") : m.dv, 0.00051, r => gap(r, "dv"));
+  }
+  ln("CM", "mm", m.dM, 0.51, r => fD(r.mm));
   return n._au = L;
 }
 /* 율 기여도 (%p, 상위 P 기준) = 율효과 + 믹스효과 = (27 금액/P 27 매출 − 26 금액/P 26 매출) − (27 비중 − 26 비중) × P 26 율
