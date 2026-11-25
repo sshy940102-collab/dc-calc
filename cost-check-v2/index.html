@@ -2392,12 +2392,12 @@ function rptXlsx(onlyShown) {
 }
 
 /* ---------- 6 월별 흐름 분석: 26 vs 27 1~12월 (전체 달, 2단계 기간 무관) ---------- */
-const MF = { k: "S", sel: ["", "", "", ""] };
+const MF = { k: "S", sel: ["", "", "", "", "", ""] };
 function mfKeys() {   // [키, 이름, 율?] · DC·장려금 분리 자료면 DC율·장려금율, 아니면 차감율
   const sp = rptSp(), dp = rptDp();
   return [["S", "매출", 0], ...(sp ? [["Q", "DC율", 1], ["J", "장려금율", 1]] : dp ? [["D", "차감율", 1]] : []), ...(sp || dp ? [["P", "판관비율", 1]] : []), ["C", "비용율", 1], ["V", "원가율", 1], ["M", "공헌이익", 0], ["Mr", "공헌이익율", 1]];
 }
-function mfIdx(X) { const I = rptIdx(X); return [I.b, I.t, I.c, I.big]; }
+function mfIdx(X) { const I = rptIdx(X); return [I.b, I.t, I.c, I.big, I.sm, I.sku]; }   // 부문·팀·채널·대분류·소분류·SKU
 function mfLeaves(X, upto) { const ix = mfIdx(X); return X.leaves.filter(L => ix.every((i, k) => k >= upto || !MF.sel[k] || i < 0 || L.d[i] === MF.sel[k])); }
 /* 연도 y의 1~12월 값 (자료 없는 달 = null) + 연간(있는 달 합 기준) */
 function mfSeries(Ls, X, y, key) {
@@ -2421,14 +2421,14 @@ function renderMf() {
   const X = DC0, W = $("#mfWrap"); if (!W) return;
   if (!X) { W.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; ["#mfSel", "#mfChips", "#mfLg", "#mfTbl"].forEach(s => $(s).innerHTML = ""); return; }
   if (!isMonthly(X)) { W.innerHTML = '<div class="empty">월별(1~12월) 자료일 때만 볼 수 있어요</div>'; ["#mfSel", "#mfChips", "#mfLg", "#mfTbl"].forEach(s => $(s).innerHTML = ""); return; }
-  const ix = mfIdx(X), nm = ["부문", "팀", "채널", "대분류"];
+  const ix = mfIdx(X), nm = ["부문", "팀", "채널", "대분류", "소분류", "SKU"];
   $("#mfSel").innerHTML = ix.map((i, k) => { if (i < 0) return ""; const opts = [...new Set(mfLeaves(X, k).map(L => L.d[i]))].sort((a, b) => String(a).localeCompare(String(b), "ko", { numeric: true }));
     if (MF.sel[k] && !opts.includes(MF.sel[k])) MF.sel[k] = "";
-    return `<label class="muted">${esc(X.dims[i] || nm[k])} <select data-mfs="${k}"><option value="">전체</option>${opts.map(o => `<option${o === MF.sel[k] ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`; }).join("");
+    return `<label class="muted">${esc(X.dims[i] || nm[k])} <select data-mfs="${k}"${k === 5 ? ' style="max-width:260px"' : ""}><option value="">전체</option>${opts.map(o => `<option value="${esc(o)}"${o === MF.sel[k] ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`; }).join("");
   const K = mfKeys(); if (!K.some(x => x[0] === MF.k)) MF.k = "S";
   const [key, kn, isR] = K.find(x => x[0] === MF.k);
   $("#mfChips").innerHTML = K.map(([k, n]) => `<button class="${k === MF.k ? "on" : "sec"}" data-mfk="${k}">${n}</button>`).join("");
-  const Ls = mfLeaves(X, 4), A = mfSeries(Ls, X, X.y0, key), B = mfSeries(Ls, X, X.y1, key);
+  const Ls = mfLeaves(X, 6), A = mfSeries(Ls, X, X.y0, key), B = mfSeries(Ls, X, X.y1, key);
   const C0 = "#94a3b8", C1 = "#0369a1", la = yl(X.y0), lb = yl(X.y1);
   $("#mfLg").innerHTML = `<span><i style="border-color:${C0};border-top-style:dashed"></i>${esc(la)}</span><span><i style="border-color:${C1}"></i>${esc(lb)}</span><span class="muted">${esc(kn)}${isR ? "" : " (백만원)"}</span>`;
   const fv = v => v == null ? "-" : isR ? (v * 100).toFixed(1) + "%" : fN(v), fd = (a, b) => a == null || b == null ? "-" : isR ? fPP(b - a) : fD(b - a);
@@ -2436,8 +2436,8 @@ function renderMf() {
   const vals = [...A.ms, ...B.ms].filter(v => v != null);
   if (!vals.length) { W.innerHTML = '<div class="empty">이 범위에 값이 없어요</div>'; $("#mfTbl").innerHTML = ""; return; }
   let lo = Math.min(...vals), hi = Math.max(...vals); if (!isR && lo > 0) lo = 0; if (!isR && hi < 0) hi = 0;
-  if (isR) { const pad = (hi - lo) * 0.15 || 0.01; lo = Math.max(lo - pad, Math.min(lo, 0)); hi += pad; }
-  const N = mfNice(lo, hi), w = 960, h = 340, ml = 64, mr = 48, mt = 16, mb = 32, pw = w - ml - mr, ph = h - mt - mb;
+  { const pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.1 || 0.01; if (isR) lo = Math.max(lo - pad, Math.min(lo, 0)); else if (lo < 0) lo -= pad; hi += pad; }   // 숫자 라벨 자리
+  const N = mfNice(lo, hi), w = 960, h = 360, ml = 64, mr = 48, mt = 22, mb = 32, pw = w - ml - mr, ph = h - mt - mb;
   const xs = i => ml + pw * (i + 0.5) / 12, ys = v => mt + ph * (1 - (v - N.a) / (N.b - N.a));
   const tl = v => isR ? (v * 100).toFixed(Math.abs(N.t[1] - N.t[0]) * 100 < 1 ? 1 : 0) + "%" : Math.round(v).toLocaleString("ko-KR");
   const path = ms => { let d = "", pen = false; ms.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + xs(i).toFixed(1) + " " + ys(v).toFixed(1); pen = true; }); return d; };
@@ -2453,6 +2453,9 @@ function renderMf() {
     <path d="${path(A.ms)}" fill="none" stroke="${C0}" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>${dots(A.ms, C0)}
     <path d="${path(B.ms)}" fill="none" stroke="${C1}" stroke-width="2" stroke-linejoin="round"/>${dots(B.ms, C1)}
     ${lab(A.ms, C0, la, dA)}${lab(B.ms, C1, lb, -dA)}
+    ${Array.from({ length: 12 }, (_, i) => { const a = A.ms[i], b = B.ms[i], t = (v, up, c) => `<text x="${xs(i).toFixed(1)}" y="${(ys(v) + (up ? -10 : 16)).toFixed(1)}" font-size="11" fill="${c}" text-anchor="middle"${c === "#0f172a" ? ' font-weight="600"' : ""}>${fv(v)}</text>`;
+      if (a == null && b == null) return ""; if (a == null) return t(b, true, "#0f172a"); if (b == null) return t(a, true, "#64748b");
+      const bUp = b >= a; return t(b, bUp, "#0f172a") + t(a, !bUp, "#64748b"); }).join("")}
     <rect id="mfHit" x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="transparent"/>
   </svg><div class="mftip" id="mfTip" hidden></div>`;
   W._mf = { A, B, la, lb, kn, fv, fd, ml, pw, w, xs };
@@ -2463,7 +2466,7 @@ function renderMf() {
     ${row(la, A.ms.map(fv), fv(A.tot))}${row(lb, B.ms.map(fv), fv(B.tot))}${row("증감", A.ms.map((a, i) => dCell(a, B.ms[i])), dCell(A.tot, B.tot), "tot")}
   </tbody></table><div class="muted" style="font-size:11px;margin-top:4px">연간 = 자료 있는 달 합계 기준 (${esc(la)} ${A.n}개월 · ${esc(lb)} ${B.n}개월)${isR ? " · 율은 월 합계 금액 ÷ 월 합계 매출" : ""} · 빨간 글자 = 불리한 방향 (비용·원가율은 ↑, 매출·공헌이익은 ↓)</div>`;
 }
-document.addEventListener("change", e => { const s = e.target.closest && e.target.closest("[data-mfs]"); if (!s) return; const k = +s.dataset.mfs; MF.sel[k] = s.value; for (let j = k + 1; j < 4; j++) MF.sel[j] = ""; renderMf(); });
+document.addEventListener("change", e => { const s = e.target.closest && e.target.closest("[data-mfs]"); if (!s) return; const k = +s.dataset.mfs; MF.sel[k] = s.value; for (let j = k + 1; j < 6; j++) MF.sel[j] = ""; renderMf(); });
 document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-mfk]"); if (!b) return; MF.k = b.dataset.mfk; renderMf(); });
 document.addEventListener("mousemove", e => {
   const W = $("#mfWrap"), M = W && W._mf; if (!M) return;
