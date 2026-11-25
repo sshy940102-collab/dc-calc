@@ -473,7 +473,8 @@ function renderPerBox() {
   box.innerHTML = cmpBar().replace('class="cmpb"', 'class="cmpb" style="margin-left:0"') +
     `<div class="lbl" style="margin-top:12px">미리보기 — 전체 (${esc(vl("FY"))}, 백만원)</div><div class="tw" style="max-width:640px;max-height:none"><table><thead><tr><th></th><th>기준 ${esc(yl(D.y0))}</th><th>비교 ${esc(yl(D.y1))}</th><th>증감</th></tr></thead><tbody>
       ${r("매출", j.a.S, j.b.S, j.dS)}${r("판촉비", j.a.C, j.b.C, j.dC)}${r("판촉율", j.cr0, j.cr1, j.dcr, 1)}${r("CM", j.a.M, j.b.M, j.dM)}${r("CM율", j.mr0, j.mr1, j.dmr, 1)}</tbody></table></div>
-    <div class="row"><span class="muted">이 기준으로 보기 →</span><button data-gostage="2">요약표</button><button data-gostage="3">판정표</button><button data-gostage="5">증감 요인 분석</button><button data-gostage="7">보고서(채널)</button><button data-gostage="8">보고서(부문)</button></div>`;
+    <div class="row"><span class="muted">이 기준으로 보기 →</span><button data-gostage="2">요약표</button><button data-gostage="3">판정표</button><button data-gostage="5">증감 요인 분석</button></div>
+    <div class="muted" style="font-size:12px;margin-top:4px">6 월별 흐름 · 7·8 보고서는 이 선택과 무관하게 26 vs 27 연간 전체로 봐요</div>`;
 }
 function cmpBar() {
   if (!DC0) return "";
@@ -2151,8 +2152,9 @@ function rptImp(n, scOrg) {   // scOrg = 요약 탭: 소분류 대신 하위 조
   const tt = scOrg ? (scOrg.M ? "CM " + scOrg.M : "") : top.length ? `CM${m.dM >= 0 ? "↑" : "↓"} 소분류: ` + top.map(x => `${x.k} ${fD(x.v)}`).join(" · ") : "";
   const sc = scOrg || rptSmCh(n);
   if (m.st) return { v: [null, null, null, m.dM, null], t: [sc.S ? "매출 " + sc.S : "", "", "", m.st === "N" ? "CM 증감 (신규)" : m.st === "Z" ? "CM 증감 (매출없음)" : "CM 증감 (종료)", tt] };
-  const rest = m.eC - m.eQ - m.eJ - m.eP;
-  const cs = rptSp() ? ` (DC ${fD(m.eQ)} · 장려금 ${fD(m.eJ)} · 판관 ${fD(m.eP)}${Math.abs(rest) >= 0.5 ? ` · 기타 ${fD(rest)}` : ""})` : rptDp() ? ` (차감 ${fD(m.eD)} · 판관 ${fD(m.eP)})` : "";
+  // 괄호 = 항목별 단순 금액 증감 (27 − 26, 사용자 요청 2026-11-25) · 비용효과 숫자(CM 영향)와는 다른 값
+  const dA = k => m.b[k] - m.a[k], rest = dA("C") - dA("Q") - dA("J") - dA("P");
+  const cs = rptSp() ? ` (금액 증감 DC ${fD(dA("Q"))} · 장려금 ${fD(dA("J"))} · 판관 ${fD(dA("P"))}${Math.abs(rest) >= 0.5 ? ` · 기타 ${fD(rest)}` : ""})` : rptDp() ? ` (금액 증감 차감 ${fD(dA("D"))} · 판관 ${fD(dA("P"))})` : "";
   return { v: [m.eS, m.eC, m.eV, m.dM, null], t: ["매출효과" + (sc.S ? " : " + sc.S : ""), "비용효과" + cs + (sc.C ? " : 비용율 " + sc.C : ""), "원가효과" + (sc.V ? " : 원가율 " + sc.V : ""), "CM 증감 계" + (Math.abs(m.eX) >= 0.5 ? ` (기타 ${fD(m.eX)})` : ""), tt] };
 }
 /* Impact 내용용 소분류별 증감: 매출 = 금액, 비용·원가 = 이 줄 Δ율에 대한 기여 %p (소분류 합 = 줄 Δ율) · ↑ 2개 / ↓ 2개 */
