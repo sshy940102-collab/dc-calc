@@ -53,7 +53,7 @@ button:disabled{opacity:.4;cursor:default}
 .modebar{background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12.5px}
 .stages .badge{background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .stg{display:none}
-body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4,body[data-stage="5"] #stage5,body[data-stage="6"] #stage6,body[data-stage="7"] #stage7,body[data-stage="8"] #stage8,body[data-stage="9"] #stage9,body[data-stage="10"] #stage7{display:block}
+body[data-stage="1"] #stage1,body[data-stage="2"] #stage2,body[data-stage="3"] #stage3,body[data-stage="4"] #stage4,body[data-stage="5"] #stage5,body[data-stage="6"] #stage6,body[data-stage="7"] #stage7,body[data-stage="8"] #stage8,body[data-stage="9"] #stage9,body[data-stage="10"] #stage7,body[data-stage="11"] #stage11{display:block}
 .mfchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .mfsel{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 8px}
 .mfsel select{min-width:120px}
@@ -214,6 +214,7 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
   <button data-s="7" data-m="c"><b>7</b>보고서(채널)</button>
   <button data-s="10" data-m="c"><b>8</b>보고서(팀)</button>
   <button data-s="8" data-m="c"><b>9</b>보고서(부문)</button>
+  <button data-s="11" data-m="c"><b>10</b>Appendix</button>
   <span id="bdgP" hidden></span>
 </nav>
 <main>
@@ -322,6 +323,14 @@ button{background:var(--accent);border-radius:8px}button.sec{background:#f1f5f9;
   </div>
   <div class="crumb" id="insCrumb"></div>
   <div class="ins" id="insOut"></div>
+</section>
+
+<section id="stage11" class="stg">
+  <div class="card" style="padding:14px 18px">
+    <h2>📎 Appendix <small>시험용 분석 모음 · 26년 연간 vs 27년 연간 (누계) · 백만원 · 1) CM 브리지 2) 사분면 3) 월별 히트맵 4) 파레토 5) What-if 6) 믹스 분해</small></h2>
+    <div class="row" id="apSel" style="margin-top:4px"></div>
+  </div>
+  <div id="apOut"></div>
 </section>
 
 <section id="stage6" class="stg">
@@ -2756,14 +2765,204 @@ function rbXlsx() {
 }
 const bk0 = (B, R) => B === R.tot ? "전체" : rbNm(B.org[0]) || B.org[0];
 
+/* ---------- 10 Appendix (2026-11-25 시험용): 1) CM 브리지 2) 사분면 3) 월별 히트맵 4) 파레토 5) What-if 6) 믹스 분해 ---------- */
+const AP = { b: "", t: "", u: "", p: "C", wi: "", wc: 0, ws: 0 };
+const AP_G = "#1e8e5a", AP_R = "#c0392b", AP_N = "#1f3864", AP_GY = "#94a3b8";
+function apCtx() {
+  const X = DC0; if (!X) return null;
+  const I = rptIdx(X);
+  const Ls = X.leaves.filter(L => (!AP.b || I.b < 0 || L.d[I.b] === AP.b) && (!AP.t || I.t < 0 || L.d[I.t] === AP.t));
+  const depth = AP.t ? 2 : AP.b ? 1 : 0, cand = [["b", I.b, "부문"], ["t", I.t, "팀"], ["c", I.c, "채널"]].filter((x, k) => x[1] >= 0 && k >= depth);
+  if (!cand.some(x => x[0] === AP.u)) AP.u = cand.length ? cand[0][0] : "";
+  const cu = cand.find(x => x[0] === AP.u) || [, -1, "전체"], ui = cu[1];
+  const P = rptM(rptSum(Ls, X, X.y0), rptSum(Ls, X, X.y1));
+  const g = new Map(); for (const L of Ls) { const k = ui >= 0 ? L.d[ui] : "전체"; (g.get(k) || g.set(k, []).get(k)).push(L); }
+  const U = [...g.entries()].map(([k, L]) => ({ k, L, m: rptM(rptSum(L, X, X.y0), rptSum(L, X, X.y1)) })).filter(u => rptLive(u.m)).sort((a, b) => b.m.b.S - a.m.b.S || b.m.a.S - a.m.a.S);
+  for (const u of U) u.dg = rptDiag(u.m, P.gS);
+  return { X, I, Ls, P, U, cand, un: cu[2], nm: AP.t || AP.b || "전체", la: yl(X.y0), lb: yl(X.y1) };
+}
+const apCard = (t, sub, body) => `<div class="card"><h2>${t} <small>${sub}</small></h2>${body}</div>`;
+const apNice = (lo, hi, n) => { const raw = (hi - lo) / (n || 5) || 1, p = Math.pow(10, Math.floor(Math.log10(raw))), st = [1, 2, 5, 10].map(k => k * p).find(q => q >= raw) || p * 10, t = [], e = Math.ceil(hi / st - 1e-9) * st; for (let v = Math.floor(lo / st + 1e-9) * st; v <= e + st * 1e-6; v += st) t.push(+v.toFixed(10)); return { a: t[0], b: t[t.length - 1], t }; };
+/* 정수 반올림 후 합 = 목표(T)가 되게 나머지 큰 순으로 ±1 (표시 숫자 딱 맞추기) */
+const apRoundTo = (vals, T) => { const r = vals.map(Math.round); let d = Math.round(T) - r.reduce((a, b) => a + b, 0); const ord = vals.map((v, i) => i).sort((i, j) => d > 0 ? (vals[j] - r[j]) - (vals[i] - r[i]) : (vals[i] - r[i]) - (vals[j] - r[j])); for (let k = 0; d !== 0 && ord.length; k = (k + 1) % ord.length) { r[ord[k]] += d > 0 ? 1 : -1; d += d > 0 ? -1 : 1; } return r; };
+const apPP = v => (Math.round(v * 10) === 0 ? "0.0" : (v > 0 ? "+" : "") + v.toFixed(1)) + "%p";
+const apSgn = (v, th) => v >= (th || 0.5) ? AP_G : v <= -(th || 0.5) ? AP_R : AP_GY;
+
+/* 1) CM 브리지: 26 CM → 매출효과 / DC / 장려금 / 판관비 / (기타비용) / 원가 / (기타) → 27 CM · 단계 합 = CM 증감 (rptM 분해 그대로) */
+function apBridgeSteps(m) {
+  const sp = rptSp(), dp = rptDp(), st = [["매출효과", m.eS, "매출 증감 × " + "26 CM율"]];
+  if (sp) { st.push(["DC", m.eQ, "−DC율 증감 × 27 매출"], ["장려금", m.eJ, "−장려금율 증감 × 27 매출"], ["판관비", m.eP, "−판관비율 증감 × 27 매출"]); const r = m.eC - m.eQ - m.eJ - m.eP; if (Math.abs(r) >= 0.05) st.push(["기타비용", r, "비용 중 DC·장려금·판관비 외"]); }
+  else if (dp) { st.push(["차감", m.eD, "−차감율 증감 × 27 매출"], ["판관비", m.eP, "−판관비율 증감 × 27 매출"]); const r = m.eC - m.eD - m.eP; if (Math.abs(r) >= 0.05) st.push(["기타비용", r, "비용 중 차감·판관비 외"]); }
+  else st.push(["비용", m.eC, "−비용율 증감 × 27 매출"]);
+  st.push(["원가", m.eV, "−원가율 증감 × 27 매출"]);
+  if (Math.abs(m.eX) >= 0.05) st.push(["기타", m.eX, "CM ≠ 매출−비용−원가 부분"]);
+  return st;
+}
+function apBridge(C) {
+  const m = C.P, sub = `${esc(C.nm)} · ${C.la} 공헌이익 → ${C.lb} 공헌이익이 왜 변했나 · 백만원 · 초록 = CM↑ 요인, 빨강 = CM↓ 요인`;
+  if (m.st) return apCard("1) CM 브리지", sub, '<div class="empty">신규·종료 범위라 브리지를 그릴 수 없어요</div>');
+  const st = apBridgeSteps(m), si = apRoundTo(st.map(x => x[1]), Math.round(m.b.M) - Math.round(m.a.M)), bars = [[C.la + " CM", m.a.M, 1, 0, fN(m.a.M)]]; let run = m.a.M;
+  st.forEach(([k, v], i) => { bars.push([k, v, 0, run, fD(si[i])]); run += v; });
+  bars.push([C.lb + " CM", m.b.M, 1, 0, fN(m.b.M)]);
+  const lv = []; bars.forEach(b => { if (b[2]) lv.push(0, b[1]); else lv.push(b[3], b[3] + b[1]); });
+  let lo = Math.min(...lv), hi = Math.max(...lv);
+  const stepMax = Math.max(...st.map(s => Math.abs(s[1])), 1e-9), tot = Math.max(Math.abs(m.a.M), Math.abs(m.b.M)), cut = lo >= 0 && stepMax * 4 < tot;   // 단계가 너무 작으면 축을 0에서 안 띄우고 잘라서 보여줌 (표시)
+  if (cut) { const rl = Math.min(...bars.filter(b => !b[2]).flatMap(b => [b[3], b[3] + b[1]]), m.a.M, m.b.M); lo = Math.max(0, rl - stepMax * 2.5); }
+  const N = apNice(lo, hi + (hi - lo) * 0.08, 5), w = 1000, h = 360, ml = 70, mr = 16, mt = 26, mb = 46, pw = w - ml - mr, ph = h - mt - mb;
+  const ys = v => mt + ph * (1 - (v - N.a) / (N.b - N.a)), slot = pw / bars.length, bw = Math.min(64, slot * 0.6), xs = i => ml + slot * (i + 0.5);
+  let g = N.t.map(v => `<line x1="${ml}" x2="${w - mr}" y1="${ys(v).toFixed(1)}" y2="${ys(v).toFixed(1)}" stroke="#eef0f3"/><text x="${ml - 6}" y="${ys(v).toFixed(1)}" font-size="11" fill="#64748b" text-anchor="end" dominant-baseline="middle">${fN(v)}</text>`).join("");
+  bars.forEach((b, i) => {
+    const x = xs(i) - bw / 2, y0 = b[2] ? ys(Math.max(N.a, 0)) : ys(b[3]), y1 = b[2] ? ys(b[1]) : ys(b[3] + b[1]), top = Math.min(y0, y1), hh = Math.max(Math.abs(y1 - y0), 1.5), c = b[2] ? AP_N : apSgn(b[1], 0.05);
+    g += `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="3" fill="${c}"><title>${esc(b[0])} ${b[4]}</title></rect>`;
+    g += `<text x="${xs(i).toFixed(1)}" y="${(top - 6).toFixed(1)}" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">${b[4]}</text>`;
+    g += `<text x="${xs(i).toFixed(1)}" y="${h - mb + 18}" font-size="12" fill="#334155" text-anchor="middle">${esc(b[0])}</text>`;
+    if (i < bars.length - 1) { const yy = ys(b[2] ? b[1] : b[3] + b[1]); g += `<line x1="${(x + bw).toFixed(1)}" x2="${(xs(i + 1) - bw / 2).toFixed(1)}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#94a3b8" stroke-dasharray="3 3"/>`; }
+  });
+  if (cut) g += `<text x="${ml}" y="${h - 6}" font-size="11" fill="#b26a00">※ 단계가 작아 세로축을 ${fN(N.a)}부터 표시 (0부터 아님)</text>`;
+  const sum = si.reduce((s, x) => s + x, 0);
+  const tb = `<table class="mft"><thead><tr><th>항목</th><th>CM 영향 (백만원)</th><th style="text-align:left">계산</th></tr></thead><tbody>
+    <tr><td>${C.la} 공헌이익</td><td>${fN(m.a.M)}</td><td class="muted" style="text-align:left">CM율 ${p1(m.m0)}</td></tr>
+    ${st.map(([k, v, d], i) => `<tr><td>${esc(k)}</td><td${si[i] < 0 ? ' class="neg"' : ""}>${fD(si[i])}</td><td class="muted" style="text-align:left">${d}</td></tr>`).join("")}
+    <tr class="tot"><td>${C.lb} 공헌이익</td><td>${fN(m.b.M)}</td><td class="muted" style="text-align:left">CM율 ${p1(m.m1)} · 단계 합 ${fD(sum)} = CM 증감 ${fD(Math.round(m.b.M) - Math.round(m.a.M))}</td></tr></tbody></table>`;
+  return apCard("1) CM 브리지 (워터폴)", sub, `<div class="mfwrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="CM 브리지">${g}</svg></div>${tb}`);
+}
+
+/* 2) 사분면: 가로 = 비용율 증감 %p, 세로 = 매출 증가율, 점 크기 = 27 매출, 색 = 진단 (7 보고서 기준) · 세로 기준선 = 상위(범위 합) 증가율 */
+function apQuad(C) {
+  const sub = `${esc(C.nm)} 안 ${C.un}별 · 가로 = 비용율 증감(%p) · 세로 = 매출 증가율 · 점 크기 = ${C.lb} 매출 · 색 = 진단(7 보고서 기준) · 점에 마우스 = 숫자`;
+  const pts = C.U.filter(u => !u.m.st && u.m.gS != null), out = C.U.filter(u => u.m.st);
+  if (pts.length < 2) return apCard("2) 사분면 산점도", sub, `<div class="empty">비교할 ${C.un}이 2개 이상 있어야 해요 (범위를 넓히거나 보는 단위를 아래 단계로)</div>`);
+  const ref = Math.max(C.P.gS || 0, 0), XC = [-8, 8], YC = [-0.6, 1.0], cl = (v, a) => Math.min(Math.max(v, a[0]), a[1]);
+  const xv = pts.map(u => cl(u.m.dc * 100, XC)), yv = pts.map(u => cl(u.m.gS, YC));
+  const xa = Math.max(Math.abs(Math.min(...xv)), Math.abs(Math.max(...xv)), 0.5) * 1.15, Nx = apNice(-xa, xa, 6), Ny = apNice(Math.min(...yv, ref, 0) - 0.03, Math.max(...yv, ref, 0) + 0.05, 5);
+  const w = 1000, h = 460, ml = 60, mr = 20, mt = 20, mb = 40, pw = w - ml - mr, ph = h - mt - mb, xs = v => ml + pw * (v - Nx.a) / (Nx.b - Nx.a), ys = v => mt + ph * (1 - (v - Ny.a) / (Ny.b - Ny.a));
+  const sMax = Math.max(...pts.map(u => Math.abs(u.m.b.S)), 1e-9), rad = u => 5 + 20 * Math.sqrt(Math.abs(u.m.b.S) / sMax);
+  const col = d => ["1", "2", "3"].includes(d) ? AP_R : d === "G" ? AP_G : AP_GY;
+  let g = Nx.t.map(v => `<line x1="${xs(v).toFixed(1)}" x2="${xs(v).toFixed(1)}" y1="${mt}" y2="${mt + ph}" stroke="${v === 0 ? "#64748b" : "#eef0f3"}"/><text x="${xs(v).toFixed(1)}" y="${h - mb + 16}" font-size="11" fill="#64748b" text-anchor="middle">${v > 0 ? "+" : ""}${v}%p</text>`).join("");
+  g += Ny.t.map(v => `<line x1="${ml}" x2="${w - mr}" y1="${ys(v).toFixed(1)}" y2="${ys(v).toFixed(1)}" stroke="#eef0f3"/><text x="${ml - 6}" y="${ys(v).toFixed(1)}" font-size="11" fill="#64748b" text-anchor="end" dominant-baseline="middle">${Math.round(v * 100)}%</text>`).join("");
+  g += `<line x1="${ml}" x2="${w - mr}" y1="${ys(ref).toFixed(1)}" y2="${ys(ref).toFixed(1)}" stroke="#64748b" stroke-dasharray="5 4"/><text x="${w - mr - 4}" y="${(ys(ref) - 6).toFixed(1)}" font-size="11" fill="#475569" text-anchor="end">상위 증가율 ${g1(ref)}</text>`;
+  const q = (x, y, t, a) => `<text x="${x}" y="${y}" font-size="12" font-weight="600" fill="#94a3b8" text-anchor="${a}">${t}</text>`;
+  g += q(w - mr - 6, mt + 16, "비용↑ · 매출 상위보다↑", "end") + q(w - mr - 6, mt + ph - 8, "비용↑ · 매출 부진 → ①② 주의", "end") + q(ml + 6, mt + 16, "비용↓ · 매출↑ → 효율 좋음", "start") + q(ml + 6, mt + ph - 8, "비용↓ · 매출 부진 → ③ 확인", "start");
+  const lab = new Set([...pts].sort((a, b) => b.m.b.S - a.m.b.S).slice(0, 8).concat(pts.filter(u => ["1", "2", "3"].includes(u.dg)).slice(0, 8)));
+  [...pts].sort((a, b) => rad(b) - rad(a)).forEach(u => {
+    const xr = u.m.dc * 100, yr = u.m.gS, cx = xs(cl(xr, XC)), cy = ys(cl(yr, YC)), r = rad(u), clip = xr !== cl(xr, XC) || yr !== cl(yr, YC);
+    g += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${col(u.dg)}" fill-opacity=".55" stroke="#fff" stroke-width="2"><title>${esc(u.k)}\n비용율 ${p1(u.m.c0)}→${p1(u.m.c1)} (${fPP(u.m.dc)})\n매출 ${fN(u.m.a.S)}→${fN(u.m.b.S)} (${g1(u.m.gS)})\nCM ${fD(u.m.dM)} · 진단 ${RPT_LB[u.dg] || ""}${clip ? "\n※ 축 범위 밖 → 끝에 표시" : ""}</title></circle>`;
+    if (lab.has(u)) g += `<text x="${(cx + r + 3).toFixed(1)}" y="${cy.toFixed(1)}" font-size="11" fill="#0f172a" dominant-baseline="middle">${esc(rptNick(u.k))}${clip ? " ⇥" : ""}</text>`;
+  });
+  const lg = `<div class="mflg"><span><b style="color:${AP_R}">●</b> 진단 ①②③</span><span><b style="color:${AP_G}">●</b> 추진방향</span><span><b style="color:${AP_GY}">●</b> 기타</span><span class="muted">세로축 −60%~+100%, 가로축 ±8%p 밖은 끝에 표시(⇥)${out.length ? ` · 신규·종료 ${out.length}개 제외 (${out.slice(0, 4).map(u => esc(rptNick(u.k))).join(", ")}${out.length > 4 ? " 외" : ""})` : ""}</span></div>`;
+  return apCard("2) 사분면 산점도", sub, lg + `<div class="mfwrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="비용율 증감 vs 매출 증가율">${g}</svg></div>`);
+}
+
+/* 3) 월별 히트맵: 행 = 단위, 열 = 1~12월, 값 = 그 달 비용율 증감 (27 − 26, %p) · 빨강 = 비용율↑ */
+function apHeat(C) {
+  const sub = `${esc(C.nm)} 안 ${C.un}별 · 그 달 비용율 ${C.lb} − ${C.la} (%p) · 빨강 = 비용율↑(불리), 파랑 = ↓ · 진할수록 큼 (±3%p에서 최대) · 굵은 글자 = ±2%p 이상`;
+  if (!isMonthly(C.X)) return apCard("3) 월별 비용율 히트맵", sub, '<div class="empty">월별(1~12월) 자료일 때만 볼 수 있어요</div>');
+  const rows = [{ k: "범위 합계", L: C.Ls, t: 1 }, ...C.U.slice(0, 30)];
+  const cell = d => { if (d == null) return `<td class="muted" style="text-align:center">-</td>`; const a = Math.min(Math.abs(d) / 0.03, 1), bg = d >= 0 ? `rgba(192,57,43,${(a * 0.75).toFixed(2)})` : `rgba(37,99,235,${(a * 0.6).toFixed(2)})`, fc = a > 0.6 ? "#fff" : "#0f172a";
+    return `<td style="background:${bg};color:${fc};text-align:center${Math.abs(d) >= 0.02 ? ";font-weight:700" : ""}">${r1(d)}</td>`; };
+  const body = rows.map(u => { const A = mfSeries(u.L, C.X, C.X.y0, "C"), B = mfSeries(u.L, C.X, C.X.y1, "C"), dd = (a, b) => a == null || b == null ? null : b - a;
+    return `<tr${u.t ? ' class="tot"' : ""}><td>${esc(u.t ? u.k : rptNick(u.k))}</td>${A.ms.map((a, i) => cell(dd(a, B.ms[i]))).join("")}${cell(dd(A.tot, B.tot))}</tr>`; }).join("");
+  return apCard("3) 월별 비용율 히트맵", sub, `<div class="tw" style="max-height:60vh"><table class="mft" style="margin:0"><thead><tr><th>${C.un}</th>${Array.from({ length: 12 }, (_, i) => `<th>${i + 1}월</th>`).join("")}<th>연간</th></tr></thead><tbody>${body}</tbody></table></div>${C.U.length > 30 ? `<div class="muted" style="font-size:11px">${C.lb} 매출 큰 순 30개만 표시 (전체 ${C.U.length}개)</div>` : ""}`);
+}
+
+/* 4) 파레토: SKU별 비용 증가(금액) 또는 CM 감소 → 상위 몇 개가 80%인지 */
+function apPareto(C) {
+  const I = C.I, key = AP.p === "M" ? "M" : "C", g = new Map();
+  for (const L of C.Ls) { const k = I.sku >= 0 ? L.d[I.sku] : "-"; (g.get(k) || g.set(k, []).get(k)).push(L); }
+  const it = [...g.entries()].map(([k, L]) => { const a = rptSum(L, C.X, C.X.y0), b = rptSum(L, C.X, C.X.y1); return { k, v: key === "C" ? b.C - a.C : a.M - b.M, dS: b.S - a.S, dM: b.M - a.M, st: a.S <= 1e-9 ? "IN" : b.S <= 1e-9 ? "OUT" : "" }; });
+  const pos = it.filter(x => x.v > 0.005).sort((a, b) => b.v - a.v), neg = it.filter(x => x.v < -0.005), T = pos.reduce((s, x) => s + x.v, 0), TN = neg.reduce((s, x) => s + x.v, 0);
+  const nm = key === "C" ? "비용 증가" : "CM 감소";
+  const tg = `<div class="row" style="margin:0 0 8px"><button class="${key === "C" ? "on" : "sec"}" data-app="C">비용 증가 기준</button><button class="${key === "M" ? "on" : "sec"}" data-app="M">CM 감소 기준</button></div>`;
+  const sub = `${esc(C.nm)} · SKU별 ${nm} 금액 (백만원) · 큰 순 누적 → 상위 몇 개가 80%인지 = 협상·점검 우선순위`;
+  if (!pos.length) return apCard("4) 파레토 (집중도)", sub, tg + `<div class="empty">${nm} SKU가 없어요</div>`);
+  let cum = 0, k80 = 0; const rows = pos.map((x, i) => { cum += x.v; if (!k80 && cum >= T * 0.8 - 1e-9) k80 = i + 1; return { ...x, c: cum / T }; });
+  const mx = pos[0].v, show = rows.slice(0, Math.max(20, Math.min(k80, 40)));
+  const hd = `<div class="subc"><b>${nm} SKU ${pos.length}개 · 합계 ${fD1(T)}</b> → 상위 <b>${k80}개 (${Math.round(k80 / pos.length * 100)}%)</b>가 ${nm}의 80% · 반대로 ${key === "C" ? "비용이 줄어든" : "CM이 늘어난"} SKU ${neg.length}개 ${fN(-TN)} 상쇄 → 순 ${key === "C" ? "비용 증감 " + fD1(T + TN) : "CM 증감 " + fD1(-(T + TN))}</div>`;
+  const tb = `<div class="tw" style="max-height:60vh"><table class="mft" style="margin:0"><thead><tr><th>#</th><th style="text-align:left">SKU</th><th>${nm}</th><th></th><th>누적 비중</th><th>매출 증감</th><th>CM 증감</th></tr></thead><tbody>${show.map((x, i) => `<tr${i + 1 === k80 ? ' style="border-bottom:2px solid #c0392b"' : ""}><td>${i + 1}</td><td style="text-align:left" title="${esc(x.k)}">${esc(rptSkuNm(x.k))}${x.st ? ` <span class="j new">${x.st}</span>` : ""}</td><td>${fD1(x.v)}</td><td style="width:180px"><div style="height:10px;border-radius:0 4px 4px 0;background:${i < k80 ? AP_R : "#e2a39b"};width:${(x.v / mx * 100).toFixed(1)}%"></div></td><td>${Math.round(x.c * 100)}%</td><td>${fD(x.dS)}</td><td${x.dM < -0.5 ? ' class="neg"' : ""}>${fD(x.dM)}</td></tr>`).join("")}</tbody></table></div>${rows.length > show.length ? `<div class="muted" style="font-size:11px">상위 ${show.length}개만 표시 (전체 ${rows.length}개) · 빨간 선 = 80% 지점</div>` : '<div class="muted" style="font-size:11px">빨간 선 = 80% 지점</div>'}`;
+  return apCard("4) 파레토 (집중도)", sub, tg + hd + tb);
+}
+
+/* 5) What-if: 한 단위의 27 비용율·매출을 조정하면 CM 얼마나 바뀌나 (원가율·기타 비율은 계획 그대로 유지) */
+function apWhatIf(C) {
+  const sub = `${esc(C.nm)} 안 ${C.un} 하나 골라 ${C.lb} 계획의 비용율(%p)·매출(%)을 바꿔보기 · 원가율·나머지 비율은 계획 그대로 · 즉석 계산`;
+  const U = C.U.filter(u => u.m.b.S > 1e-9); if (!U.length) return apCard("5) What-if 시뮬레이션", sub, '<div class="empty">27년 매출 있는 단위가 없어요</div>');
+  if (!U.some(u => u.k === AP.wi)) AP.wi = U[0].k;
+  const sel = `<label class="f">${C.un}<select data-apw="u">${U.map(u => `<option value="${esc(u.k)}"${u.k === AP.wi ? " selected" : ""}>${esc(u.k)}</option>`).join("")}</select></label>`;
+  const sl = (k, lo, hi, st, v, t) => `<label class="f" style="min-width:260px">${t} <b id="apW${k}v"></b><input type="range" data-apw="${k}" min="${lo}" max="${hi}" step="${st}" value="${v}" style="width:100%"></label>`;
+  const sens = U.slice(0, 12).map(u => `<tr><td>${esc(rptNick(u.k))}</td><td>${fN(u.m.b.S)}</td><td>${p1(u.m.c1)}</td><td>${fD1(u.m.b.S * 0.001)}</td><td>${fD1(u.m.b.S * 0.01)}</td></tr>`).join("");
+  return apCard("5) What-if 시뮬레이션", sub, `<div class="row" style="margin:0 0 8px">${sel}${sl("c", -3, 3, 0.1, AP.wc, "비용율 조정")}${sl("s", -20, 20, 1, AP.ws, "매출 조정")}<button class="sec" data-apw="r" style="align-self:flex-end">↺ 0으로</button></div><div id="apWiOut"></div>
+    <div class="lbl muted" style="margin-top:10px">민감도: 비용율을 낮추면 CM이 얼마나 늘어나나 (${C.lb} 매출 큰 순 12개)</div><table class="mft"><thead><tr><th>${C.un}</th><th>${C.lb} 매출</th><th>${C.lb} 비용율</th><th>비용율 −0.1%p</th><th>비용율 −1%p</th></tr></thead><tbody>${sens}</tbody></table>`);
+}
+function apWiCalc() {
+  const o = $("#apWiOut"), C = apCtx(); if (!o || !C) return;
+  const u = C.U.find(x => x.k === AP.wi); if (!u) { o.innerHTML = ""; return; }
+  const m = u.m, dc = AP.wc / 100, gs = AP.ws / 100, S1 = m.b.S * (1 + gs), cm1 = m.b.M / m.b.S - dc, M1 = S1 * cm1, dM = M1 - m.b.M;
+  const vEl = (k, t) => { const e = $("#apW" + k + "v"); if (e) e.textContent = t; };
+  vEl("c", (AP.wc > 0 ? "+" : "") + AP.wc.toFixed(1) + "%p"); vEl("s", (AP.ws > 0 ? "+" : "") + AP.ws + "%");
+  const P = C.P, PS = P.b.S + S1 - m.b.S, PM = P.b.M + dM;
+  const tr = (t, a, b, f, df, bad) => `<tr><td>${t}</td><td>${f(a)}</td><td><b>${f(b)}</b></td><td${bad ? ' class="neg"' : ""}>${df(b - a)}</td></tr>`;
+  o.innerHTML = `<table class="mft"><thead><tr><th>${esc(rptNick(u.k))}</th><th>계획</th><th>조정 후</th><th>차이</th></tr></thead><tbody>
+    ${tr("매출", m.b.S, S1, fN, fD1, S1 - m.b.S < -0.05)}${tr("비용율", m.c1, m.c1 + dc, p1, fPP, dc > 5e-5)}${tr("공헌이익", m.b.M, M1, fN, fD1, dM < -0.05)}${tr("CM율", m.m1, cm1, p1, fPP, cm1 - m.m1 < -5e-5)}
+    <tr class="tot"><td>${esc(C.nm)} 합계 CM</td><td>${fN(P.b.M)}</td><td><b>${fN(PM)}</b></td><td${dM < -0.05 ? ' class="neg"' : ""}>${fD1(dM)}</td></tr>
+    <tr><td>${esc(C.nm)} 합계 CM율</td><td>${p1(P.m1)}</td><td><b>${p1(PS ? PM / PS : null)}</b></td><td>${fPP(PS ? PM / PS - P.m1 : null)}</td></tr></tbody></table>
+    <div class="muted" style="font-size:11px">조정 후 CM = 조정 매출 × (계획 CM율 − 비용율 조정) · 빨간 글자 = 불리한 방향 (비용율은 ↑)</div>`;
+}
+
+/* 6) 믹스 분해: 범위 CM율 증감 = Σ 단위별 (율효과 + 믹스효과), 합 = 정확히 범위 Δ CM율 · 매출 증감 = 유지 SKU + IN + OUT */
+function apMix(C) {
+  const P = C.P, sub = `${esc(C.nm)} CM율 증감을 ${C.un}별로 · 율효과 = ${C.lb} 비중 × 자기 CM율 증감 · 믹스효과 = 비중 변화 효과 (CM율 높은 곳 비중↑ = +) · 합 = 범위 CM율 증감 · 수량 자료가 없어 물량·단가 분해 대신 이 방식`;
+  if (P.st) return apCard("6) 믹스 분해", sub, '<div class="empty">신규·종료 범위라 분해할 수 없어요</div>');
+  const e = 1e-9, R = C.U.map(u => { const w0 = Math.abs(P.a.S) > e ? u.m.a.S / P.a.S : 0, w1 = Math.abs(P.b.S) > e ? u.m.b.S / P.b.S : 0, t = rptCK(u.m, P, "M"), r = u.m.st ? 0 : w1 * (u.m.m1 - u.m.m0); return { u, w0, w1, t, r, x: t - r }; });
+  // 표시값 딱 맞추기: 합(기여도) 열 = 합계가 범위 Δ CM율(반올림)과 같게, 율효과 열도 같은 방식, 믹스 = 합 − 율 → 줄마다·열마다 합이 맞음
+  const tD = rbRound(R.map(x => x.t * 100)), rD = rbRound(R.map(x => x.r * 100)); R.forEach((x, i) => { x.tD = tD[i]; x.rD = rD[i]; x.xD = Math.round((tD[i] - rD[i]) * 10) / 10; });
+  const s = k => Math.round(R.reduce((a, x) => a + x[k], 0) * 10) / 10, sR = s("rD"), sX = s("xD"), sT = s("tD"), sTr = R.reduce((a, x) => a + x.t, 0);
+  const cc = v => `<td${v < 0 ? ' class="neg"' : ""}>${apPP(v)}</td>`;
+  const show = [...R].sort((a, b) => Math.abs(b.t) - Math.abs(a.t)).slice(0, 25);
+  // 매출 증감: SKU(단위 안) 기준 유지 / IN / OUT
+  const I = C.I, ui = (C.cand.find(x => x[0] === AP.u) || [, -1])[1], g = new Map();
+  for (const L of C.Ls) { const k = [ui, I.sku].map(i => i >= 0 ? L.d[i] : "").join("\u0001"); (g.get(k) || g.set(k, []).get(k)).push(L); }
+  const io = { K: [0, 0, 0], I: [0, 0, 0], O: [0, 0, 0] };
+  for (const Ls of g.values()) { const a = rptSum(Ls, C.X, C.X.y0), b = rptSum(Ls, C.X, C.X.y1); if (Math.abs(a.S) <= e && Math.abs(b.S) <= e) { io.K[1] += b.S - a.S; io.K[2] += b.M - a.M; continue; } const t = a.S <= e ? io.I : b.S <= e ? io.O : io.K; t[0]++; t[1] += b.S - a.S; t[2] += b.M - a.M; }
+  const iS = apRoundTo([io.K[1], io.I[1], io.O[1]], P.dS), iM = apRoundTo([io.K[2], io.I[2], io.O[2]], P.dM);
+  const hd = `<div class="subc"><b>CM율 ${p1(P.m0)} → ${p1(P.m1)} (${apPP(sT)})</b> = 율효과 <b>${apPP(sR)}</b> + 믹스효과 <b>${apPP(sX)}</b>${Math.abs(sTr - P.dm) > 1e-7 ? ` <span class="neg">(검산 차이 ${fPP(sTr - P.dm)})</span>` : ""}<br>
+    매출 ${fD(Math.round(P.dS))} = 유지 SKU ${io.K[0]}개 ${fD(iS[0])} + 신규 IN ${io.I[0]}개 ${fD(iS[1])} + 종료 OUT ${io.O[0]}개 ${fD(iS[2])} &nbsp;|&nbsp; CM ${fD(Math.round(P.dM))} = 유지 ${fD(iM[0])} + IN ${fD(iM[1])} + OUT ${fD(iM[2])}</div>`;
+  const tb = `<div class="tw" style="max-height:60vh"><table class="mft" style="margin:0"><thead><tr><th>${C.un}</th><th>${C.la} 비중</th><th>${C.lb} 비중</th><th>${C.la} CM율</th><th>${C.lb} CM율</th><th>율효과</th><th>믹스효과</th><th>합 (기여도)</th></tr></thead><tbody>
+    ${show.map(x => `<tr><td>${esc(rptNick(x.u.k))}${x.u.m.st === "N" ? ' <span class="j new">신규</span>' : x.u.m.st === "X" ? ' <span class="j end">종료</span>' : ""}</td><td>${p1(x.w0)}</td><td>${p1(x.w1)}</td><td>${p1(x.u.m.m0)}</td><td>${p1(x.u.m.m1)}</td>${cc(x.rD)}${cc(x.xD)}${cc(x.tD)}</tr>`).join("")}
+    <tr class="tot"><td>합계</td><td>100%</td><td>100%</td><td>${p1(P.m0)}</td><td>${p1(P.m1)}</td>${cc(sR)}${cc(sX)}${cc(sT)}</tr></tbody></table></div>${R.length > 25 ? `<div class="muted" style="font-size:11px">기여도 큰 순 25개만 표시 · 합계는 전체 ${R.length}개 기준</div>` : ""}`;
+  return apCard("6) 믹스 분해", sub, hd + tb);
+}
+function renderAp() {
+  const box = $("#apOut"), sb = $("#apSel"); if (!box) return;
+  const X = DC0; if (!X) { box.innerHTML = '<div class="empty">1단계에서 자료를 붙여넣어 주세요</div>'; sb.innerHTML = ""; return; }
+  const I = rptIdx(X), ko = (a, b) => String(a).localeCompare(String(b), "ko", { numeric: true }), uniq = (Ls, i) => [...new Set(Ls.map(L => L.d[i]))].sort(ko);
+  if (I.b >= 0 && AP.b && !X.leaves.some(L => L.d[I.b] === AP.b)) AP.b = "";
+  const Lb = X.leaves.filter(L => !AP.b || I.b < 0 || L.d[I.b] === AP.b);
+  if (I.t >= 0 && AP.t && !Lb.some(L => L.d[I.t] === AP.t)) AP.t = "";
+  const C = apCtx(), opt = (v, cur) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(v)}</option>`;
+  sb.innerHTML = (I.b >= 0 ? `<label class="f">부문<select data-aps="b"><option value="">전체</option>${uniq(X.leaves, I.b).map(v => opt(v, AP.b)).join("")}</select></label>` : "")
+    + (I.t >= 0 ? `<label class="f">팀<select data-aps="t"><option value="">전체</option>${uniq(Lb, I.t).map(v => opt(v, AP.t)).join("")}</select></label>` : "")
+    + `<label class="f">보는 단위<select data-aps="u">${C.cand.map(x => `<option value="${x[0]}"${x[0] === AP.u ? " selected" : ""}>${x[2]}</option>`).join("")}</select></label>`;
+  box.innerHTML = [apBridge(C), apQuad(C), apHeat(C), apPareto(C), apWhatIf(C), apMix(C)].join("");
+  apWiCalc();
+}
+document.addEventListener("change", e => {
+  const s = e.target.closest && e.target.closest("[data-aps]"); if (s) { const k = s.dataset.aps; AP[k] = s.value; if (k === "b") AP.t = ""; renderAp(); return; }
+  const w = e.target.closest && e.target.closest("select[data-apw]"); if (w) { AP.wi = w.value; AP.wc = 0; AP.ws = 0; renderAp(); }
+});
+document.addEventListener("input", e => { const w = e.target.closest && e.target.closest("input[data-apw]"); if (!w) return; if (w.dataset.apw === "c") AP.wc = +w.value; else AP.ws = +w.value; apWiCalc(); });
+document.addEventListener("click", e => {
+  const p = e.target.closest && e.target.closest("[data-app]"); if (p) { AP.p = p.dataset.app; renderAp(); return; }
+  const r = e.target.closest && e.target.closest("button[data-apw='r']"); if (r) { AP.wc = 0; AP.ws = 0; renderAp(); }
+});
+
 /* ---------- 공통 ---------- */
-function setStage(s) { document.body.dataset.stage = s; if (s == 7 || s == 10) RPT.mode = s == 10 ? "t" : "c"; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || s == 6 || s == 7 || s == 8 || s == 9 || s == 10 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || s == 6 || s == 7 || s == 8 || s == 9 || s == 10 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpShort(); } if (s == 6) renderPerBox(); if (s == 7 || s == 10) renderRpt(); if (s == 8) renderRs(); if (s == 9) renderMf(); window.scrollTo(0, 0); }
-function renderAll() { renderSum(); renderTbl(); renderIns(); renderPz(); RPT.data = null; if (document.body.dataset.stage == 7 || document.body.dataset.stage == 10) renderRpt(); if (document.body.dataset.stage == 8) renderRs(); if (document.body.dataset.stage == 9) renderMf(); }
+function setStage(s) { document.body.dataset.stage = s; if (s == 7 || s == 10) RPT.mode = s == 10 ? "t" : "c"; document.querySelectorAll("#stages button").forEach(b => b.classList.toggle("on", b.dataset.s == s && (s == 1 || s == 6 || s == 7 || s == 8 || s == 9 || s == 10 || s == 11 || b.dataset.m === ST.mode))); const mb = $("#modeBar"); if (mb) { mb.hidden = s == 1 || s == 6 || s == 7 || s == 8 || s == 9 || s == 10 || s == 11 || !D; if (D) mb.innerHTML = (ST.mode === "p" ? `📦 <b>제품 분석</b> — ${D.dims.map(esc).join(" → ")}` : `📍 <b>채널 분석</b> — ${D.dims.map(esc).join(" → ")}`) + cmpShort(); } if (s == 6) renderPerBox(); if (s == 7 || s == 10) renderRpt(); if (s == 8) renderRs(); if (s == 9) renderMf(); if (s == 11) renderAp(); window.scrollTo(0, 0); }
+function renderAll() { renderSum(); renderTbl(); renderIns(); renderPz(); RPT.data = null; if (document.body.dataset.stage == 7 || document.body.dataset.stage == 10) renderRpt(); if (document.body.dataset.stage == 8) renderRs(); if (document.body.dataset.stage == 9) renderMf(); if (document.body.dataset.stage == 11) renderAp(); }
 /* 상단 KPI 카드: 지금 화면의 필터 범위 기준 (요약표=요약표 필터, 판정표=판정표 필터, 증감 요인·INSIGHT=공유 범위) */
 function updateKpi() {
   const box = $("#kpiBar"); if (!box) return;
   const s = document.body.dataset.stage;
-  if (!D || s == 1 || s == 6 || s == 7 || s == 8 || s == 9 || s == 10) { box.hidden = true; return; }
+  if (!D || s == 1 || s == 6 || s == 7 || s == 8 || s == 9 || s == 10 || s == 11) { box.hidden = true; return; }
   const F = s == 2 ? ST.sum.filt : s == 3 ? ST.filt : ST.ins.filt;
   const fk = Object.keys(F || {}).filter(k => F[k] && !(Array.isArray(F[k]) && !F[k].length)).map(Number).sort((a, b) => a - b);
   const Ls = D.leaves.filter(L => passF(L, F || {}));
