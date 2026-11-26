@@ -2777,7 +2777,7 @@ function rbXlsx() {
 const bk0 = (B, R) => B === R.tot ? "전체" : rbNm(B.org[0]) || B.org[0];
 
 /* ---------- 10 Appendix (2026-11-25 시험용): 1) CM 브리지 2) 사분면 3) 월별 히트맵 4) 파레토 5) What-if 6) 믹스 분해 ---------- */
-const AP = { b: "", t: "", u: "", p: "C", wi: "", wc: 0, ws: 0 };
+const AP = { b: "", t: "", u: "", p: "C", wi: "", wc: 0, ws: 0, il: "big", ii: "", iu: "" };
 const AP_G = "#1e8e5a", AP_R = "#c0392b", AP_N = "#1f3864", AP_GY = "#94a3b8";
 function apCtx() {
   const X = DC0; if (!X) return null;
@@ -2977,7 +2977,7 @@ function renderBr() {
     + (I.t >= 0 ? `<label class="f">팀<select data-aps="t"><option value="">전체</option>${uniq(Lb, I.t).map(v => opt(v, AP.t)).join("")}</select></label>` : "");
   const miss = prdMissing(X);
   wb.innerHTML = miss && miss.length ? `<div class="chips" style="margin-top:6px"><span class="chip w">⚠ 제품구분 목록에 없는 대분류 ${miss.length}개 → "(미분류)"로 처리: ${esc(miss.join(", "))}</span></div>` : "";
-  box.innerHTML = apBridge(C) + brPrd(C);
+  box.innerHTML = apBridge(C) + brPrd(C) + brItem(C);
 }
 /* 제품구분 순서 (사용자 확정: 고정 순서, 세 그래프 공통) */
 const PRD_ORD = ["단백질", "유아식", "음료", "커피", "백색시유", "가공유", "발효유", "치즈", "기타", PRD_NONE];
@@ -3006,6 +3006,45 @@ function brPrd(C) {
     cols: [la + " CM", lb + " CM", "증감"], row: x => [fN(x.m.a.M), fN(x.m.b.M)], tot: `단계 합 ${fD(sM.reduce((a, b) => a + b, 0))} = CM 증감 ${fD(Math.round(P.b.M) - Math.round(P.a.M))}` }, G);
   return s1 + s2 + s3;
 }
+/* 품목별 브릿지 (2026-11-26): 품목(대분류/소분류 1개) 골라 → 부문별/팀별 막대로 매출·비용율·공헌이익 · 범위 = 위 부문·팀 선택
+   비용율 기여도 = rptCK(단위, 범위 안 그 품목 전체 기준) · 막대 합 = 그 품목 증감 */
+function brItem(C) {
+  const X = C.X, I = rptIdx(X), ko = (a, b) => String(a).localeCompare(String(b), "ko", { numeric: true });
+  const lvs = [["big", I.big, "대분류"], ["sm", I.sm, "소분류"]].filter(x => x[1] >= 0), uns = [["b", I.b, "부문"], ["t", I.t, "팀"]].filter(x => x[1] >= 0);
+  const T0 = "품목별 브릿지";
+  if (!lvs.length || !uns.length) return apCard(T0, "", '<div class="empty">대분류·소분류 열과 부문·팀 열이 있어야 해요</div>');
+  if (!lvs.some(x => x[0] === AP.il)) AP.il = lvs[0][0];
+  if (!uns.some(x => x[0] === AP.iu)) AP.iu = AP.b && uns.some(x => x[0] === "t") ? "t" : uns[0][0];
+  const lv = lvs.find(x => x[0] === AP.il), un = uns.find(x => x[0] === AP.iu), li = lv[1], ui = un[1];
+  // 품목 목록 = 범위 안에 있는 값 (기본 선택 = 27 매출 큰 것)
+  const gi = new Map(); for (const L of C.Ls) { const k = L.d[li]; (gi.get(k) || gi.set(k, []).get(k)).push(L); }
+  const items = [...gi.keys()].sort(ko);
+  if (!gi.has(AP.ii)) { let best = "", bs = -Infinity; for (const [k, L] of gi) { const s = rptSum(L, X, X.y1).S; if (s > bs) { bs = s; best = k; } } AP.ii = best; }
+  const opt = (v, t, cur) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(t)}</option>`;
+  const sel = `<div class="row" style="margin:0 0 4px"><label class="f">품목 단위<select data-aps="il">${lvs.map(x => opt(x[0], x[2], AP.il)).join("")}</select></label>`
+    + `<label class="f">${lv[2]}<select data-aps="ii">${items.map(v => opt(v, v, AP.ii)).join("")}</select></label>`
+    + `<label class="f">막대 단위<select data-aps="iu">${uns.map(x => opt(x[0], x[2] + "별", AP.iu)).join("")}</select></label></div>`;
+  const Li = gi.get(AP.ii) || [], P = rptM(rptSum(Li, X, X.y0), rptSum(Li, X, X.y1)), nm = `${C.nm} · ${AP.ii}`, sc = esc(nm), la = C.la, lb = C.lb;
+  const head = apCard(T0, `${esc(C.nm)} 범위 안에서 품목 하나 골라 ${un[2]}별로 매출·비용율·공헌이익 증감 보기 · 범위는 위 부문·팀 선택 · 비용율 기여도 = 범위 안 그 품목 전체 기준`, sel);
+  if (!Li.length) return head;
+  if (P.st) return head + apCard(T0, sc, '<div class="empty">이 품목은 신규·종료라 브릿지를 그릴 수 없어요</div>');
+  const g = new Map(); for (const L of Li) { const k = L.d[ui]; (g.get(k) || g.set(k, []).get(k)).push(L); }
+  const G = [...g.keys()].sort(ko).map(k => ({ k, m: rptM(rptSum(g.get(k), X, X.y0), rptSum(g.get(k), X, X.y1)) })).filter(x => rptLive(x.m));
+  const ul = un[2], hd = ul;
+  const sS = apRoundTo(G.map(x => x.m.dS), Math.round(P.b.S) - Math.round(P.a.S));
+  const s1 = brWf({ t: `매출 브릿지 (${ul}별)`, nm, hd, sub: `${sc} · ${la} 총매출 → ${lb} 총매출 · 백만원 · 초록 = 매출↑, 빨강 = 매출↓`, a: P.a.S, b: P.b.S, la: la + " 매출", lb: lb + " 매출",
+    st: G.map((x, i) => [x.k, x.m.dS, sS[i]]), fA: fN, fS: v => fD(v), up: 1,
+    cols: [la + " 매출", lb + " 매출", "증감"], row: x => [fN(x.m.a.S), fN(x.m.b.S)], tot: `단계 합 ${fD(sS.reduce((a, b) => a + b, 0))} = 매출 증감 ${fD(Math.round(P.b.S) - Math.round(P.a.S))}` }, G);
+  const cK = G.map(x => rptCK(x.m, P, "C") * 100), cR = rbRound(cK), c0 = P.c0 * 100, c1 = P.c1 * 100;
+  const s2 = brWf({ t: `비용율 브릿지 (${ul}별)`, nm, hd, sub: `${sc} · ${la} 비용율 → ${lb} 비용율 · 막대 = ${sc} 기준 기여도(%p, 보고서 기여도와 같은 방식) · 빨강 = 비용율↑(불리), 초록 = ↓`, a: c0, b: c1, la: la + " 비용율", lb: lb + " 비용율",
+    st: G.map((x, i) => [x.k, cK[i], cR[i]]), fA: v => v.toFixed(1) + "%", fS: v => apPP(v), up: 0, pct: 1,
+    cols: [la + " 비용율", lb + " 비용율", "기여도"], row: x => [p1(x.m.c0), p1(x.m.c1)], tot: `기여도 합 ${apPP(cR.reduce((a, b) => a + b, 0))} = 비용율 증감 ${apPP(c1 - c0)}` }, G);
+  const sM = apRoundTo(G.map(x => x.m.dM), Math.round(P.b.M) - Math.round(P.a.M));
+  const s3 = brWf({ t: `공헌이익 브릿지 (${ul}별)`, nm, hd, sub: `${sc} · ${la} 공헌이익 → ${lb} 공헌이익 · 백만원 · 초록 = CM↑, 빨강 = CM↓`, a: P.a.M, b: P.b.M, la: la + " CM", lb: lb + " CM",
+    st: G.map((x, i) => [x.k, x.m.dM, sM[i]]), fA: fN, fS: v => fD(v), up: 1,
+    cols: [la + " CM", lb + " CM", "증감"], row: x => [fN(x.m.a.M), fN(x.m.b.M)], tot: `단계 합 ${fD(sM.reduce((a, b) => a + b, 0))} = CM 증감 ${fD(Math.round(P.b.M) - Math.round(P.a.M))}` }, G);
+  return head + s1 + s2 + s3;
+}
 /* 범용 워터폴: o.a 시작값, o.st = [[이름, 실제 증감, 표시 증감]], o.b 끝값 · up=1이면 +가 초록(매출·CM), 0이면 +가 빨강(비용율) */
 function brWf(o, G) {
   const bars = [[o.la, o.a, 1, 0, o.fA(o.a)]]; let run = o.a;
@@ -3017,19 +3056,20 @@ function brWf(o, G) {
   if (cut) { const rl = Math.min(...bars.filter(b => !b[2]).flatMap(b => [b[3], b[3] + b[1]]), o.a, o.b); lo = Math.max(0, rl - stepMax * 2.5); }
   const N = apNice(lo, hi + (hi - lo) * 0.08, 5), w = 1000, h = 360, ml = 70, mr = 16, mt = 26, mb = 46, pw = w - ml - mr, ph = h - mt - mb;
   const ys = v => mt + ph * (1 - (v - N.a) / (N.b - N.a)), slot = pw / bars.length, bw = Math.min(64, slot * 0.6), xs = i => ml + slot * (i + 0.5);
-  const tick = v => o.pct ? (Math.round(v * 10) / 10) + "%" : fN(v), th = o.pct ? 0.005 : 0.05;
+  const tick = v => o.pct ? (Math.round(v * 10) / 10) + "%" : fN(v), th = o.pct ? 0.005 : 0.05, fs = bars.length > 14 ? 9.5 : bars.length > 10 ? 10.5 : 12;
   let g = N.t.map(v => `<line x1="${ml}" x2="${w - mr}" y1="${ys(v).toFixed(1)}" y2="${ys(v).toFixed(1)}" stroke="#eef0f3"/><text x="${ml - 6}" y="${ys(v).toFixed(1)}" font-size="11" fill="#64748b" text-anchor="end" dominant-baseline="middle">${tick(v)}</text>`).join("");
   bars.forEach((b, i) => {
     const x = xs(i) - bw / 2, y0 = b[2] ? ys(Math.max(N.a, 0)) : ys(b[3]), y1 = b[2] ? ys(b[1]) : ys(b[3] + b[1]), top = Math.min(y0, y1), hh = Math.max(Math.abs(y1 - y0), 1.5);
     const c = b[2] ? AP_N : apSgn(o.up ? b[1] : -b[1], th);
     g += `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="3" fill="${c}"><title>${esc(b[0])} ${b[4]}</title></rect>`;
     g += `<text x="${xs(i).toFixed(1)}" y="${(top - 6).toFixed(1)}" font-size="12" font-weight="600" fill="#0f172a" text-anchor="middle">${b[4]}</text>`;
-    g += `<text x="${xs(i).toFixed(1)}" y="${h - mb + 18}" font-size="12" fill="#334155" text-anchor="middle">${esc(b[0])}</text>`;
+    const lbl = bars.length > 12 && String(b[0]).length > 7 ? String(b[0]).slice(0, 7) + "…" : b[0];
+    g += `<text x="${xs(i).toFixed(1)}" y="${h - mb + 18}" font-size="${fs}" fill="#334155" text-anchor="middle">${esc(lbl)}</text>`;
     if (i < bars.length - 1) { const yy = ys(b[2] ? b[1] : b[3] + b[1]); g += `<line x1="${(x + bw).toFixed(1)}" x2="${(xs(i + 1) - bw / 2).toFixed(1)}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#94a3b8" stroke-dasharray="3 3"/>`; }
   });
   if (cut) g += `<text x="${ml}" y="${h - 6}" font-size="11" fill="#b26a00">※ 단계가 작아 세로축을 ${tick(N.a)}부터 표시 (0부터 아님)</text>`;
   const bad = d => o.up ? d < 0 : d > 0;
-  const tb = `<table class="mft"><thead><tr><th>제품구분</th>${o.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
+  const tb = `<table class="mft"><thead><tr><th>${esc(o.hd || "제품구분")}</th>${o.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
     ${G.map((x, i) => `<tr><td>${esc(x.k)}${x.m.st === "N" ? ' <span class="j new">신규</span>' : x.m.st === "X" ? ' <span class="j end">종료</span>' : ""}</td>${o.row(x).map(v => `<td>${v}</td>`).join("")}<td${bad(o.st[i][2]) ? ' class="neg"' : ""}>${o.fS(o.st[i][2])}</td></tr>`).join("")}
     <tr class="tot"><td>합계</td><td>${o.fA(o.a)}</td><td>${o.fA(o.b)}</td><td class="muted">${o.tot}</td></tr></tbody></table>`;
   return apCard(o.t, o.sub, brImgBtns(o.t + " · " + o.nm) + `<div class="mfwrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(o.t)}">${g}</svg></div>${tb}`);
@@ -3070,7 +3110,7 @@ function renderAp() {
   apWiCalc();
 }
 document.addEventListener("change", e => {
-  const s = e.target.closest && e.target.closest("[data-aps]"); if (s) { const k = s.dataset.aps; AP[k] = s.value; if (k === "b") AP.t = ""; if (document.body.dataset.stage == 12) renderBr(); else renderAp(); return; }
+  const s = e.target.closest && e.target.closest("[data-aps]"); if (s) { const k = s.dataset.aps; AP[k] = s.value; if (k === "b") AP.t = ""; if (k === "il") AP.ii = ""; if (document.body.dataset.stage == 12) renderBr(); else renderAp(); return; }
   const w = e.target.closest && e.target.closest("select[data-apw]"); if (w) { AP.wi = w.value; AP.wc = 0; AP.ws = 0; renderAp(); }
 });
 document.addEventListener("input", e => { const w = e.target.closest && e.target.closest("input[data-apw]"); if (!w) return; if (w.dataset.apw === "c") AP.wc = +w.value; else AP.ws = +w.value; apWiCalc(); });
